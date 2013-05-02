@@ -1,0 +1,60 @@
+This archive contains data files supporting the paper:
+
+Capra JA and Singh M. Characterization and Prediction of Residues
+Determining Protein Functional Specificity. Bioinformatics, In Press,
+2008.
+
+This paper must be cited if any part of this data set is used.
+
+
+The "capra_bioinf08_data/" directory contains four types of
+files.
+
+    1. Alignment files (*.aln).  CLUSTAL format PROBCONS alignments of
+       sequences from homologous specificity groups.  The alignment
+       name gives information about the aligned specificity groups.  A
+       tilde (~) separates the names of the groups.  Each group name
+       includes the EC number (1st field) and Pfam ID (3rd field) of
+       the sequences in the group.  Sequences in the alignment are
+       named according to their SwissProt or PDB ID, the sequence
+       range where the Pfam domain is found, and the EC number of the
+       sequence (each separated by a '|').  Within an alignment file,
+       the EC number defines the specificity group of each sequence.
+
+    2. Ligand distance files (*.ligdist5).  For many of the alignment
+       files there is a corresponding ligand distance file that
+       contains a list of all the alignment columns within 5\AA of a
+       ligand.  The lines that begin with a '*' provide a union of all
+       the alignment columns found near a relevant ligand in one of
+       the structures representative of the listed specificity
+       group. The near ligand columns for each representative PDB
+       chain in the specificity group used are listed below the '*'
+       lines.  In our analysis the union of all alignment columns
+       across specificity groups ('*' lines) in the file was used for
+       each alignment.
+
+    3. Catalytic Site distance files (*.csadist5).  For alignments
+       that contain a structure with an experimentally identified
+       catalytic site, there will be a .csadist5 file.  This file
+       follows the same format as the ligand distance files, but
+       instead lists all columns within 5\AA of a known catalytic site
+       for the specificity group.
+
+    4. Putative SDP files (*.sdp(L|O|A)).  For each alignment, these
+       files give a list of the columns in each of the putative SDP
+       sets (SDP_L, SDP_O, SDP_A) described in the paper.  If no
+       alignment positions are within 5\AA of a ligand/cat. site and
+       pass the filter, then the file contains no column numbers.
+
+
+Please note: all column indices used in these files start with 0.
+
+The results in the text are based on a subset of the alignments that
+does not include any EC-Pfam pair more than once.  The file
+"non_redundant.txt" lists the alignments used in our analysis.
+
+In all files, lines beginning with '#' are comments.  See the main
+text for background and a full explanation of the creation of the
+data set.
+
+Please email the authors with any questions.

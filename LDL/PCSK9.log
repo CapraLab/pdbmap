@@ -1,0 +1,42 @@
+
+@----------------------------------------------------------@
+|        PLINK!       |     v1.07      |   10/Aug/2009     |
+|----------------------------------------------------------|
+|  (C) 2009 Shaun Purcell, GNU General Public License, v2  |
+|----------------------------------------------------------|
+|  For documentation, citation & bug-report instructions:  |
+|        http://pngu.mgh.harvard.edu/purcell/plink/        |
+@----------------------------------------------------------@
+
+Skipping web check... [ --noweb ] 
+Writing this text to log file [ ./PCSK9.log ]
+Analysis started: Tue Apr 23 16:30:42 2013
+
+Options in effect:
+	--noweb
+	--file ./PCSK9
+	--recodeA
+	--out ./PCSK9
+
+** For gPLINK compatibility, do not use '.' in --out **
+35 (of 35) markers to be included from [ ./PCSK9.map ]
+Warning, found 1 individuals with ambiguous sex codes
+Writing list of these individuals to [ ./PCSK9.nosex ]
+11167 individuals read from [ ./PCSK9.ped ] 
+11167 individuals with nonmissing phenotypes
+Assuming a disease phenotype (1=unaff, 2=aff, 0=miss)
+Missing phenotype value is also -9
+5570 cases, 5597 controls and 0 missing
+4049 males, 7117 females, and 1 of unspecified sex
+Before frequency and genotyping pruning, there are 35 SNPs
+11167 founders and 0 non-founders found
+Total genotyping rate in remaining individuals is 0.999378
+0 SNPs failed missingness test ( GENO > 1 )
+0 SNPs failed frequency test ( MAF < 0 )
+After frequency and genotyping pruning, there are 35 SNPs
+After filtering, 5570 cases, 5597 controls and 0 missing
+After filtering, 4049 males, 7117 females, and 1 of unspecified sex
+Writing recoded file to [ ./PCSK9.raw ] 
+
+Analysis finished: Tue Apr 23 16:30:53 2013
+
