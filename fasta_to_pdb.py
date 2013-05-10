@@ -39,7 +39,7 @@ with open(sdpname,'r') as fin:
 		col = int(line.split()[0])
 		score = line.split()[1]
 		if score == 'None':
-			score = None
+			score = -9
 		else:
 			score = float(score)
 		

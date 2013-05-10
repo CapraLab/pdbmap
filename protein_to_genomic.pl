@@ -33,7 +33,7 @@ foreach my $transcript (@transcripts) {
 	my $peptide = $transcript->translate()->seq();
 	my $peplength = length($peptide);
 	my @locs = $transcript->pep2genomic(0,$peplength-1);
-		
+	
 	for ($i=0; $i<$peplength; $i++) {
 		my @query = $transcript->pep2genomic($i,$i);
 		my $q_start = @query[0]->start();
@@ -49,8 +49,7 @@ foreach my $transcript (@transcripts) {
 		my $pep_index = $i+1;
 		print GenomicCoords "$t_stable_id\t$pep_index\t$amino_acid\t$q_start\t$q_end\t$s_name\t$q_strand\n";
 	}
-
-	print PDBTranscript "$pdb\t$chain\t$t_stable_id\n";
+	print PDBTranscript "$pdb\t$chain\t$t_stable_id\t0\n";
 }
 close(GenomicCoords);
 close(PDBTranscript);
