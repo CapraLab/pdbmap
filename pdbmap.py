@@ -218,7 +218,9 @@ def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname):
 	for q in query:
 		c.execute(q)
 	con.close()	# Close the remote MySQL connection
-	os.system('rm %s.tab'%pdb_id)
+	os.system('rm -f GenomicCoords.tab')
+	os.system('rm -f PDBTranscript.tab')
+	os.system('rm -f %s.tab'%pdb_id)
 
 def create_new_database(dbhost,dbuser,dbpass,dbname):
 	try:
@@ -235,8 +237,10 @@ def create_new_database(dbhost,dbuser,dbpass,dbname):
 	query.append("CREATE TABLE %s.PDBInfo (pdbid VARCHAR(20),species VARCHAR(20),chain VARCHAR(1),unp VARCHAR(20),PRIMARY KEY(pdbid,chain))"%dbname)
 	query.append("CREATE TABLE %s.PDBTranscript (pdbid VARCHAR(20),chain VARCHAR(1),transcript VARCHAR(20),homologue BOOLEAN,PRIMARY KEY(pdbid,chain))"%dbname)
 	format_dict = {'dbuser':dbuser,'dbhost':dbhost}
-	query.append(build_genomePDB_proc%format_dict)
-	query.append(sanitize_transcripts_proc%format_dict)
+	with open('create_proc_buildGenomePDB.sql','r') as fin:
+		query.append(fin.read()%format_dict)
+	with open('create_proc_sanitize_transcripts.sql','r') as fin:
+		query.append(fin.read()%format_dict)
 	for q in query:
 		c.execute(q)
 
