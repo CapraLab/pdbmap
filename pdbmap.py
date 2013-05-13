@@ -63,7 +63,12 @@ def main():
 	print "%d PDB file(s) found."%len(pdb_files)
 	for pdb_id,pdb_file in pdbs.iteritems():
 		print "Processing PDB %s..."%pdb_id
-		load_pdb(pdb_id,pdb_file)
+		try:
+			load_pdb(pdb_id,pdb_file)
+		except Exception as e:
+			print "PDB %s could not be processed."%pdb_id
+			print e
+			print "Skipping..."
 	
 
 def sqlite_init():

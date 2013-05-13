@@ -1,0 +1,8 @@
+*.pdb
+*.ped
+*.map
+*.raw
+*.nosex
+*.freq
+bush/*
+capra/*
