@@ -66,9 +66,9 @@ def main():
 		try:
 			load_pdb(pdb_id,pdb_file)
 		except Exception as e:
-			print "PDB %s could not be processed."%pdb_id
-			print e
-			print "Skipping..."
+			sys.stderr.write("PDB %s could not be processed.\n"%pdb_id)
+			sys.stderr.write("%s\n"%e)
+			sys.stderr.write("Skipping...\n")
 	
 
 def sqlite_init():
