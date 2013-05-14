@@ -62,13 +62,17 @@ def main():
 	# Load each PDB structure
 	print "%d PDB file(s) found."%len(pdb_files)
 	for pdb_id,pdb_file in pdbs.iteritems():
-		print "Processing PDB %s..."%pdb_id
-		try:
-			load_pdb(pdb_id,pdb_file)
-		except Exception as e:
-			sys.stderr.write("PDB %s could not be processed.\n"%pdb_id)
-			sys.stderr.write("%s\n"%e)
-			sys.stderr.write("Skipping...\n")
+		if pdb_in_db(pdb_id):
+			print "PDB %s already included in database. Skipping..."%pdb_id
+		else:
+			print "Processing PDB %s..."%pdb_id
+			try:
+				load_pdb(pdb_id,pdb_file)
+			except Exception as e:
+				sys.stderr.write("PDB %s could not be processed.\n"%pdb_id)
+				sys.stderr.write("%s\n"%e)
+				sys.stderr.write("Skipping...\n")
+		sys.stdout.flush()	# Flush all output for this PDB file
 	
 
 def sqlite_init():
@@ -227,7 +231,19 @@ def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname):
 	os.system('rm -f PDBTranscript.tab')
 	os.system('rm -f %s.tab'%pdb_id)
 
-def create_new_database(dbhost,dbuser,dbpass,dbname):
+def pdb_in_db(pdb_id,dbhost,dbuser,dbpass,dbname):
+	try:
+		con = MySQLdb.connect(host=dbhost,user=dbuser,passwd=dbpass,db=dbname)
+		c = con.cursor()
+	except Exception as e:
+		print "There was an error connecting to the database.\n%s"%e
+		sys.exit(1)
+	c.execute("SELECT * FROM PDBInfo WHERE pdbid=?",(pdb_id,))
+	res = c.fetchone()
+	con.close()
+	return res
+
+def create_new_db(dbhost,dbuser,dbpass,dbname):
 	try:
 		con = MySQLdb.connect(host=dbhost,user=dbuser,passwd=dbpass)
 		c = con.cursor()
