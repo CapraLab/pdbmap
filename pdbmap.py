@@ -118,7 +118,7 @@ def load_pdb(pdb_id,pdb_file):
 	for unp_chain in unp_chains:
 		unp = str(unp_chain[0])
 		chain = str(unp_chain[1])
-		if species.lower() == 'human':
+		if species.lower() == 'human' or species.lower() == 'homo sapiens':
 			print "\tLoading -> pdb: %s, chain: %s, unp: %s, species: %s"%(pdb_id,chain,unp,species)
 			os.system("./protein_to_genomic.pl %s %s %s %s"%(pdb_id,chain,unp,species))
 		elif not args.disable_human_homologue:
