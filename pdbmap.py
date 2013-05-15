@@ -82,8 +82,8 @@ def sqlite_init():
 	"""Initializes a temporary SQLite instance for local PDB->Genome Mapping"""
 	con = sqlite3.connect(':memory:')
 	c = con.cursor()
-	c.execute("CREATE TABLE chains (chain VARCHAR(10),unp VARCHAR(10),pdb VARCHAR(20),pdbstart INT,offset INT,species VARCHAR(20),PRIMARY KEY(chain))")
-	c.execute("CREATE TABLE coords (chain VARCHAR(10),serialnum INT,seqres INT,aa3 VARCHAR(3), aa1 VARCHAR(1),x DOUBLE,y DOUBLE,z DOUBLE,PRIMARY KEY(chain,serialnum))")
+	c.execute("CREATE TABLE chains (chain VARCHAR(1),unp VARCHAR(10),pdb VARCHAR(20),pdbstart INT,offset INT,species VARCHAR(20),PRIMARY KEY(chain))")
+	c.execute("CREATE TABLE coords (chain VARCHAR(1),serialnum INT,seqres INT,aa3 VARCHAR(3), aa1 VARCHAR(1),x DOUBLE,y DOUBLE,z DOUBLE,PRIMARY KEY(chain,serialnum))")
 	con.commit()
 	return c,con
 
@@ -97,6 +97,9 @@ def load_pdb(pdb_id,pdb_file):
 	print "\tParsing info from %s..."%pdb_id
 	with open(pdb_file,'r') as fin:
 		species = read_species(fin)
+		if not species:
+			print "PDB contained no species information. Skipping..."
+			return
 		read_dbref(fin,c,pdb_id,species)
 		read_atom(fin,c)
 		con.commit()
@@ -136,12 +139,27 @@ def load_pdb(pdb_id,pdb_file):
 
 def read_species(fin):
 	"""Parses the species field from a PDB file"""
+	flag = 0
+	common = ''
+	scientific = ''
 	for line in fin:
-		if line[0:6] == "SOURCE" and line[11:26] == "ORGANISM_COMMON":
-			species = line[28:].split(';')[0]
-			if species in species_map:
-				species = species_map[species]
-			return species
+		if line[0:6] == "SOURCE":
+			flag = 1
+			if line[11:26] == "ORGANISM_COMMON":
+				common = line[28:].split(';')[0]
+				if common in species_map:
+					common = species_map[common]
+			if line[11:30] == "ORGANISM_SCIENTIFIC":
+				scientific = line[30:].split(';')[0]
+				if scientific in species_map:
+					scientific = species_map[scientific]
+		elif flag:
+			if common: # Return common if found
+				return common
+			elif scientific: # Return scientific if not
+				return scientific
+			else: # Empty return if no species information
+				return
 
 
 def read_dbref(fin,c,pdb_id,species):
@@ -177,7 +195,6 @@ def read_seqres(fin,c):
 
 def read_atom(fin,c):
 	"""Parses the ATOM fields from a PDB file"""
-	chainatom_coord_map = {}
 	for line in fin:
 		if line[0:4] == "ATOM":
 			chain = line[21]

@@ -12,7 +12,8 @@ my $chain = $ARGV[1];
 my $unp = $ARGV[2];
 my $species = $ARGV[3];
 
-Bio::EnsEMBL::Registry->load_registry_from_db(-host=>'gwar-dev.mc.vanderbilt.edu',-user=>'script_access',-pass=>'bushlabrocks');
+Bio::EnsEMBL::Registry->load_registry_from_db(-host=>'ensembldb.ensembl.org',-user=>'anonymous');
+#Bio::EnsEMBL::Registry->load_registry_from_db(-host=>'gwar-dev.mc.vanderbilt.edu',-user=>'script_access',-pass=>'bushlabrocks');
 
 $transcript_adaptor = Bio::EnsEMBL::Registry->get_adaptor($species,'Core','Transcript');
 
