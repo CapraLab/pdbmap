@@ -51,7 +51,7 @@ def main():
 
 	# If a new database needs to be created, create one.
 	if args.create_new_db:
-		create_new_database(args.dbhost,args.dbuser,args.dbpass,args.dbname)
+		create_new_db(args.dbhost,args.dbuser,args.dbpass,args.dbname)
 
 	# Identify all PDB structures in pdb_dir
 	if os.path.isdir(args.pdb_dir):
@@ -118,7 +118,6 @@ def load_pdb(pdb_id,pdb_file):
 	for unp_chain in unp_chains:
 		unp = str(unp_chain[0])
 		chain = str(unp_chain[1])
-		print species.lower()
 		if species.lower() in ['human','homo sapien','homo sapiens']:
 			print "\tLoading -> pdb: %s, chain: %s, unp: %s, species: %s"%(pdb_id,chain,unp,species)
 			os.system("./protein_to_genomic.pl %s %s %s %s"%(pdb_id,chain,unp,species))
@@ -134,8 +133,10 @@ def load_pdb(pdb_id,pdb_file):
 			print "\tSpecies is non-human and human homologue mapping is disabled. Skipping..."
 
 	# Upload to the database
+	print "\tUploading data to database..."
 	publish_data(pdb_id,args.dbhost,args.dbuser,args.dbpass,args.dbname)
-
+	#FIXME
+	sys.exit(0)
 
 
 def read_species(fin):
@@ -318,6 +319,7 @@ species_map = {"PIG" : "sus_scrofa",
 				"YEAST" : "saccharomyces_cerevisiae"}
 
 build_genomePDB_proc ="""
+DELIMITER $$
 CREATE DEFINER=`will_home`@`gwar-dev.mc.vanderbilt.edu` PROCEDURE `build_GenomePDB`(new_pdbid VARCHAR(20))
 BEGIN
 
@@ -344,6 +346,7 @@ END
 """
 
 sanitize_transcripts_proc ="""
+DELIMITER $$
 CREATE DEFINER=`%(dbuser)s`@`%(dbhost)s` PROCEDURE `sanitize_transcripts`()
 BEGIN
 
