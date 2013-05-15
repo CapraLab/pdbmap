@@ -118,7 +118,8 @@ def load_pdb(pdb_id,pdb_file):
 	for unp_chain in unp_chains:
 		unp = str(unp_chain[0])
 		chain = str(unp_chain[1])
-		if species.lower() == 'human' or species.lower() == 'homo sapiens':
+		print species.lower()
+		if species.lower() in ['human','homo sapien','homo sapiens']:
 			print "\tLoading -> pdb: %s, chain: %s, unp: %s, species: %s"%(pdb_id,chain,unp,species)
 			os.system("./protein_to_genomic.pl %s %s %s %s"%(pdb_id,chain,unp,species))
 		elif not args.disable_human_homologue:
@@ -146,11 +147,11 @@ def read_species(fin):
 		if line[0:6] == "SOURCE":
 			flag = 1
 			if line[11:26] == "ORGANISM_COMMON":
-				common = line[28:].split(';')[0]
+				common = line[28:].split(';')[0].strip()
 				if common in species_map:
 					common = species_map[common]
 			if line[11:30] == "ORGANISM_SCIENTIFIC":
-				scientific = line[30:].split(';')[0]
+				scientific = line[32:].split(';')[0].strip()
 				if scientific in species_map:
 					scientific = species_map[scientific]
 		elif flag:
