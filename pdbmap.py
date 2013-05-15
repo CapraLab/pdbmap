@@ -24,6 +24,7 @@ defaults = {
 	"pdb_dir" : "./pdb",
 	"disable_human_homologue" : False,
 	"create_new_db" : False
+	"force" : False
 	}
 if args.conf_file:
 	config = ConfigParser.SafeConfigParser()
@@ -42,6 +43,7 @@ parser.add_argument("--dbname", help="Database name")
 parser.add_argument("--pdb_dir", help="Directory containing PDB files")
 parser.add_argument("--disable_human_homologue", action='store_true', help="Disable mapping from non-human PDBs to human homologues")
 parser.add_argument("--create_new_db", action='store_true', help="Create a new database prior to uploading PDB data")
+parser.add_argument("-f", "--force", action='store_true', help="Force configuration. No safety checks.")
 
 
 def main():
@@ -224,7 +226,7 @@ def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname):
 	query.append("LOAD DATA LOCAL INFILE '%s.tab' INTO TABLE PDBCoords FIELDS TERMINATED BY '\t' IGNORE 1 LINES (chain,@dummy,@dummy,pdbid,seqres,aa3,aa1,x,y,z)"%pdb_id)
 	query.append("LOAD DATA LOCAL INFILE '%s.tab' INTO TABLE PDBInfo FIELDS TERMINATED BY '\t' IGNORE 1 LINES (chain,species,unp,pdbid,@dummy,@dummy,@dummy,@dummy,@dummy,@dummy)"%pdb_id)
 	query.append("CALL %s.sanitize_transcripts();"%dbname)
-	query.append("CALL %s.build_GenomePDB();"%dbname)
+	query.append("CALL %s.build_GenomePDB(%s);"%(dbname,pdb_id))
 	for q in query:
 		c.execute(q)
 	con.close()	# Close the remote MySQL connection
@@ -294,21 +296,24 @@ species_map = {"PIG" : "sus_scrofa",
 				"YEAST" : "saccharomyces_cerevisiae"}
 
 build_genomePDB_proc ="""
-CREATE DEFINER=`%(dbuser)s`@`%(dbhost)s` PROCEDURE `build_GenomePDB`()
+CREATE DEFINER=`will_home`@`gwar-dev.mc.vanderbilt.edu` PROCEDURE `build_GenomePDB`(new_pdbid VARCHAR(20))
 BEGIN
 
-DROP TABLE IF EXISTS GenomePDB;
+CREATE TABLE IF NOT EXISTS GenomePDB (pdbid VARCHAR(20),species VARCHAR(20),chain VARCHAR(1),unp VARCHAR(20),transcript VARCHAR(20),seqres INT,aa1 VARCHAR(1),x DOUBLE,y DOUBLE,z DOUBLE,start BIGINT,end BIGINT,chr INT,strand INT, PRIMARY KEY(pdbid,chain,seqres));
 DROP TABLE IF EXISTS PDB;
 
 CREATE TABLE PDB AS
 (SELECT PDBInfo.pdbid,PDBInfo.species,PDBInfo.chain,PDBInfo.unp,PDBCoords.seqres,PDBCoords.aa1,PDBCoords.x,PDBCoords.y,PDBCoords.z,PDBTranscript.transcript
 FROM PDBInfo,PDBCoords,PDBTranscript
-WHERE PDBInfo.pdbid=PDBCoords.pdbid AND PDBInfo.chain=PDBCoords.chain AND PDBInfo.pdbid=PDBTranscript.pdbid AND PDBInfo.chain=PDBTranscript.chain AND PDBCoords.pdbid=PDBTranscript.pdbid AND PDBCoords.chain=PDBTranscript.chain);
+WHERE PDBInfo.pdbid=new_pdbid AND PDBCoords.pdbid=new_pdbid AND PDBTranscript.pdbid=new_pdbid 
+AND PDBInfo.pdbid=PDBCoords.pdbid AND PDBInfo.chain=PDBCoords.chain 
+AND PDBInfo.pdbid=PDBTranscript.pdbid AND PDBInfo.chain=PDBTranscript.chain 
+AND PDBCoords.pdbid=PDBTranscript.pdbid AND PDBCoords.chain=PDBTranscript.chain);
 
-CREATE TABLE GenomePDB AS
+INSERT INTO GenomePDB
 SELECT PDB.pdbid,PDB.species,PDB.chain,PDB.unp,PDB.transcript,PDB.seqres,PDB.aa1,PDB.x,PDB.y,PDB.z,GenomicCoords.start,GenomicCoords.end,GenomicCoords.chr,GenomicCoords.strand
 FROM PDB,GenomicCoords
-WHERE PDB.transcript=GenomicCoords.transcript AND PDB.seqres=GenomicCoords.seqres
+WHERE PDB.pdbid=new_pdbid AND PDB.transcript=GenomicCoords.transcript AND PDB.seqres=GenomicCoords.seqres
 GROUP BY PDB.pdbid,PDB.chain,PDB.seqres
 ORDER BY PDB.pdbid,PDB.chain,PDB.seqres;
 
@@ -357,4 +362,11 @@ if __name__=='__main__':
 	args = parser.parse_args(remaining_argv)
 	args.create_new_db = bool(args.create_new_db)
 	args.disable_human_homologue = bool(args.disable_human_homologue)
+	args.force = bool(args.force)
+	if args.create_new_db and not args.force:
+		print "You have opted to create a new database."
+		print "This will overwrite any existing database by the same name."
+		if raw_input("Are you sure you want to do this? (y/n):") == 'n':
+			print "Aborting..."
+			sys.exit(0)
 	main()
