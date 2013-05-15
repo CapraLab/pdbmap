@@ -135,8 +135,6 @@ def load_pdb(pdb_id,pdb_file):
 	# Upload to the database
 	print "\tUploading data to database..."
 	publish_data(pdb_id,args.dbhost,args.dbuser,args.dbpass,args.dbname)
-	#FIXME
-	sys.exit(0)
 
 
 def read_species(fin):
@@ -249,7 +247,7 @@ def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname):
 	query.append("LOAD DATA LOCAL INFILE '%s.tab' INTO TABLE PDBCoords FIELDS TERMINATED BY '\t' IGNORE 1 LINES (chain,@dummy,@dummy,pdbid,seqres,aa3,aa1,x,y,z)"%pdb_id)
 	query.append("LOAD DATA LOCAL INFILE '%s.tab' INTO TABLE PDBInfo FIELDS TERMINATED BY '\t' IGNORE 1 LINES (chain,species,unp,pdbid,@dummy,@dummy,@dummy,@dummy,@dummy,@dummy)"%pdb_id)
 	query.append("CALL %s.sanitize_transcripts();"%dbname)
-	query.append("CALL %s.build_GenomePDB(%s);"%(dbname,pdb_id))
+	query.append("CALL %s.update_GenomePDB('%s');"%(dbname,pdb_id))
 	for q in query:
 		c.execute(q)
 	con.close()	# Close the remote MySQL connection
@@ -284,7 +282,7 @@ def create_new_db(dbhost,dbuser,dbpass,dbname):
 	query.append("CREATE TABLE %s.PDBInfo (pdbid VARCHAR(20),species VARCHAR(20),chain VARCHAR(1),unp VARCHAR(20),PRIMARY KEY(pdbid,chain))"%dbname)
 	query.append("CREATE TABLE %s.PDBTranscript (pdbid VARCHAR(20),chain VARCHAR(1),transcript VARCHAR(20),homologue BOOLEAN,PRIMARY KEY(pdbid,chain))"%dbname)
 	format_dict = {'dbuser':dbuser,'dbhost':dbhost}
-	with open('create_proc_buildGenomePDB.sql','r') as fin:
+	with open('create_proc_update_GenomePDB.sql','r') as fin:
 		query.append(fin.read()%format_dict)
 	with open('create_proc_sanitize_transcripts.sql','r') as fin:
 		query.append(fin.read()%format_dict)
@@ -318,70 +316,6 @@ species_map = {"PIG" : "sus_scrofa",
 				"BAKER'S YEAST" : "saccharomyces_cerevisiae",
 				"YEAST" : "saccharomyces_cerevisiae"}
 
-build_genomePDB_proc ="""
-DELIMITER $$
-CREATE DEFINER=`will_home`@`gwar-dev.mc.vanderbilt.edu` PROCEDURE `build_GenomePDB`(new_pdbid VARCHAR(20))
-BEGIN
-
-CREATE TABLE IF NOT EXISTS GenomePDB (pdbid VARCHAR(20),species VARCHAR(20),chain VARCHAR(1),unp VARCHAR(20),transcript VARCHAR(20),seqres INT,aa1 VARCHAR(1),x DOUBLE,y DOUBLE,z DOUBLE,start BIGINT,end BIGINT,chr INT,strand INT, PRIMARY KEY(pdbid,chain,seqres));
-DROP TABLE IF EXISTS PDB;
-
-CREATE TABLE PDB AS
-(SELECT PDBInfo.pdbid,PDBInfo.species,PDBInfo.chain,PDBInfo.unp,PDBCoords.seqres,PDBCoords.aa1,PDBCoords.x,PDBCoords.y,PDBCoords.z,PDBTranscript.transcript
-FROM PDBInfo,PDBCoords,PDBTranscript
-WHERE PDBInfo.pdbid=new_pdbid AND PDBCoords.pdbid=new_pdbid AND PDBTranscript.pdbid=new_pdbid 
-AND PDBInfo.pdbid=PDBCoords.pdbid AND PDBInfo.chain=PDBCoords.chain 
-AND PDBInfo.pdbid=PDBTranscript.pdbid AND PDBInfo.chain=PDBTranscript.chain 
-AND PDBCoords.pdbid=PDBTranscript.pdbid AND PDBCoords.chain=PDBTranscript.chain);
-
-INSERT INTO GenomePDB
-SELECT PDB.pdbid,PDB.species,PDB.chain,PDB.unp,PDB.transcript,PDB.seqres,PDB.aa1,PDB.x,PDB.y,PDB.z,GenomicCoords.start,GenomicCoords.end,GenomicCoords.chr,GenomicCoords.strand
-FROM PDB,GenomicCoords
-WHERE PDB.pdbid=new_pdbid AND PDB.transcript=GenomicCoords.transcript AND PDB.seqres=GenomicCoords.seqres
-GROUP BY PDB.pdbid,PDB.chain,PDB.seqres
-ORDER BY PDB.pdbid,PDB.chain,PDB.seqres;
-
-DROP TABLE PDB;
-END
-"""
-
-sanitize_transcripts_proc ="""
-DELIMITER $$
-CREATE DEFINER=`%(dbuser)s`@`%(dbhost)s` PROCEDURE `sanitize_transcripts`()
-BEGIN
-
-DROP TABLE IF EXISTS minTrans;
-DROP TABLE IF EXISTS maxTrans;
-
-# Genomic transcripts that match the minimum seqres for their PDB Sequence
-CREATE TABLE minTrans AS (SELECT PDBTranscript.transcript FROM PDBTranscript,GenomicCoords as GC WHERE
-		# PDB seqres must match the GC seqres (no out of range)
-		GC.seqres=(SELECT seqres FROM PDBCoords WHERE PDBCoords.pdbid=PDBTranscript.pdbid AND PDBCoords.chain=PDBTranscript.chain ORDER BY seqres LIMIT 1)
-		AND
-		# PDB amino acid must match the GC amino acid (no mismatched peptides)
-		GC.aa1=(SELECT aa1 FROM PDBCoords WHERE PDBCoords.pdbid=PDBTranscript.pdbid AND PDBCoords.chain=PDBTranscript.chain ORDER BY seqres LIMIT 1)
-	);
-
-# Genomic transcripts that match the maximum seqres for their PDB Sequence
-CREATE TABLE maxTrans AS (SELECT PDBTranscript.transcript FROM PDBTranscript,GenomicCoords as GC WHERE
-		# PDB seqres must match the GC seqres (no out of range)
-		GC.seqres=(SELECT seqres FROM PDBCoords WHERE PDBCoords.pdbid=PDBTranscript.pdbid AND PDBCoords.chain=PDBTranscript.chain ORDER BY seqres DESC LIMIT 1)
-		AND
-		# PDB amino acid must match the GC amino acid (no mismatched peptides)
-		GC.aa1=(SELECT aa1 FROM PDBCoords WHERE PDBCoords.pdbid=PDBTranscript.pdbid AND PDBCoords.chain=PDBTranscript.chain ORDER BY seqres DESC LIMIT 1)
-	);
-
-DELETE FROM PDBTranscript
-WHERE
-# Delete if the amino acids don't match at the minimum seqres
-transcript NOT IN (SELECT transcript FROM minTrans)
-OR
-# Delete if the amino acids don't match at the maximum seqres
-transcript NOT IN (SELECT transcript FROM maxTrans);
-DROP TABLE minTrans;
-DROP TABLE maxTrans;
-END
-"""
 
 if __name__=='__main__':
 	args = parser.parse_args(remaining_argv)
