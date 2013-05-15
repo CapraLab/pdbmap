@@ -23,7 +23,7 @@ defaults = {
 	"dbpass" : "pass",
 	"pdb_dir" : "./pdb",
 	"disable_human_homologue" : False,
-	"create_new_db" : False
+	"create_new_db" : False,
 	"force" : False
 	}
 if args.conf_file:
@@ -120,10 +120,14 @@ def load_pdb(pdb_id,pdb_file):
 			os.system("./protein_to_genomic.pl %s %s %s %s"%(pdb_id,chain,unp,species))
 		elif not args.disable_human_homologue:
 			ung = unp2ung(unp)
-			print "\tLoading any human homologues -> pdb: %s, chain: %s, unp: %s, ung: %s, species: %s"%(pdb_id,chain,unp,ung,species)
-			os.system("./unigene_to_homologue_genomic.pl %s %s %s %s"%(pdb_id,chain,ung,species))
+			if not ung:
+				sys.stderr.write("No UniGene entry found -> pdb: %s, chain: %s, unp: %s, species: %s"%(pdb_id,chain,unp,species))
+				return
+			else:
+				print "\tSearching for human homologues -> pdb: %s, chain: %s, unp: %s, ung: %s, species: %s"%(pdb_id,chain,unp,ung,species)
+				os.system("./unigene_to_homologue_genomic.pl %s %s %s %s"%(pdb_id,chain,ung,species))
 		else:
-			print "\tSpecies is non-human and human homologue mappning is disabled. Skipping..."
+			print "\tSpecies is non-human and human homologue mapping is disabled. Skipping..."
 
 	# Upload to the database
 	publish_data(pdb_id,args.dbhost,args.dbuser,args.dbpass,args.dbname)
