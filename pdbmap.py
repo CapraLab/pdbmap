@@ -9,6 +9,7 @@ import argparse,ConfigParser
 import os,sys,csv,sqlite3,MySQLdb
 from warnings import filterwarnings	# Disable MySQL warnings
 filterwarnings('ignore',category=MySQLdb.Warning)
+filterwarnings('ignore',"Unknown table.*")
 
 # Setup the Config File Parser
 conf_parser = argparse.ArgumentParser(add_help=False)
@@ -62,7 +63,7 @@ def main():
 	# Load each PDB structure
 	print "%d PDB file(s) found."%len(pdb_files)
 	for pdb_id,pdb_file in pdbs.iteritems():
-		if pdb_in_db(pdb_id):
+		if pdb_in_db(pdb_id,args.dbhost,args.dbuser,args.dbpass,args.dbname):
 			print "PDB %s already included in database. Skipping..."%pdb_id
 		else:
 			print "Processing PDB %s..."%pdb_id
@@ -215,7 +216,7 @@ def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname):
 	try:
 		con = MySQLdb.connect(host=dbhost,user=dbuser,passwd=dbpass,db=dbname)
 		c = con.cursor()
-	except Exception as e:
+	except MySQLdb.Error as e:
 		print "There was an error connecting to the database.\n%s"%e
 		sys.exit(1)
 	query = ["LOAD DATA LOCAL INFILE 'GenomicCoords.tab' INTO TABLE GenomicCoords FIELDS TERMINATED BY '\t' IGNORE 1 LINES"]
@@ -235,10 +236,10 @@ def pdb_in_db(pdb_id,dbhost,dbuser,dbpass,dbname):
 	try:
 		con = MySQLdb.connect(host=dbhost,user=dbuser,passwd=dbpass,db=dbname)
 		c = con.cursor()
-	except Exception as e:
+	except MySQLdb.Error as e:
 		print "There was an error connecting to the database.\n%s"%e
 		sys.exit(1)
-	c.execute("SELECT * FROM PDBInfo WHERE pdbid=?",(pdb_id,))
+	c.execute("SELECT * FROM PDBInfo WHERE pdbid=%s",pdb_id)
 	res = c.fetchone()
 	con.close()
 	return res
@@ -247,7 +248,7 @@ def create_new_db(dbhost,dbuser,dbpass,dbname):
 	try:
 		con = MySQLdb.connect(host=dbhost,user=dbuser,passwd=dbpass)
 		c = con.cursor()
-	except Exception as e:
+	except MySQLdb.Error as e:
 		print "There was an error connecting to the database.\n%s"%e
 		sys.exit(1)
 	query = ["DROP DATABASE IF EXISTS %s"%dbname]
