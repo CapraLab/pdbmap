@@ -6,7 +6,8 @@
 # homologues for non-human protein structures.
 
 import argparse,ConfigParser
-import os,sys,csv,sqlite3,MySQLdb
+import os,sys,csv,time
+import sqlite3,MySQLdb
 from warnings import filterwarnings	# Disable MySQL warnings
 filterwarnings('ignore',category=MySQLdb.Warning)
 filterwarnings('ignore',"Unknown table.*")
@@ -49,6 +50,9 @@ parser.add_argument("-f", "--force", action='store_true', help="Force configurat
 def main():
 	"""Map each PDB to its genomic coordinates and upload to the specified database"""
 
+	# Profiler
+	t0 = time.time()
+
 	# If a new database needs to be created, create one.
 	if args.create_new_db:
 		create_new_db(args.dbhost,args.dbuser,args.dbpass,args.dbname)
@@ -63,12 +67,14 @@ def main():
 	
 
 	# Load each PDB structure
+	pdb_count = 0
 	print "%d PDB file(s) found."%len(pdb_files)
 	for pdb_id,pdb_file in pdbs.iteritems():
 		if pdb_in_db(pdb_id,args.dbhost,args.dbuser,args.dbpass,args.dbname):
 			print "PDB %s already included in database. Skipping..."%pdb_id
 		else:
 			print "Processing PDB %s..."%pdb_id
+			pdb_count += 1
 			try:
 				load_pdb(pdb_id,pdb_file)
 			except Exception as e:
@@ -77,6 +83,13 @@ def main():
 				sys.stderr.write("Skipping...\n")
 		sys.stdout.flush()	# Flush all output for this PDB file
 	
+	# Profiler
+	t_elapsed = time.time() - t0
+	t_average = t_elapsed / pdb_count
+	print "Number of PDBs processed: %d"%pdb_count
+	print "Total execution time: %f"%t_elapsed
+	print "Average execution time per PDB: %f"%t_average
+	print "...Complete"
 
 def sqlite_init():
 	"""Initializes a temporary SQLite instance for local PDB->Genome Mapping"""
