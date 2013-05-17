@@ -21,6 +21,8 @@ with open(fastaname,'r') as fin:
 	unp = ''
 	# For each row
 	for line in fin:
+		if line[0]=='#' or not line[0].strip():
+			continue
 		if line[0]=='>':
 			unp = line[1:].split('_')[0]
 		else:
@@ -29,6 +31,8 @@ with open(fastaname,'r') as fin:
 			for col,aa1 in enumerate(line):
 				if aa1 != '-':
 					pepindex += 1
+					print "Inserting into fasta_pep: ",
+					print unp,pepindex,col,aa1
 					c.execute("INSERT INTO fasta_pep VALUES (?,?,?,?)",(unp,pepindex,col,aa1))
 
 # Build a database mapping UNP+seqres -> SDP score
@@ -50,6 +54,8 @@ with open(sdpname,'r') as fin:
 			unp = str(res[0])
 			pepindex = int(res[1])
 			# For each UNP+SEQRES, add the score to the database
+			print "Inserting into sdp_scores: ",
+			print unp,pepindex,score
 			c.execute("INSERT INTO sdp_scores VALUES (?,?,?)",(unp,pepindex,score))
 
 # Upload the SDP scores to the MySQL database
@@ -62,7 +68,10 @@ c.execute("SELECT unp,pepindex,sdp_score FROM sdp_scores")
 results = c.fetchall()
 with open('sdp_scores.csv','w') as fout:
 	for res in results:
+		print res
 		fout.write("%s,%d,%s\n"%res)
+MySQLc.execute("CREATE TABLE IF NOT EXISTS sdp_scores (unp VARCHAR(20), seqres INT, sdp_score DOUBLE, PRIMARY KEY(unp,seqres))")
+MySQLcon.commit()
 MySQLc.execute("LOAD DATA LOCAL INFILE 'sdp_scores.csv' INTO TABLE sdp_scores FIELDS TERMINATED BY ',' IGNORE 1 LINES")
 MySQLcon.commit()
 
