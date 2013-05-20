@@ -1,0 +1,4 @@
+  File "./pdbmap.py", line 27
+    "force" : False
+          ^
+SyntaxError: invalid syntax
