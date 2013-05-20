@@ -8,12 +8,13 @@ filterwarnings('ignore',category=MySQLdb.Warning)
 con = sqlite3.connect(':memory:')
 c = con.cursor()
 c.execute("CREATE TABLE fasta_pep (unp VARCHAR(20),pepindex INT,col INT,aa1 VARCHAR(1))")
-c.execute("CREATE TABLE sdp_scores (unp VARCHAR(20),pepindex INT,sdp_score DOUBLE)")
+c.execute("CREATE TABLE sdp_scores (unp VARCHAR(20),pepindex INT,sdp_score DOUBLE,sdp_label VARCHAR(20))")
 
 # User provides the fasta and sdpfilenames
 fastaname = sys.argv[1]
 sdpname = sys.argv[2]
-DBNAME = sys.argv[3]
+sdp_label = sys.argv[3]
+DBNAME = sys.argv[4]
 fasta_map = {}
 
 # Build the column->pepindex mapping for each UNP
@@ -31,8 +32,6 @@ with open(fastaname,'r') as fin:
 			for col,aa1 in enumerate(line):
 				if aa1 != '-':
 					pepindex += 1
-					print "Inserting into fasta_pep: ",
-					print unp,pepindex,col,aa1
 					c.execute("INSERT INTO fasta_pep VALUES (?,?,?,?)",(unp,pepindex,col,aa1))
 
 # Build a database mapping UNP+seqres -> SDP score
@@ -54,9 +53,7 @@ with open(sdpname,'r') as fin:
 			unp = str(res[0])
 			pepindex = int(res[1])
 			# For each UNP+SEQRES, add the score to the database
-			print "Inserting into sdp_scores: ",
-			print unp,pepindex,score
-			c.execute("INSERT INTO sdp_scores VALUES (?,?,?)",(unp,pepindex,score))
+			c.execute("INSERT INTO sdp_scores VALUES (?,?,?,?)",(unp,pepindex,score,sdp_label))
 
 # Upload the SDP scores to the MySQL database
 MySQLcon = MySQLdb.connect(host='loki.mc.vanderbilt.edu',user='sivleyrm',passwd='19jcpkxw88',db=DBNAME)
@@ -64,13 +61,12 @@ MySQLc = MySQLcon.cursor()
 
 
 
-c.execute("SELECT unp,pepindex,sdp_score FROM sdp_scores")
+c.execute("SELECT unp,pepindex,sdp_score,sdp_label FROM sdp_scores")
 results = c.fetchall()
 with open('sdp_scores.csv','w') as fout:
 	for res in results:
-		print res
-		fout.write("%s,%d,%s\n"%res)
-MySQLc.execute("CREATE TABLE IF NOT EXISTS sdp_scores (unp VARCHAR(20), seqres INT, sdp_score DOUBLE, PRIMARY KEY(unp,seqres))")
+		fout.write("%s,%d,%s,%s\n"%res)
+MySQLc.execute("CREATE TABLE IF NOT EXISTS sdp_scores (unp VARCHAR(20), seqres INT, sdp_score DOUBLE,sdp_label VARCHAR(20), PRIMARY KEY(sdp_label,unp,seqres))")
 MySQLcon.commit()
 MySQLc.execute("LOAD DATA LOCAL INFILE 'sdp_scores.csv' INTO TABLE sdp_scores FIELDS TERMINATED BY ',' IGNORE 1 LINES")
 MySQLcon.commit()
