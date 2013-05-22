@@ -6,7 +6,7 @@
 # homologues for non-human protein structures.
 
 import argparse,ConfigParser
-import os,sys,csv,time
+import os,sys,csv,time,subprocess
 import sqlite3,MySQLdb
 from warnings import filterwarnings	# Disable MySQL warnings
 filterwarnings('ignore',category=MySQLdb.Warning)
@@ -73,13 +73,16 @@ def main():
 		if pdb_in_db(pdb_id,args.dbhost,args.dbuser,args.dbpass,args.dbname):
 			print "PDB %s already included in database. Skipping..."%pdb_id
 		else:
-			print "Processing PDB %s..."%pdb_id
+			print "\nProcessing PDB %s..."%pdb_id
 			pdb_count += 1
 			try:
 				load_pdb(pdb_id,pdb_file)
+			except (KeyboardInterrupt,SystemExit):
+				print("\nExiting...")
+				sys.exit(0)
 			except Exception as e:
-				sys.stderr.write("PDB %s could not be processed.\n"%pdb_id)
-				sys.stderr.write("%s\n"%e)
+				sys.stderr.write("\tPDB %s could not be processed.\n"%pdb_id)
+				sys.stderr.write("\t%s\n"%e)
 				sys.stderr.write("Skipping...\n")
 		sys.stdout.flush()	# Flush all output for this PDB file
 	
@@ -111,7 +114,7 @@ def load_pdb(pdb_id,pdb_file):
 	with open(pdb_file,'r') as fin:
 		species = read_species(fin)
 		if not species:
-			print "PDB contained no species information. Skipping..."
+			sys.stderr.write("PDB contained no species information. Skipping...\n")
 			return
 		read_dbref(fin,c,pdb_id,species)
 		read_atom(fin,c)
@@ -131,19 +134,25 @@ def load_pdb(pdb_id,pdb_file):
 	for unp_chain in unp_chains:
 		unp = str(unp_chain[0])
 		chain = str(unp_chain[1])
-		if species.lower() in ['human','homo sapien','homo sapiens']:
-			print "\tLoading -> pdb: %s, chain: %s, unp: %s, species: %s"%(pdb_id,chain,unp,species)
-			os.system("./protein_to_genomic.pl %s %s %s %s"%(pdb_id,chain,unp,species))
-		elif not args.disable_human_homologue:
-			ung = unp2ung(unp)
-			if not ung:
-				sys.stderr.write("No UniGene entry found -> pdb: %s, chain: %s, unp: %s, species: %s"%(pdb_id,chain,unp,species))
-				return
+		try:
+			if species.lower() in ['human','homo sapien','homo sapiens']:
+				print "\tLoading -> pdb: %s, chain: %s, unp: %s, species: %s"%(pdb_id,chain,unp,species)
+				exit_code = subprocess.call("./protein_to_genomic.pl",pdb_id,chain,unp,species)
+			elif not args.disable_human_homologue:
+				ung = unp2ung(unp)
+				if not ung:
+					sys.stderr.write("No UniGene entry found -> pdb: %s, chain: %s, unp: %s, species: %s"%(pdb_id,chain,unp,species))
+					return
+				else:
+					print "\tSearching for human homologues -> pdb: %s, chain: %s, unp: %s, ung: %s, species: %s"%(pdb_id,chain,unp,ung,species)
+					exit_code = subprocess.call("./unigene_to_homologue_genomic.pl",pdb_id,chain,ung,species)
 			else:
-				print "\tSearching for human homologues -> pdb: %s, chain: %s, unp: %s, ung: %s, species: %s"%(pdb_id,chain,unp,ung,species)
-				os.system("./unigene_to_homologue_genomic.pl %s %s %s %s"%(pdb_id,chain,ung,species))
-		else:
-			print "\tSpecies is non-human and human homologue mapping is disabled. Skipping..."
+				print "\tSpecies is non-human and human homologue mapping is disabled. Skipping..."
+		except KeyboardInterrupt:
+			raise KeyboardInterrupt		
+		if exit_code:
+			sys.stderr.write("\tPerl script returned a non-zero exit status. Skipping...\n")
+			return		
 
 	# Upload to the database
 	print "\tUploading data to database..."
@@ -255,23 +264,31 @@ def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname):
 	except MySQLdb.Error as e:
 		print "There was an error connecting to the database.\n%s"%e
 		sys.exit(1)
-	query = ["LOAD DATA LOCAL INFILE 'GenomicCoords.tab' INTO TABLE GenomicCoords FIELDS TERMINATED BY '\t' IGNORE 1 LINES"]
-	query.append("LOAD DATA LOCAL INFILE 'PDBTranscript.tab' INTO TABLE PDBTranscript FIELDS TERMINATED BY '\t' IGNORE 1 LINES")
-	query.append("LOAD DATA LOCAL INFILE '%s.tab' INTO TABLE PDBCoords FIELDS TERMINATED BY '\t' IGNORE 1 LINES (chain,@dummy,@dummy,pdbid,seqres,aa3,aa1,x,y,z)"%pdb_id)
-	query.append("LOAD DATA LOCAL INFILE '%s.tab' INTO TABLE PDBInfo FIELDS TERMINATED BY '\t' IGNORE 1 LINES (chain,species,unp,pdbid,@dummy,@dummy,@dummy,@dummy,@dummy,@dummy)"%pdb_id)
-	query.append("CALL %s.sanitize_transcripts(%s);"%(dbname,pdb_id))
-	query.append("CALL %s.update_GenomePDB('%s');"%(dbname,pdb_id))
-	end_of_query = ['...','.']
-	for q in query:
-		tq0  = time.time()
-		print("\t%s%s - "%(q[:20],end_of_query[int(len(q)>20))]),
-		c.execute(q)
-		tqel = time.time()-tq0
-		print("%2.2fs"%tqel)
-	con.close()	# Close the remote MySQL connection
-	os.system('rm -f GenomicCoords.tab')
-	os.system('rm -f PDBTranscript.tab')
-	os.system('rm -f %s.tab'%pdb_id)
+	try:
+		query = ["LOAD DATA LOCAL INFILE 'GenomicCoords.tab' INTO TABLE GenomicCoords FIELDS TERMINATED BY '\t' IGNORE 1 LINES"]
+		query.append("LOAD DATA LOCAL INFILE 'PDBTranscript.tab' INTO TABLE PDBTranscript FIELDS TERMINATED BY '\t' IGNORE 1 LINES")
+		query.append("LOAD DATA LOCAL INFILE '%s.tab' INTO TABLE PDBCoords FIELDS TERMINATED BY '\t' IGNORE 1 LINES (chain,@dummy,@dummy,pdbid,seqres,aa3,aa1,x,y,z)"%pdb_id)
+		query.append("LOAD DATA LOCAL INFILE '%s.tab' INTO TABLE PDBInfo FIELDS TERMINATED BY '\t' IGNORE 1 LINES (chain,species,unp,pdbid,@dummy,@dummy,@dummy,@dummy,@dummy,@dummy)"%pdb_id)
+		query.append("CALL %s.sanitize_transcripts('%s');"%(dbname,pdb_id))
+		query.append("CALL %s.update_GenomePDB('%s');"%(dbname,pdb_id))
+		end_of_query = ['.','...']
+		for q in query:
+			tq0  = time.time()
+			sys.stdout.write("\t\t%s%s - "%(q[:35],end_of_query[int(len(q)>35)]))
+			sys.stdout.flush()
+			c.execute(q)
+			tqel = time.time()-tq0
+			print("%2.2fs"%tqel)
+	except (KeyboardInterrupt,SystemExit):
+		sys.stderr.write("\tUpload to MySQL was interrupted by user. Skipping...")
+		raise KeyboardInterrupt
+	except Exception as e:
+		sys.stderr.write("\tUpload to MySQL failed: %s. Skipping..."%e)
+	finally:
+		con.close()	# Close the remote MySQL connection
+		os.system('rm -f GenomicCoords.tab')
+		os.system('rm -f PDBTranscript.tab')
+		os.system('rm -f %s.tab'%pdb_id)
 
 def pdb_in_db(pdb_id,dbhost,dbuser,dbpass,dbname):
 	try:
