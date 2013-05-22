@@ -70,9 +70,7 @@ def main():
 	pdb_count = 0
 	print "%d PDB file(s) found."%len(pdb_files)
 	for pdb_id,pdb_file in pdbs.iteritems():
-		if pdb_in_db(pdb_id,args.dbhost,args.dbuser,args.dbpass,args.dbname):
-			print "PDB %s already included in database. Skipping..."%pdb_id
-		else:
+		if not pdb_in_db(pdb_id,args.dbhost,args.dbuser,args.dbpass,args.dbname):
 			print "\nProcessing PDB %s..."%pdb_id
 			pdb_count += 1
 			try:
@@ -83,7 +81,7 @@ def main():
 			except Exception as e:
 				sys.stderr.write("\tPDB %s could not be processed.\n"%pdb_id)
 				sys.stderr.write("\t%s\n"%e)
-				sys.stderr.write("Skipping...\n")
+				sys.stderr.write("\tSkipping...\n")
 		sys.stdout.flush()	# Flush all output for this PDB file
 	
 	# Profiler
@@ -137,7 +135,7 @@ def load_pdb(pdb_id,pdb_file):
 		try:
 			if species.lower() in ['human','homo sapien','homo sapiens']:
 				print "\tLoading -> pdb: %s, chain: %s, unp: %s, species: %s"%(pdb_id,chain,unp,species)
-				exit_code = subprocess.call("./protein_to_genomic.pl",pdb_id,chain,unp,species)
+				exit_code = subprocess.call(["./protein_to_genomic.pl",pdb_id,chain,unp,species])
 			elif not args.disable_human_homologue:
 				ung = unp2ung(unp)
 				if not ung:
@@ -145,11 +143,14 @@ def load_pdb(pdb_id,pdb_file):
 					return
 				else:
 					print "\tSearching for human homologues -> pdb: %s, chain: %s, unp: %s, ung: %s, species: %s"%(pdb_id,chain,unp,ung,species)
-					exit_code = subprocess.call("./unigene_to_homologue_genomic.pl",pdb_id,chain,ung,species)
+					exit_code = subprocess.call(["./unigene_to_homologue_genomic.pl",pdb_id,chain,ung,species])
 			else:
 				print "\tSpecies is non-human and human homologue mapping is disabled. Skipping..."
 		except KeyboardInterrupt:
-			raise KeyboardInterrupt		
+			if raw_input("\nContinue to next PDB? (y/n):") == 'n':
+				raise KeyboardInterrupt
+			print("\tSkipping...")
+			return
 		if exit_code:
 			sys.stderr.write("\tPerl script returned a non-zero exit status. Skipping...\n")
 			return		
