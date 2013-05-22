@@ -259,10 +259,15 @@ def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname):
 	query.append("LOAD DATA LOCAL INFILE 'PDBTranscript.tab' INTO TABLE PDBTranscript FIELDS TERMINATED BY '\t' IGNORE 1 LINES")
 	query.append("LOAD DATA LOCAL INFILE '%s.tab' INTO TABLE PDBCoords FIELDS TERMINATED BY '\t' IGNORE 1 LINES (chain,@dummy,@dummy,pdbid,seqres,aa3,aa1,x,y,z)"%pdb_id)
 	query.append("LOAD DATA LOCAL INFILE '%s.tab' INTO TABLE PDBInfo FIELDS TERMINATED BY '\t' IGNORE 1 LINES (chain,species,unp,pdbid,@dummy,@dummy,@dummy,@dummy,@dummy,@dummy)"%pdb_id)
-	query.append("CALL %s.sanitize_transcripts();"%dbname)
+	query.append("CALL %s.sanitize_transcripts(%s);"%(dbname,pdb_id))
 	query.append("CALL %s.update_GenomePDB('%s');"%(dbname,pdb_id))
+	end_of_query = ['...','.']
 	for q in query:
+		tq0  = time.time()
+		print("\t%s%s - "%(q[:20],end_of_query[int(len(q)>20))]),
 		c.execute(q)
+		tqel = time.time()-tq0
+		print("%2.2fs"%tqel)
 	con.close()	# Close the remote MySQL connection
 	os.system('rm -f GenomicCoords.tab')
 	os.system('rm -f PDBTranscript.tab')
