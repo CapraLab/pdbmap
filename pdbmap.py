@@ -324,6 +324,7 @@ def create_new_db(dbhost,dbuser,dbpass,dbname):
 		query.append(fin.read()%format_dict)
 	for q in query:
 		c.execute(q)
+	con.close()
 
 aa_code_map = {"ala" : "A",
 				"arg" : "R",

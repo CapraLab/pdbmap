@@ -4,5 +4,6 @@
 *.raw
 *.nosex
 *.freq
+*.tab
 bush/*
 capra/*
