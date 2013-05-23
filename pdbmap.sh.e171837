@@ -1,6 +1,0 @@
-Traceback (most recent call last):
-  File "/labs/twells/sivleyrm/pdbmap/pdbmap.py", line 33, in <module>
-    defaults = dict(config.items("Genome_PDB_Mapper"))
-  File "/usr/lib64/python2.7/ConfigParser.py", line 642, in items
-    raise NoSectionError(section)
-ConfigParser.NoSectionError: No section: 'Genome_PDB_Mapper'
