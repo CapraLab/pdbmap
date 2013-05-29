@@ -209,10 +209,12 @@ def read_seqres(fin,c):
 		if line[0:6] == "SEQRES":
 			flag = 1
 			chain = line[11]
-			pep_subseq = line[19:70].split()
-			for aa in pep_subseq:
-				c.execute("INSERT INTO peptide VALUES (?,?,?)",(chain,index,aa))
-				index += 1
+			c.execute("SELECT * FROM chains WHERE chain=?",chain)
+			if c.fetchone():
+				pep_subseq = line[19:70].split()
+				for aa in pep_subseq:
+					c.execute("INSERT INTO peptide VALUES (?,?,?)",(chain,index,aa))
+					index += 1
 		elif flag:
 			return 
 
@@ -221,14 +223,16 @@ def read_atom(fin,c):
 	for line in fin:
 		if line[0:4] == "ATOM":
 			chain = line[21]
-			serialnum = int(line[6:11])
-			seqres = int(line[22:26])
-			aminoacid = line[17:20]
-			aminoacid_oneletter = aa_code_map[aminoacid.lower()]
-			x = float(line[30:38])
-			y = float(line[38:46])
-			z = float(line[46:54])
-			c.execute("INSERT INTO coords VALUES (?,?,?,?,?,?,?,?)",(chain,serialnum,seqres,aminoacid,aminoacid_oneletter,x,y,z))
+			c.execute("SELECT * FROM chains WHERE chain=?",chain)
+			if c.fetchone():
+				serialnum = int(line[6:11])
+				seqres = int(line[22:26])
+				aminoacid = line[17:20]
+				aminoacid_oneletter = aa_code_map[aminoacid.lower()]
+				x = float(line[30:38])
+				y = float(line[38:46])
+				z = float(line[46:54])
+				c.execute("INSERT INTO coords VALUES (?,?,?,?,?,?,?,?)",(chain,serialnum,seqres,aminoacid,aminoacid_oneletter,x,y,z))
 
 def write_pdb_data(pdb_id,c,con):
 	"""Averages the 3D coordinates and outputs the PDB data to tabular for MySQL upload"""

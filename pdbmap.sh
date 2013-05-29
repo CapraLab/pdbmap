@@ -5,4 +5,4 @@
 #PBS -l mem=5000mb
 
 cd /labs/twells/sivleyrm/pdbmap/
-./pdbmap.py -c metabochip.config
+./pdbmap.py -c metabochip.loki.config
