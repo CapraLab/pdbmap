@@ -62,7 +62,7 @@ def main():
 		pdb_files = ['%s/%s'%(args.pdb_dir,pdb_file) for pdb_file in os.listdir(args.pdb_dir)]
 	else:
 		pdb_files = [args.pdb_dir]
-	pdbs   = dict((os.path.basename(x).split('.')[0][-4:].upper(),pdb_file) for pdb_file in pdb_files)
+	pdbs   = dict((os.path.basename(pdb_file).split('.')[0][-4:].upper(),pdb_file) for pdb_file in pdb_files)
 
 	
 
@@ -110,7 +110,7 @@ def load_pdb(pdb_id,pdb_file):
 	# Load all information from the PDB file
 	# Use gzip if the files appear to be gzipped
 	print "\tParsing info from %s..."%pdb_id
-	if os.path.splitext(pdb_file) == '.gz':
+	if os.path.splitext(pdb_file)[-1] == '.gz':
 		fin = gzip.open(pdb_file,'r')
 	else:
 		fin = open(pdb_file,'r')
