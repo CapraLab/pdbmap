@@ -108,6 +108,7 @@ def load_pdb(pdb_id,pdb_file):
 	c,con = sqlite_init()
 
 	# Load all information from the PDB file
+	# Use gzip if the files appear to be gzipped
 	print "\tParsing info from %s..."%pdb_id
 	if os.path.splitext(pdb_file) == '.gz':
 		fin = gzip.open(pdb_file,'r')
