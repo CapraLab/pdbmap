@@ -1,8 +1,8 @@
 #!/bin/sh
 #PBS -M mike.sivley@vanderbilt.edu
 #PBS -m bae
-#PBS -l walltime=3:00:00:00
+#PBS -l walltime=4:00:00:00
 #PBS -l mem=5000mb
 
 cd /labs/twells/sivleyrm/pdbmap/
-./pdbmap.py -c metabochip.loki.config
+./pdbmap.py -c metabochip.config

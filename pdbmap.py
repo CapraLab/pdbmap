@@ -6,7 +6,7 @@
 # homologues for non-human protein structures.
 
 import argparse,ConfigParser
-import os,sys,csv,time,subprocess
+import os,sys,csv,time,subprocess,gzip
 import sqlite3,MySQLdb
 from warnings import filterwarnings	# Disable MySQL warnings
 filterwarnings('ignore',category=MySQLdb.Warning)
@@ -109,14 +109,18 @@ def load_pdb(pdb_id,pdb_file):
 
 	# Load all information from the PDB file
 	print "\tParsing info from %s..."%pdb_id
-	with open(pdb_file,'r') as fin:
-		species = read_species(fin)
-		if not species:
-			sys.stderr.write("PDB contained no species information. Skipping...\n")
-			return
-		read_dbref(fin,c,pdb_id,species)
-		read_atom(fin,c)
-		con.commit()
+	if os.path.splitext(pdb_file) == '.gz':
+		fin = gzip.open(pdb_file,'r')
+	else:
+		fin = open(pdb_file,'r')
+	species = read_species(fin)
+	if not species:
+		sys.stderr.write("PDB contained no species information. Skipping...\n")
+		return
+	read_dbref(fin,c,pdb_id,species)
+	read_atom(fin,c)
+	con.commit()
+	fin.close()
 
 	# Write data to tabular for MySQL upload
 	write_pdb_data(pdb_id,c,con)
@@ -157,6 +161,7 @@ def load_pdb(pdb_id,pdb_file):
 
 	# Upload to the database
 	print "\tUploading data to database..."
+	sanitize_data(pdb_id)
 	publish_data(pdb_id,args.dbhost,args.dbuser,args.dbpass,args.dbname)
 
 
@@ -262,6 +267,46 @@ def unp2ung(unp):
 	page = response.read(200000)
 	return page.split()[-1]
 
+def sanitize_data(pdb_id):
+	with open('GenomicCoords.tab','r') as fin:
+		reader = csv.reader(fin,delimiter='\t')
+		gc = {(row[0],row[1]): row[2] for row in reader}
+	with open('PDBTranscript.tab','r') as fin:
+		pdb_t_header = fin.next()
+		reader = csv.reader(fin,delimiter='\t')
+		pdb_t = {(row[1]): row[2] for row in reader}
+	with open('%s.tab'%pdb_id,'r') as fin:
+		reader = csv.reader(fin,delimiter='\t')
+		pdb_c = {(row[0],row[4]): row[6] for row in reader}
+	sanitize = []
+	for chain in pdb_t.keys():
+		transcript = pdb_t[chain]
+		# Reduce by first key and remove
+		test1 = [key[0] for key in gc if key[0]==transcript]
+		test2 = [key[0] for key in pdb_c if key[0]==chain]
+		gc_sub    = {key[1]:gc[key]    for key in gc    if key[0]==transcript}
+		pdb_c_sub = {key[1]:pdb_c[key] for key in pdb_c if key[0]==chain}
+		# Join by second key and compare values
+		for seqres in pdb_c_sub:
+			# If the transcript does not contain the seqres
+			if seqres not in gc_sub:
+				sanitize.append(chain)
+				break
+			# Or the amino acid is different at that seqres
+			elif gc_sub[seqres] != pdb_c_sub[seqres]:
+				sanitize.append(chain)
+				break
+	# Then remove the mapping from pdb_transcript
+	print("\tSanitizing the following transcript maps:")
+	for key in sanitize:
+		sys.stderr.write("\t\t%s:%s,%s\n"%(pdb_id,key,pdb_t[key]))
+		del pdb_t[key]
+	# And write the sanitized mappings back to file
+	with open('PDBTranscript.tab','w') as fout:
+		writer = csv.writer(fout,delimiter='\t')
+		for key in pdb_t:
+			writer.writerow([pdb_id,key,pdb_t[key]])
+
 def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname):
 	try:
 		con = MySQLdb.connect(host=dbhost,user=dbuser,passwd=dbpass,db=dbname)
@@ -274,9 +319,10 @@ def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname):
 		query.append("LOAD DATA LOCAL INFILE 'PDBTranscript.tab' INTO TABLE PDBTranscript FIELDS TERMINATED BY '\t' IGNORE 1 LINES")
 		query.append("LOAD DATA LOCAL INFILE '%s.tab' INTO TABLE PDBCoords FIELDS TERMINATED BY '\t' IGNORE 1 LINES (chain,@dummy,@dummy,pdbid,seqres,aa3,aa1,x,y,z)"%pdb_id)
 		query.append("LOAD DATA LOCAL INFILE '%s.tab' INTO TABLE PDBInfo FIELDS TERMINATED BY '\t' IGNORE 1 LINES (chain,species,unp,pdbid,@dummy,@dummy,@dummy,@dummy,@dummy,@dummy)"%pdb_id)
-		query.append("CALL %s.sanitize_transcripts('%s');"%(dbname,pdb_id))
+		#query.append("CALL %s.sanitize_transcripts('%s');"%(dbname,pdb_id))
 		query.append("CALL %s.update_GenomePDB('%s');"%(dbname,pdb_id))
 		end_of_query = ['.','...']
+		print("\tUploading staging files to database...")
 		for q in query:
 			tq0  = time.time()
 			sys.stdout.write("\t\t%s%s - "%(q[:35],end_of_query[int(len(q)>35)]))
