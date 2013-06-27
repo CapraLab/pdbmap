@@ -62,7 +62,7 @@ def main():
 		pdb_files = ['%s/%s'%(args.pdb_dir,pdb_file) for pdb_file in os.listdir(args.pdb_dir)]
 	else:
 		pdb_files = [args.pdb_dir]
-	pdbs   = dict((os.path.basename(pdb_file[0:-4]),pdb_file) for pdb_file in pdb_files)
+	pdbs   = dict((os.path.basename(x).split('.')[0][-4:].upper(),pdb_file) for pdb_file in pdb_files)
 
 	
 
