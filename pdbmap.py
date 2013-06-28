@@ -118,6 +118,9 @@ def load_pdb(pdb_id,pdb_file):
 	if not species:
 		sys.stderr.write("PDB contained no species information. Skipping...\n")
 		return
+	elif (not species.lower() in ['human','homo sapien','homo sapiens']) and args.disable_human_homologue:
+		sys.stderr.write("Species is non-human and human homologue mapping is disabled. Skipping...\n")
+		return
 	read_dbref(fin,c,pdb_id,species)
 	read_atom(fin,c)
 	con.commit()
@@ -141,7 +144,7 @@ def load_pdb(pdb_id,pdb_file):
 			if species.lower() in ['human','homo sapien','homo sapiens']:
 				print "\tLoading -> pdb: %s, chain: %s, unp: %s, species: %s"%(pdb_id,chain,unp,species)
 				exit_code = subprocess.call(["./protein_to_genomic.pl",pdb_id,chain,unp,species])
-			elif not args.disable_human_homologue:
+			else:
 				ung = unp2ung(unp)
 				if not ung:
 					sys.stderr.write("No UniGene entry found -> pdb: %s, chain: %s, unp: %s, species: %s"%(pdb_id,chain,unp,species))
@@ -149,8 +152,6 @@ def load_pdb(pdb_id,pdb_file):
 				else:
 					print "\tSearching for human homologues -> pdb: %s, chain: %s, unp: %s, ung: %s, species: %s"%(pdb_id,chain,unp,ung,species)
 					exit_code = subprocess.call(["./unigene_to_homologue_genomic.pl",pdb_id,chain,ung,species])
-			else:
-				print "\tSpecies is non-human and human homologue mapping is disabled. Skipping..."
 		except KeyboardInterrupt:
 			if raw_input("\nContinue to next PDB? (y/n):") == 'n':
 				raise KeyboardInterrupt
