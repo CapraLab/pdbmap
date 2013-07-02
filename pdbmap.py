@@ -86,7 +86,10 @@ def main():
 	
 	# Profiler
 	t_elapsed = time.time() - t0
-	t_average = t_elapsed / pdb_count
+	if pdb_count > 0:
+		t_average = t_elapsed / pdb_count
+	else:
+		t_average = 0
 	print "Number of PDBs processed: %d"%pdb_count
 	print "Total execution time: %f"%t_elapsed
 	print "Average execution time per PDB: %f"%t_average
@@ -122,14 +125,26 @@ def load_pdb(pdb_id,pdb_file):
 	elif (not species.lower() in ['human','homo sapien','homo sapiens']) and args.disable_human_homologue:
 		sys.stderr.write("\tSpecies is non-human and human homologue mapping is disabled. Skipping...\n")
 		return
-	read_dbref(fin,c,pdb_id,species)
-	read_seqadv(fin,c)
-	read_atom(fin,c)
+
+	for line in fin:
+		field = line[0:6].strip()
+		if field == "DBREF":
+			read_dbref(line,c,pdb_id,species)
+		elif field == "SEQADV":
+			read_seqadv(line,c)
+		elif field == "ATOM":
+			read_atom(line,c)
 	con.commit()
 	fin.close()
 
 	# Remove residues with unwanted conflicts
-	c.execute("DELETE FROM coords WHERE chain,seqres IN (SELECT chain,seqres FROM seqadv WHERE conflict='EXPRESSION TAG')")
+	print("\tRemoving SEQADV conflicts...")
+	c.execute("SELECT chain,seqres FROM seqadv WHERE conflict='EXPRESSION TAG'")
+	for chain,seqres in c.fetchall():
+		print("\t\tSEQADV %s,%s removed"%(chain,seqres))
+		print("\t\tConflict: EXPRESSION TAG")
+		print("\t\t#-------------#")
+		c.execute("DELETE FROM coords WHERE chain=? AND seqres=?",(chain,seqres))
 
 	# Write data to tabular for MySQL upload
 	write_pdb_data(pdb_id,c,con)
@@ -137,7 +152,7 @@ def load_pdb(pdb_id,pdb_file):
 	# Pull local processing information
 	c.execute("SELECT unp,chain FROM chains")
 	unp_chains = c.fetchall()
-	c.execute("SELECT chain,seqres FROM seqadv")
+	c.execute("SELECT chain,seqres FROM seqadv WHERE conflict='ENGINEERED MUTATION'")
 	seqadv_protected = c.fetchall()
 	con.close()	# Close the local SQLite connection
 
@@ -171,7 +186,6 @@ def load_pdb(pdb_id,pdb_file):
 			return		
 
 	# Upload to the database
-	print "\tUploading data to database..."
 	num_matches = sanitize_data(pdb_id,seqadv_protected)
 	publish_data(pdb_id,args.dbhost,args.dbuser,args.dbpass,args.dbname,num_matches)
 
@@ -201,69 +215,48 @@ def read_species(fin):
 				return
 
 
-def read_dbref(fin,c,pdb_id,species):
+def read_dbref(line,c,pdb_id,species):
 	"""Parses the DBREF fields from a PDB file"""
-	flag = 0
-	for line in fin:
-		if line[0:5] == "DBREF":
-			flag = 1
-			if line[26:32].strip() == "UNP":
-				chain = line[12]
-				unp_id = line[33:41].strip()
-				pdbstart = int(line[14:18])
-				dbstart = int(line[55:60])
-				offset = dbstart - pdbstart
-				c.execute("INSERT INTO chains VALUES (?,?,?,?,?,?)",(chain,unp_id,pdb_id,pdbstart,offset,species))
-		elif flag:
-			return
+	if line[26:32].strip() == "UNP":
+		chain = line[12]
+		unp_id = line[33:41].strip()
+		pdbstart = int(line[14:18])
+		dbstart = int(line[55:60])
+		offset = dbstart - pdbstart
+		c.execute("INSERT INTO chains VALUES (?,?,?,?,?,?)",(chain,unp_id,pdb_id,pdbstart,offset,species))
 
-def read_seqres(fin,c):
+def read_seqres(line,c):
 	"""Parses the SEQRES fields from a PDB file"""
-	flag = 0
-	index = 0
-	for line in fin:
-		if line[0:6] == "SEQRES":
-			flag = 1
-			chain = line[11]
-			c.execute("SELECT * FROM chains WHERE chain=?",chain)
-			if c.fetchone():
-				pep_subseq = line[19:70].split()
-				for aa in pep_subseq:
-					c.execute("INSERT INTO seqres VALUES (?,?,?)",(chain,index,aa))
-					index += 1
-		elif flag:
-			return 
+	chain = line[11]
+	c.execute("SELECT * FROM chains WHERE chain=?",chain)
+	if c.fetchone():
+		pep_subseq = line[19:70].split()
+		for aa in pep_subseq:
+			c.execute("INSERT INTO seqres VALUES (?,?,?)",(chain,read_seqres.index,aa))
+			read_seqres.index += 1
+read_seqres.index = 0
 
-def read_seqadv(fin,c):
+def read_seqadv(line,c):
 	"""Parses the SEQADV fields from a PDB file"""
-	flag = 0
-	index = 0
-	for line in fin:
-		if line[0:6] == "SEQADV":
-			flag = 1
-			aa = int(line[12:15])
-			chain = line[16]
-			seqres = int(line[18:22])
-			conflict = line[49:70].strip()
-			c.execute("INSERT INTO seqadv VALUES (?,?,?,?)",(chain,seqres,aa,conflict))
-		elif flag:
-			return 
+	aa = line[12:15]
+	chain = line[16]
+	seqres = int(line[18:22])
+	conflict = line[49:70].strip()
+	c.execute("INSERT INTO seqadv VALUES (?,?,?,?)",(chain,seqres,aa,conflict))
 
-def read_atom(fin,c):
+def read_atom(line,c):
 	"""Parses the ATOM fields from a PDB file"""
-	for line in fin:
-		if line[0:4] == "ATOM":
-			chain = line[21]
-			c.execute("SELECT * FROM chains WHERE chain=?",chain)
-			if c.fetchone():
-				serialnum = int(line[6:11])
-				seqres = int(line[22:26])
-				aminoacid = line[17:20]
-				aminoacid_oneletter = aa_code_map[aminoacid.lower()]
-				x = float(line[30:38])
-				y = float(line[38:46])
-				z = float(line[46:54])
-				c.execute("INSERT INTO coords VALUES (?,?,?,?,?,?,?,?)",(chain,serialnum,seqres,aminoacid,aminoacid_oneletter,x,y,z))
+	chain = line[21]
+	c.execute("SELECT * FROM chains WHERE chain=?",chain)
+	if c.fetchone():
+		serialnum = int(line[6:11])
+		seqres = int(line[22:26])
+		aminoacid = line[17:20]
+		aminoacid_oneletter = aa_code_map[aminoacid.lower()]
+		x = float(line[30:38])
+		y = float(line[38:46])
+		z = float(line[46:54])
+		c.execute("INSERT INTO coords VALUES (?,?,?,?,?,?,?,?)",(chain,serialnum,seqres,aminoacid,aminoacid_oneletter,x,y,z))
 
 def write_pdb_data(pdb_id,c,con):
 	"""Averages the 3D coordinates and outputs the PDB data to tabular for MySQL upload"""
@@ -294,24 +287,25 @@ def unp2ung(unp):
 	return page.split()[-1]
 
 def sanitize_data(pdb_id,seqadv_protected):
+	print("\tSanitizing transcript maps...")
 	with open('GenomicCoords.tab','r') as fin:
 		reader = csv.reader(fin,delimiter='\t')
 		gc = {(row[0],row[1]): row[2] for row in reader}
 	with open('PDBTranscript.tab','r') as fin:
 		pdb_t_header = fin.next()
 		reader = csv.reader(fin,delimiter='\t')
-		pdb_t = {(row[1]): row[2] for row in reader}
+		# store list of tuples (transcript,chain)
+		pdb_t = [(row[2],row[1]) for row in reader]
 	with open('%s.tab'%pdb_id,'r') as fin:
 		reader = csv.reader(fin,delimiter='\t')
 		pdb_c = {(row[0],row[4]): row[6] for row in reader}
 	sanitize = []
-	for chain in pdb_t.keys():
-		transcript = pdb_t[chain]
+	for transcript,chain in pdb_t:
 		# Reduce by first key and remove
 		test1 = [key[0] for key in gc if key[0]==transcript]
 		test2 = [key[0] for key in pdb_c if key[0]==chain]
-		gc_sub    = {key[1]:gc[key]    for key in gc    if key[0]==transcript}
-		pdb_c_sub = {key[1]:pdb_c[key] for key in pdb_c if key[0]==chain}
+		gc_sub    = {int(key[1]):gc[key]    for key in gc    if key[0]==transcript}
+		pdb_c_sub = {int(key[1]):pdb_c[key] for key in pdb_c if key[0]==chain}
 		# Join by second key and compare values
 		for seqres in pdb_c_sub:
 			# If a protected SEQADV conflict, skip
@@ -319,26 +313,34 @@ def sanitize_data(pdb_id,seqadv_protected):
 				pass
 			# If the transcript does not contain the seqres, discard
 			elif seqres not in gc_sub:
-				sanitize.append(chain)
+				print("\t\tTranscript %s sanitized. Conflict SEQRES: %s"%(transcript,seqres))
+				print("\t\tChain: %s"%chain)
+				print("\t\tCause: SEQRES out of transcript range.")
+				print("\t\tTranscript range: %d - %d"%(min(gc_sub.keys()),max(gc_sub.keys())))
+				print("\t\t#-------------#")
+				sanitize.append((transcript,chain))
 				break
 			# Or the amino acid is different at that seqres, discard
 			elif gc_sub[seqres] != pdb_c_sub[seqres]:
-				sanitize.append(chain)
+				print("\t\tTranscript %s sanitized. Conflict SEQRES: %s"%(transcript,seqres))
+				print("\t\tChain: %s"%chain)
+				print("\t\tCause: Amino acid mismatch.")
+				print("\t\tPDB.aa: %s, Transcript.aa: %s"%(pdb_c_sub[seqres],gc_sub[seqres]))
+				print("\t\t#-------------#")
+				sanitize.append((transcript,chain))
 				break
 
-	# Then remove the mapping from pdb_transcript
-	print("\tSanitizing the following transcript maps:")
-	for key in sanitize:
-		sys.stderr.write("\t\t%s:%s,%s\n"%(pdb_id,key,pdb_t[key]))
-		del pdb_t[key]
+	# Remove the transcript->chain map
+	for transcript,chain in sanitize:
+		pdb_t.remove((transcript,chain))
 	# And write the sanitized mappings back to file
 	with open('PDBTranscript.tab','w') as fout:
 		writer = csv.writer(fout,delimiter='\t')
-		for key in pdb_t:
-			writer.writerow([pdb_id,key,pdb_t[key]])
+		for transcript,chain in pdb_t:
+			writer.writerow([pdb_id,chain,transcript])
 
 	# Return the number of remaining matches
-	return len(pdb_t.keys())
+	return len(pdb_t)
 
 def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname,num_matches):
 	try:
@@ -371,9 +373,9 @@ def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname,num_matches):
 		sys.stderr.write("\tUpload to MySQL failed: %s. Skipping..."%e)
 	finally:
 		con.close()	# Close the remote MySQL connection
-		os.system('rm -f GenomicCoords.tab')
-		os.system('rm -f PDBTranscript.tab')
-		os.system('rm -f %s.tab'%pdb_id)
+		#os.system('rm -f PDBTranscript.tab')
+		#os.system('rm -f %s.tab'%pdb_id)
+		#os.system('rm -f GenomicCoords.tab')
 
 def pdb_in_db(pdb_id,dbhost,dbuser,dbpass,dbname):
 	try:
@@ -397,10 +399,10 @@ def create_new_db(dbhost,dbuser,dbpass,dbname):
 	query = ["DROP DATABASE IF EXISTS %s"%dbname]
 	query.append("CREATE DATABASE IF NOT EXISTS %s"%dbname)
 	query.append("USE %s"%dbname)
-	query.append("CREATE TABLE %s.GenomicCoords (transcript VARCHAR(20),seqres INT,aa1 VARCHAR(1),start BIGINT,end BIGINT,chr INT,strand INT,PRIMARY KEY(start,end,chr))"%dbname)
+	query.append("CREATE TABLE %s.GenomicCoords (transcript VARCHAR(20),seqres INT,aa1 VARCHAR(1),start BIGINT,end BIGINT,chr INT,strand INT,PRIMARY KEY(transcript,seqres),KEY(start,end,chr))"%dbname)
 	query.append("CREATE TABLE %s.PDBCoords (pdbid VARCHAR(20),chain VARCHAR(1),seqres INT,aa3 VARCHAR(3),aa1 VARCHAR(1),x DOUBLE,y DOUBLE,z DOUBLE,PRIMARY KEY(pdbid,chain,seqres))"%dbname)
 	query.append("CREATE TABLE %s.PDBInfo (pdbid VARCHAR(20),species VARCHAR(20),chain VARCHAR(1),unp VARCHAR(20),PRIMARY KEY(pdbid,chain))"%dbname)
-	query.append("CREATE TABLE %s.PDBTranscript (pdbid VARCHAR(20),chain VARCHAR(1),transcript VARCHAR(20),homologue BOOLEAN,PRIMARY KEY(pdbid,chain))"%dbname)
+	query.append("CREATE TABLE %s.PDBTranscript (pdbid VARCHAR(20),chain VARCHAR(1),transcript VARCHAR(20),homologue BOOLEAN,PRIMARY KEY(pdbid,chain),KEY(transcript))"%dbname)
 	format_dict = {'dbuser':dbuser,'dbhost':dbhost}
 	with open('create_proc_update_GenomePDB.sql','r') as fin:
 		query.append(fin.read()%format_dict)

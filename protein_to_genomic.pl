@@ -21,6 +21,7 @@ open(GenomicCoords,">>GenomicCoords.tab");
 open(PDBTranscript,">>PDBTranscript.tab");
 
 @transcripts = @{ $transcript_adaptor->fetch_all_by_external_name($unp,'uniprot%')};
+my $q_strand = 0;
 foreach my $transcript (@transcripts) {
 	my $t_stable_id = $transcript->stable_id();
 	my $t_start = $transcript->start();
