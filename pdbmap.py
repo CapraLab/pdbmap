@@ -123,9 +123,13 @@ def load_pdb(pdb_id,pdb_file):
 		sys.stderr.write("\tSpecies is non-human and human homologue mapping is disabled. Skipping...\n")
 		return
 	read_dbref(fin,c,pdb_id,species)
+	read_seqadv(fin,c)
 	read_atom(fin,c)
 	con.commit()
 	fin.close()
+
+	# Remove residues with unwanted conflicts
+	c.execute("DELETE FROM coords WHERE chain,seqres IN (SELECT chain,seqres FROM seqadv WHERE conflict='EXPRESSION TAG')")
 
 	# Write data to tabular for MySQL upload
 	write_pdb_data(pdb_id,c,con)
