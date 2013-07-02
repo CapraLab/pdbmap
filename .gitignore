@@ -5,5 +5,7 @@
 *.nosex
 *.freq
 *.tab
+*.out
+*.err
 bush/*
 capra/*

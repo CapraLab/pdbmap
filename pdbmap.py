@@ -109,17 +109,17 @@ def load_pdb(pdb_id,pdb_file):
 
 	# Load all information from the PDB file
 	# Use gzip if the files appear to be gzipped
-	print "\tParsing info from %s..."%pdb_id
+	print "\tParsing info from %s..."%pdb_file
 	if os.path.splitext(pdb_file)[-1] == '.gz':
 		fin = gzip.open(pdb_file,'r')
 	else:
 		fin = open(pdb_file,'r')
 	species = read_species(fin)
 	if not species:
-		sys.stderr.write("PDB contained no species information. Skipping...\n")
+		sys.stderr.write("\tPDB contained no species information. Skipping...\n")
 		return
 	elif (not species.lower() in ['human','homo sapien','homo sapiens']) and args.disable_human_homologue:
-		sys.stderr.write("Species is non-human and human homologue mapping is disabled. Skipping...\n")
+		sys.stderr.write("\tSpecies is non-human and human homologue mapping is disabled. Skipping...\n")
 		return
 	read_dbref(fin,c,pdb_id,species)
 	read_atom(fin,c)
@@ -163,8 +163,8 @@ def load_pdb(pdb_id,pdb_file):
 
 	# Upload to the database
 	print "\tUploading data to database..."
-	sanitize_data(pdb_id)
-	publish_data(pdb_id,args.dbhost,args.dbuser,args.dbpass,args.dbname)
+	num_matches = sanitize_data(pdb_id)
+	publish_data(pdb_id,args.dbhost,args.dbuser,args.dbpass,args.dbname,num_matches)
 
 
 def read_species(fin):
@@ -309,7 +309,10 @@ def sanitize_data(pdb_id):
 		for key in pdb_t:
 			writer.writerow([pdb_id,key,pdb_t[key]])
 
-def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname):
+	# Return the number of remaining matches
+	return len(pdb_t.keys())
+
+def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname,num_matches):
 	try:
 		con = MySQLdb.connect(host=dbhost,user=dbuser,passwd=dbpass,db=dbname)
 		c = con.cursor()
@@ -317,12 +320,13 @@ def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname):
 		print "There was an error connecting to the database.\n%s"%e
 		sys.exit(1)
 	try:
-		query = ["LOAD DATA LOCAL INFILE 'GenomicCoords.tab' INTO TABLE GenomicCoords FIELDS TERMINATED BY '\t' IGNORE 1 LINES"]
-		query.append("LOAD DATA LOCAL INFILE 'PDBTranscript.tab' INTO TABLE PDBTranscript FIELDS TERMINATED BY '\t' IGNORE 1 LINES")
-		query.append("LOAD DATA LOCAL INFILE '%s.tab' INTO TABLE PDBCoords FIELDS TERMINATED BY '\t' IGNORE 1 LINES (chain,@dummy,@dummy,pdbid,seqres,aa3,aa1,x,y,z)"%pdb_id)
-		query.append("LOAD DATA LOCAL INFILE '%s.tab' INTO TABLE PDBInfo FIELDS TERMINATED BY '\t' IGNORE 1 LINES (chain,species,unp,pdbid,@dummy,@dummy,@dummy,@dummy,@dummy,@dummy)"%pdb_id)
-		#query.append("CALL %s.sanitize_transcripts('%s');"%(dbname,pdb_id))
-		query.append("CALL %s.update_GenomePDB('%s');"%(dbname,pdb_id))
+		query = ["LOAD DATA LOCAL INFILE '%s.tab' INTO TABLE PDBInfo FIELDS TERMINATED BY '\t' IGNORE 1 LINES (chain,species,unp,pdbid,@dummy,@dummy,@dummy,@dummy,@dummy,@dummy)"%pdb_id]
+		# Only load the rest if there were any successful matches
+		if num_matches > 0:
+			query.append("LOAD DATA LOCAL INFILE 'GenomicCoords.tab' INTO TABLE GenomicCoords FIELDS TERMINATED BY '\t' IGNORE 1 LINES")
+			query.append("LOAD DATA LOCAL INFILE 'PDBTranscript.tab' INTO TABLE PDBTranscript FIELDS TERMINATED BY '\t' IGNORE 1 LINES")
+			query.append("LOAD DATA LOCAL INFILE '%s.tab' INTO TABLE PDBCoords FIELDS TERMINATED BY '\t' IGNORE 1 LINES (chain,@dummy,@dummy,pdbid,seqres,aa3,aa1,x,y,z)"%pdb_id)
+			query.append("CALL %s.update_GenomePDB('%s');"%(dbname,pdb_id))
 		end_of_query = ['.','...']
 		print("\tUploading staging files to database...")
 		for q in query:
