@@ -98,6 +98,7 @@ def sqlite_init():
 	c = con.cursor()
 	c.execute("CREATE TABLE chains (chain VARCHAR(1),unp VARCHAR(10),pdb VARCHAR(20),pdbstart INT,offset INT,species VARCHAR(20),PRIMARY KEY(chain))")
 	c.execute("CREATE TABLE coords (chain VARCHAR(1),serialnum INT,seqres INT,aa3 VARCHAR(3), aa1 VARCHAR(1),x DOUBLE,y DOUBLE,z DOUBLE,PRIMARY KEY(chain,serialnum))")
+	c.execute("CREATE TABLE seqadv (chain VARCHAR(1),seqres INT,aa3 VARCHAR(3),conflict VARCHAR(20),PRIMARY KEY(chain,seqres))")
 	con.commit()
 	return c,con
 
@@ -128,8 +129,12 @@ def load_pdb(pdb_id,pdb_file):
 
 	# Write data to tabular for MySQL upload
 	write_pdb_data(pdb_id,c,con)
+
+	# Pull local processing information
 	c.execute("SELECT unp,chain FROM chains")
 	unp_chains = c.fetchall()
+	c.execute("SELECT chain,seqres FROM seqadv")
+	seqadv_protected = c.fetchall()
 	con.close()	# Close the local SQLite connection
 
 	# Create tabulars for the genomic data
@@ -163,7 +168,7 @@ def load_pdb(pdb_id,pdb_file):
 
 	# Upload to the database
 	print "\tUploading data to database..."
-	num_matches = sanitize_data(pdb_id)
+	num_matches = sanitize_data(pdb_id,seqadv_protected)
 	publish_data(pdb_id,args.dbhost,args.dbuser,args.dbpass,args.dbname,num_matches)
 
 
@@ -220,8 +225,23 @@ def read_seqres(fin,c):
 			if c.fetchone():
 				pep_subseq = line[19:70].split()
 				for aa in pep_subseq:
-					c.execute("INSERT INTO peptide VALUES (?,?,?)",(chain,index,aa))
+					c.execute("INSERT INTO seqres VALUES (?,?,?)",(chain,index,aa))
 					index += 1
+		elif flag:
+			return 
+
+def read_seqadv(fin,c):
+	"""Parses the SEQADV fields from a PDB file"""
+	flag = 0
+	index = 0
+	for line in fin:
+		if line[0:6] == "SEQADV":
+			flag = 1
+			aa = int(line[12:15])
+			chain = line[16]
+			seqres = int(line[18:22])
+			conflict = line[49:70].strip()
+			c.execute("INSERT INTO seqadv VALUES (?,?,?,?)",(chain,seqres,aa,conflict))
 		elif flag:
 			return 
 
@@ -269,7 +289,7 @@ def unp2ung(unp):
 	page = response.read(200000)
 	return page.split()[-1]
 
-def sanitize_data(pdb_id):
+def sanitize_data(pdb_id,seqadv_protected):
 	with open('GenomicCoords.tab','r') as fin:
 		reader = csv.reader(fin,delimiter='\t')
 		gc = {(row[0],row[1]): row[2] for row in reader}
@@ -290,14 +310,18 @@ def sanitize_data(pdb_id):
 		pdb_c_sub = {key[1]:pdb_c[key] for key in pdb_c if key[0]==chain}
 		# Join by second key and compare values
 		for seqres in pdb_c_sub:
-			# If the transcript does not contain the seqres
-			if seqres not in gc_sub:
+			# If a protected SEQADV conflict, skip
+			if (chain,seqres) in seqadv_protected:
+				pass
+			# If the transcript does not contain the seqres, discard
+			elif seqres not in gc_sub:
 				sanitize.append(chain)
 				break
-			# Or the amino acid is different at that seqres
+			# Or the amino acid is different at that seqres, discard
 			elif gc_sub[seqres] != pdb_c_sub[seqres]:
 				sanitize.append(chain)
 				break
+
 	# Then remove the mapping from pdb_transcript
 	print("\tSanitizing the following transcript maps:")
 	for key in sanitize:
