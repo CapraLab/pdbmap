@@ -376,9 +376,9 @@ def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname,num_matches):
 		sys.stderr.write("\tUpload to MySQL failed: %s. Skipping..."%e)
 	finally:
 		con.close()	# Close the remote MySQL connection
-		#os.system('rm -f PDBTranscript.tab')
-		#os.system('rm -f %s.tab'%pdb_id)
-		#os.system('rm -f GenomicCoords.tab')
+		os.system('rm -f PDBTranscript.tab')
+		os.system('rm -f %s.tab'%pdb_id)
+		os.system('rm -f GenomicCoords.tab')
 
 def pdb_in_db(pdb_id,dbhost,dbuser,dbpass,dbname):
 	try:
