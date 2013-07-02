@@ -63,7 +63,6 @@ foreach my $gene (@{genes}) {
 					print GenomicCoords "$t_stable_id\t$pep_index\t$amino_acid\t$q_start\t$q_end\t$s_name\t$q_strand\n";
 				}
 				print PDBTranscript "$pdb\t$chain\t$t_stable_id\t1\n";
-				print "\t\t$t_stable_id\n";
 			}
 		}
 	}

@@ -187,6 +187,7 @@ def load_pdb(pdb_id,pdb_file):
 
 	# Upload to the database
 	num_matches = sanitize_data(pdb_id,seqadv_protected)
+	print("\t#----#\n\t%d transcripts found.\n\t#----#"%num_matches)
 	publish_data(pdb_id,args.dbhost,args.dbuser,args.dbpass,args.dbname,num_matches)
 
 
@@ -294,13 +295,13 @@ def sanitize_data(pdb_id,seqadv_protected):
 	with open('PDBTranscript.tab','r') as fin:
 		pdb_t_header = fin.next()
 		reader = csv.reader(fin,delimiter='\t')
-		# store list of tuples (transcript,chain)
-		pdb_t = [(row[2],row[1]) for row in reader]
+		# store list of tuples (transcript,chain,homologue)
+		pdb_t = [(row[2],row[1],row[3]) for row in reader]
 	with open('%s.tab'%pdb_id,'r') as fin:
 		reader = csv.reader(fin,delimiter='\t')
 		pdb_c = {(row[0],row[4]): row[6] for row in reader}
 	sanitize = []
-	for transcript,chain in pdb_t:
+	for transcript,chain,homologue in pdb_t:
 		# Reduce by first key and remove
 		test1 = [key[0] for key in gc if key[0]==transcript]
 		test2 = [key[0] for key in pdb_c if key[0]==chain]
@@ -318,7 +319,7 @@ def sanitize_data(pdb_id,seqadv_protected):
 				print("\t\tCause: SEQRES out of transcript range.")
 				print("\t\tTranscript range: %d - %d"%(min(gc_sub.keys()),max(gc_sub.keys())))
 				print("\t\t#-------------#")
-				sanitize.append((transcript,chain))
+				sanitize.append((transcript,chain,homologue))
 				break
 			# Or the amino acid is different at that seqres, discard
 			elif gc_sub[seqres] != pdb_c_sub[seqres]:
@@ -327,17 +328,17 @@ def sanitize_data(pdb_id,seqadv_protected):
 				print("\t\tCause: Amino acid mismatch.")
 				print("\t\tPDB.aa: %s, Transcript.aa: %s"%(pdb_c_sub[seqres],gc_sub[seqres]))
 				print("\t\t#-------------#")
-				sanitize.append((transcript,chain))
+				sanitize.append((transcript,chain,homologue))
 				break
 
 	# Remove the transcript->chain map
-	for transcript,chain in sanitize:
-		pdb_t.remove((transcript,chain))
+	for transcript,chain,homologue in sanitize:
+		pdb_t.remove((transcript,chain,homologue))
 	# And write the sanitized mappings back to file
 	with open('PDBTranscript.tab','w') as fout:
 		writer = csv.writer(fout,delimiter='\t')
-		for transcript,chain in pdb_t:
-			writer.writerow([pdb_id,chain,transcript])
+		for transcript,chain,homologue in pdb_t:
+			writer.writerow([pdb_id,chain,transcript,homologue])
 
 	# Return the number of remaining matches
 	return len(pdb_t)
@@ -350,12 +351,14 @@ def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname,num_matches):
 		print "There was an error connecting to the database.\n%s"%e
 		sys.exit(1)
 	try:
-		query = ["LOAD DATA LOCAL INFILE '%s.tab' INTO TABLE PDBInfo FIELDS TERMINATED BY '\t' IGNORE 1 LINES (chain,species,unp,pdbid,@dummy,@dummy,@dummy,@dummy,@dummy,@dummy)"%pdb_id]
+		query = ["LOAD DATA LOCAL INFILE '%s.tab' INTO TABLE PDBInfo FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n' IGNORE 1 LINES (chain,species,unp,pdbid,@dummy,@dummy,@dummy,@dummy,@dummy,@dummy)"%pdb_id]
+		query.append("UPDATE PDBInfo SET unp=RTRIM(unp);")
 		# Only load the rest if there were any successful matches
 		if num_matches > 0:
-			query.append("LOAD DATA LOCAL INFILE 'GenomicCoords.tab' INTO TABLE GenomicCoords FIELDS TERMINATED BY '\t' IGNORE 1 LINES")
-			query.append("LOAD DATA LOCAL INFILE 'PDBTranscript.tab' INTO TABLE PDBTranscript FIELDS TERMINATED BY '\t' IGNORE 1 LINES")
-			query.append("LOAD DATA LOCAL INFILE '%s.tab' INTO TABLE PDBCoords FIELDS TERMINATED BY '\t' IGNORE 1 LINES (chain,@dummy,@dummy,pdbid,seqres,aa3,aa1,x,y,z)"%pdb_id)
+			query.append("LOAD DATA LOCAL INFILE 'GenomicCoords.tab' INTO TABLE GenomicCoords FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n' IGNORE 1 LINES")
+			query.append("LOAD DATA LOCAL INFILE 'PDBTranscript.tab' INTO TABLE PDBTranscript FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n' IGNORE 1 LINES")
+			query.append("UPDATE PDBTranscript SET transcript=RTRIM(transcript);")
+			query.append("LOAD DATA LOCAL INFILE '%s.tab' INTO TABLE PDBCoords FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n' IGNORE 1 LINES (chain,@dummy,@dummy,pdbid,seqres,aa3,aa1,x,y,z)"%pdb_id)
 			query.append("CALL %s.update_GenomePDB('%s');"%(dbname,pdb_id))
 		end_of_query = ['.','...']
 		print("\tUploading staging files to database...")
@@ -399,14 +402,31 @@ def create_new_db(dbhost,dbuser,dbpass,dbname):
 	query = ["DROP DATABASE IF EXISTS %s"%dbname]
 	query.append("CREATE DATABASE IF NOT EXISTS %s"%dbname)
 	query.append("USE %s"%dbname)
-	query.append("CREATE TABLE %s.GenomicCoords (transcript VARCHAR(20),seqres INT,aa1 VARCHAR(1),start BIGINT,end BIGINT,chr INT,strand INT,PRIMARY KEY(transcript,seqres),KEY(start,end,chr))"%dbname)
+	query.append("CREATE TABLE %s.GenomicCoords (transcript VARCHAR(20),seqres INT,aa1 VARCHAR(1),start BIGINT,end BIGINT,chr INT,strand INT,PRIMARY KEY(transcript,seqres),KEY(transcript),KEY(start,end,chr))"%dbname)
 	query.append("CREATE TABLE %s.PDBCoords (pdbid VARCHAR(20),chain VARCHAR(1),seqres INT,aa3 VARCHAR(3),aa1 VARCHAR(1),x DOUBLE,y DOUBLE,z DOUBLE,PRIMARY KEY(pdbid,chain,seqres))"%dbname)
 	query.append("CREATE TABLE %s.PDBInfo (pdbid VARCHAR(20),species VARCHAR(20),chain VARCHAR(1),unp VARCHAR(20),PRIMARY KEY(pdbid,chain))"%dbname)
 	query.append("CREATE TABLE %s.PDBTranscript (pdbid VARCHAR(20),chain VARCHAR(1),transcript VARCHAR(20),homologue BOOLEAN,PRIMARY KEY(pdbid,chain),KEY(transcript))"%dbname)
+	query.append("""CREATE TABLE `%s`.`GenomePDB` (
+  		`pdbid` VARCHAR(20) NOT NULL default '',
+  		`species` VARCHAR(20) default NULL,
+  		`chain` VARCHAR(1) NOT NULL default '',
+  		`unp` VARCHAR(20) default NULL,
+  		`transcript` VARCHAR(20) default NULL,
+  		`seqres` INT(11) NOT NULL default '0',
+  		`aa1` VARCHAR(1) default NULL,
+  		`x` DOUBLE default NULL,
+  		`y` DOUBLE default NULL,
+  		`z` DOUBLE default NULL,
+  		`start` BIGINT(20) default NULL,
+  		`end` BIGINT(20) default NULL,
+  		`chr` INT(11) default NULL,
+  		`strand` INT(11) default NULL,
+  		PRIMARY KEY  (`pdbid`,`chain`,`seqres`),
+  		KEY `pdbid` (`pdbid`),
+  		KEY `pos` (`transcript`,`start`,`end`,`chr`)
+		)"""%dbname)
 	format_dict = {'dbuser':dbuser,'dbhost':dbhost}
 	with open('create_proc_update_GenomePDB.sql','r') as fin:
-		query.append(fin.read()%format_dict)
-	with open('create_proc_sanitize_transcripts.sql','r') as fin:
 		query.append(fin.read()%format_dict)
 	for q in query:
 		c.execute(q)
