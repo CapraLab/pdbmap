@@ -382,7 +382,6 @@ def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname,num_matches):
 		sys.exit(1)
 	try:
 		query = ["LOAD DATA LOCAL INFILE '%s.tab' INTO TABLE PDBInfo FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n' IGNORE 1 LINES (chain,species,unp,pdbid,@dummy,@dummy,@dummy,@dummy,@dummy,@dummy)"%pdb_id]
-		query.append("UPDATE PDBInfo SET unp=RTRIM(unp);")
 		# Only load the rest if there were any successful matches
 		if num_matches > 0:
 			query.append("LOAD DATA LOCAL INFILE 'GenomicCoords.tab' INTO TABLE GenomicCoords FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n' IGNORE 1 LINES")
