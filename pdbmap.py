@@ -67,21 +67,29 @@ def main():
 	
 
 	# Load each PDB structure
-	pdb_count = 0
-	print "%d PDB file(s) found."%len(pdb_files)
-	for pdb_id,pdb_file in pdbs.iteritems():
-		if not pdb_in_db(pdb_id,args.dbhost,args.dbuser,args.dbpass,args.dbname):
-			print "\nProcessing PDB %s..."%pdb_id
-			pdb_count += 1
-			try:
-				load_pdb(pdb_id,pdb_file)
-			except (KeyboardInterrupt,SystemExit):
-				print("\nExiting...")
-				sys.exit(0)
-			except Exception as e:
-				sys.stdout.write("\tPDB %s could not be processed.\n"%pdb_id)
-				sys.stdout.write("\t%s\n"%e)
-				sys.stdout.write("\tSkipping...\n")
+	pdb_count     = 0
+	skipped_count = 0
+	print "\n%d PDB file(s) found."%len(pdb_files)
+	new_pdbs = [(pdb_id,pdb_file) for pdb_id,pdb_file in pdbs.iteritems() if not pdb_in_db(pdb_id,args.dbhost,args.dbuser,args.dbpass,args.dbname)]
+	#for pdb_id,pdb_file in pdbs.iteritems():
+	print "%d/%d PDB file(s) not found in database."%(len(new_pdbs),len(pdb_files))
+	for pdb_id,pdb_file in new_pdbs:
+		#if not pdb_in_db(pdb_id,args.dbhost,args.dbuser,args.dbpass,args.dbname):
+		print "\nProcessing PDB %s..."%pdb_id
+		try:
+			status = load_pdb(pdb_id,pdb_file)
+			if status:
+				skipped_count += 1
+			else:
+				pdb_count += 1
+		except (KeyboardInterrupt,SystemExit):
+			print("\nExiting...")
+			sys.exit(0)
+		except Exception as e:
+			print("Skipping:")
+			sys.stdout.write("\tPDB %s could not be processed.\n"%pdb_id)
+			sys.stdout.write("\t%s\n\n"%e)
+			skipped_count += 1
 		sys.stdout.flush()	# Flush all output for this PDB file
 	
 	# Profiler
@@ -90,10 +98,12 @@ def main():
 		t_average = t_elapsed / pdb_count
 	else:
 		t_average = 0
+	print "\n#----------------------------------#\n"
+	print "Number of PDBs skipped: %d"%skipped_count
 	print "Number of PDBs processed: %d"%pdb_count
 	print "Total execution time: %f"%t_elapsed
 	print "Average execution time per PDB: %f"%t_average
-	print "...Complete"
+	print "\nComplete."
 
 def sqlite_init():
 	"""Initializes a temporary SQLite instance for local PDB->Genome Mapping"""
@@ -120,14 +130,13 @@ def load_pdb(pdb_id,pdb_file):
 		fin = open(pdb_file,'r')
 	species = read_species(fin)
 	if not species:
-		sys.stdout.write("\tPDB contained no species information. Skipping...\n")
-		return
+		print("\tSkipping:")
+		sys.stdout.write("\tPDB contained no species information.\n")
+		return 1
 	elif (not species.lower() in ['human','homo sapien','homo sapiens']) and args.disable_human_homologue:
-		sys.stdout.write("\tSpecies is %s and human homologue mapping is disabled. Skipping...\n"%species)
-		return
-	else:
-		print "weird place to be"
-	print "species was read and species was human"
+		print("\tSkipping:")
+		sys.stdout.write("\tSpecies is %s and human homologue mapping is disabled.\n"%species)
+		return 1
 
 	experiment_type = None
 	best_model      = None
@@ -189,23 +198,26 @@ def load_pdb(pdb_id,pdb_file):
 				ung = unp2ung(unp)
 				if not ung:
 					sys.stdout.write("No UniGene entry found -> pdb: %s, chain: %s, unp: %s, species: %s"%(pdb_id,chain,unp,species))
-					return
+					return 1
 				else:
 					print "\tSearching for human homologues -> pdb: %s, chain: %s, unp: %s, ung: %s, species: %s"%(pdb_id,chain,unp,ung,species)
 					exit_code = subprocess.call(["./unigene_to_homologue_genomic.pl",pdb_id,chain,ung,species])
 		except KeyboardInterrupt:
 			if raw_input("\nContinue to next PDB? (y/n):") == 'n':
 				raise KeyboardInterrupt
-			print("\tSkipping...")
-			return
+			print("\tSkipping:")
+			print("\tCanceled by user.")
+			return 1
 		if exit_code:
-			sys.stdout.write("\tPerl script returned a non-zero exit status. Skipping...\n")
-			return		
+			print("\tSkipping:")
+			sys.stdout.write("\tPerl script returned a non-zero exit status.\n")
+			return 1
 
 	# Upload to the database
 	num_matches = sanitize_data(pdb_id,seqadv_protected)
 	print("\t#----#\n\t%d transcripts found.\n\t#----#"%num_matches)
 	publish_data(pdb_id,args.dbhost,args.dbuser,args.dbpass,args.dbname,num_matches)
+	return 0
 
 
 def read_species(fin):
@@ -402,10 +414,12 @@ def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname,num_matches):
 			tqel = time.time()-tq0
 			print("%2.2fs"%tqel)
 	except (KeyboardInterrupt,SystemExit):
-		sys.stdout.write("\tUpload to MySQL was interrupted by user. Skipping...")
+		print("Skipping:")
+		sys.stdout.write("\tUpload to MySQL was interrupted by user.")
 		raise KeyboardInterrupt
 	except Exception as e:
-		sys.stdout.write("\tUpload to MySQL failed: %s. Skipping..."%e)
+		print("Skipping:")
+		sys.stdout.write("\tUpload to MySQL failed: %s."%e)
 	finally:
 		con.close()	# Close the remote MySQL connection
 		os.system('rm -f PDBTranscript.tab')
