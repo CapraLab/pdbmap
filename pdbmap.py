@@ -126,14 +126,29 @@ def load_pdb(pdb_id,pdb_file):
 		sys.stderr.write("\tSpecies is non-human and human homologue mapping is disabled. Skipping...\n")
 		return
 
+	experiment_type = None
+	best_model      = None
+	cur_model       = None
 	for line in fin:
 		field = line[0:6].strip()
-		if field == "DBREF":
+		code  = line[7:10]
+		if field == "REMARK" and code[0] == "2":
+			print "REMARK Code: %s"%code
+			if not experiment_type:
+				experiment_type   = read_experiment_type(line,c)
+			elif experiment_type == "NMR" and not best_model:
+				best_model = read_best_model(line,c)
+		if field == "MODEL":
+			cur_model = int(line[10:14])
+		elif field == "DBREF":
 			read_dbref(line,c,pdb_id,species)
 		elif field == "SEQADV":
 			read_seqadv(line,c)
-		elif field == "ATOM":
+		elif field == "ATOM"   and cur_model == best_model:
 			read_atom(line,c)
+	print("Experiment type: %s"%experiment_type)
+	if experiment_type == "NMR":
+		print("Best Model: %d"%best_model)
 	con.commit()
 	fin.close()
 
@@ -215,9 +230,30 @@ def read_species(fin):
 			else: # Empty return if no species information
 				return
 
+def read_experiment_type(line,c):
+	print "Checking for experiment type field, field:"
+	print line[12:27]
+	"""Parses a REMARK 2** field for experiment type"""
+	if line[12:27] == "EXPERIMENT TYPE":
+		return line[45:].strip()
+	else:
+		return None
+
+def read_best_model(line,c):
+	print "Checking for best conformer field, field:"
+	print line[11:57]
+	"""Parses a REMARK 210 field for best NMR model"""
+	if line[11:57] == "BEST REPRESENTATIVE CONFORMER IN THIS ENSEMBLE":
+		best_nmr = line[60:].strip()
+		print "best NMR model: %s"%best_nmr
+		if best_nmr == "NULL":
+			best_nmr = 1
+		return int(best_nmr)
+	else:
+		return None
 
 def read_dbref(line,c,pdb_id,species):
-	"""Parses the DBREF fields from a PDB file"""
+	"""Parses a DBREF field from a PDB file"""
 	if line[26:32].strip() == "UNP":
 		chain = line[12]
 		unp_id = line[33:41].strip()
@@ -227,7 +263,7 @@ def read_dbref(line,c,pdb_id,species):
 		c.execute("INSERT INTO chains VALUES (?,?,?,?,?,?)",(chain,unp_id,pdb_id,pdbstart,offset,species))
 
 def read_seqres(line,c):
-	"""Parses the SEQRES fields from a PDB file"""
+	"""Parses a SEQRES field from a PDB file"""
 	chain = line[11]
 	c.execute("SELECT * FROM chains WHERE chain=?",chain)
 	if c.fetchone():
@@ -238,7 +274,7 @@ def read_seqres(line,c):
 read_seqres.index = 0
 
 def read_seqadv(line,c):
-	"""Parses the SEQADV fields from a PDB file"""
+	"""Parses a SEQADV field from a PDB file"""
 	aa = line[12:15]
 	chain = line[16]
 	seqres = int(line[18:22])
@@ -246,7 +282,7 @@ def read_seqadv(line,c):
 	c.execute("INSERT INTO seqadv VALUES (?,?,?,?)",(chain,seqres,aa,conflict))
 
 def read_atom(line,c):
-	"""Parses the ATOM fields from a PDB file"""
+	"""Parses a ATOM field from a PDB file"""
 	chain = line[21]
 	c.execute("SELECT * FROM chains WHERE chain=?",chain)
 	if c.fetchone():
