@@ -427,7 +427,6 @@ def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname,num_matches):
 		os.system('rm -f %s.tab'%pdb_id)
 		os.system('rm -f GenomicCoords.tab')
 
-#def pdb_in_db(pdbid,dbhost,dbuser,dbpass,dbname):
 def get_new_pdbs(pdbs,dbhost,dbuser,dbpass,dbname):
 	try:
 		con = MySQLdb.connect(host=dbhost,user=dbuser,passwd=dbpass,db=dbname)
@@ -435,13 +434,10 @@ def get_new_pdbs(pdbs,dbhost,dbuser,dbpass,dbname):
 	except MySQLdb.Error as e:
 		print "There was an error connecting to the database.\n%s"%e
 		sys.exit(1)
-	#c.execute("SELECT * FROM PDBInfo WHERE pdbid=%s",pdb_id)
-	c.execute("SELECT pdbid FROM PDBInfo")
-	#res = c.fetchone()
+	c.execute("SELECT DISTINCT(pdbid) FROM PDBInfo")
 	res = [tup[0] for tup in c.fetchall()]
 	new_pdbs = [(pdb_id,pdb_file) for pdb_id,pdb_file in pdbs.iteritems() if pdb_id not in res]
 	con.close()
-	#return res
 	return new_pdbs
 
 def create_new_db(dbhost,dbuser,dbpass,dbname):
