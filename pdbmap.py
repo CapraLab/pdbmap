@@ -79,9 +79,9 @@ def main():
 				print("\nExiting...")
 				sys.exit(0)
 			except Exception as e:
-				sys.stderr.write("\tPDB %s could not be processed.\n"%pdb_id)
-				sys.stderr.write("\t%s\n"%e)
-				sys.stderr.write("\tSkipping...\n")
+				sys.stdout.write("\tPDB %s could not be processed.\n"%pdb_id)
+				sys.stdout.write("\t%s\n"%e)
+				sys.stdout.write("\tSkipping...\n")
 		sys.stdout.flush()	# Flush all output for this PDB file
 	
 	# Profiler
@@ -120,11 +120,14 @@ def load_pdb(pdb_id,pdb_file):
 		fin = open(pdb_file,'r')
 	species = read_species(fin)
 	if not species:
-		sys.stderr.write("\tPDB contained no species information. Skipping...\n")
+		sys.stdout.write("\tPDB contained no species information. Skipping...\n")
 		return
 	elif (not species.lower() in ['human','homo sapien','homo sapiens']) and args.disable_human_homologue:
-		sys.stderr.write("\tSpecies is non-human and human homologue mapping is disabled. Skipping...\n")
+		sys.stdout.write("\tSpecies is %s and human homologue mapping is disabled. Skipping...\n"%species)
 		return
+	else:
+		print "weird place to be"
+	print "species was read and species was human"
 
 	experiment_type = None
 	best_model      = None
@@ -185,7 +188,7 @@ def load_pdb(pdb_id,pdb_file):
 			else:
 				ung = unp2ung(unp)
 				if not ung:
-					sys.stderr.write("No UniGene entry found -> pdb: %s, chain: %s, unp: %s, species: %s"%(pdb_id,chain,unp,species))
+					sys.stdout.write("No UniGene entry found -> pdb: %s, chain: %s, unp: %s, species: %s"%(pdb_id,chain,unp,species))
 					return
 				else:
 					print "\tSearching for human homologues -> pdb: %s, chain: %s, unp: %s, ung: %s, species: %s"%(pdb_id,chain,unp,ung,species)
@@ -196,7 +199,7 @@ def load_pdb(pdb_id,pdb_file):
 			print("\tSkipping...")
 			return
 		if exit_code:
-			sys.stderr.write("\tPerl script returned a non-zero exit status. Skipping...\n")
+			sys.stdout.write("\tPerl script returned a non-zero exit status. Skipping...\n")
 			return		
 
 	# Upload to the database
@@ -399,10 +402,10 @@ def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname,num_matches):
 			tqel = time.time()-tq0
 			print("%2.2fs"%tqel)
 	except (KeyboardInterrupt,SystemExit):
-		sys.stderr.write("\tUpload to MySQL was interrupted by user. Skipping...")
+		sys.stdout.write("\tUpload to MySQL was interrupted by user. Skipping...")
 		raise KeyboardInterrupt
 	except Exception as e:
-		sys.stderr.write("\tUpload to MySQL failed: %s. Skipping..."%e)
+		sys.stdout.write("\tUpload to MySQL failed: %s. Skipping..."%e)
 	finally:
 		con.close()	# Close the remote MySQL connection
 		os.system('rm -f PDBTranscript.tab')
