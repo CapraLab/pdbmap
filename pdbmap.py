@@ -133,7 +133,6 @@ def load_pdb(pdb_id,pdb_file):
 		field = line[0:6].strip()
 		code  = line[7:10]
 		if field == "REMARK" and code[0] == "2":
-			print "REMARK Code: %s"%code
 			if not experiment_type:
 				experiment_type   = read_experiment_type(line,c)
 			elif experiment_type == "NMR" and not best_model:
@@ -146,9 +145,9 @@ def load_pdb(pdb_id,pdb_file):
 			read_seqadv(line,c)
 		elif field == "ATOM"   and cur_model == best_model:
 			read_atom(line,c)
-	print("Experiment type: %s"%experiment_type)
+	print("\tExperiment type: %s"%experiment_type)
 	if experiment_type == "NMR":
-		print("Best Model: %d"%best_model)
+		print("\tBest Model: %d"%best_model)
 	con.commit()
 	fin.close()
 
@@ -231,8 +230,6 @@ def read_species(fin):
 				return
 
 def read_experiment_type(line,c):
-	print "Checking for experiment type field, field:"
-	print line[12:27]
 	"""Parses a REMARK 2** field for experiment type"""
 	if line[12:27] == "EXPERIMENT TYPE":
 		return line[45:].strip()
@@ -240,12 +237,9 @@ def read_experiment_type(line,c):
 		return None
 
 def read_best_model(line,c):
-	print "Checking for best conformer field, field:"
-	print line[11:57]
 	"""Parses a REMARK 210 field for best NMR model"""
 	if line[11:57] == "BEST REPRESENTATIVE CONFORMER IN THIS ENSEMBLE":
 		best_nmr = line[60:].strip()
-		print "best NMR model: %s"%best_nmr
 		if best_nmr == "NULL":
 			best_nmr = 1
 		return int(best_nmr)
