@@ -5,4 +5,4 @@
 #PBS -l mem=5000mb
 
 cd /labs/twells/sivleyrm/pdbmap/
-./pdbmap.py -c all_pdb.config >> pdbmap_v2.out
+./pdbmap.py -c all_pdb.config >> pdbmap_v2_2.out

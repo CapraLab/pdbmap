@@ -70,7 +70,8 @@ def main():
 	pdb_count     = 0
 	skipped_count = 0
 	print "\n%d PDB file(s) found."%len(pdb_files)
-	new_pdbs = [(pdb_id,pdb_file) for pdb_id,pdb_file in pdbs.iteritems() if not pdb_in_db(pdb_id,args.dbhost,args.dbuser,args.dbpass,args.dbname)]
+	new_pdbs = get_new_pdbs(pdbs,args.dbhost,args.dbuser,args.dbpass,args.dbname)
+	#new_pdbs = [(pdb_id,pdb_file) for pdb_id,pdb_file in pdbs.iteritems() if not pdb_in_db(pdb_id,args.dbhost,args.dbuser,args.dbpass,args.dbname)]
 	#for pdb_id,pdb_file in pdbs.iteritems():
 	print "%d/%d PDB file(s) not found in database."%(len(new_pdbs),len(pdb_files))
 	for pdb_id,pdb_file in new_pdbs:
@@ -426,17 +427,22 @@ def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname,num_matches):
 		os.system('rm -f %s.tab'%pdb_id)
 		os.system('rm -f GenomicCoords.tab')
 
-def pdb_in_db(pdb_id,dbhost,dbuser,dbpass,dbname):
+#def pdb_in_db(pdbid,dbhost,dbuser,dbpass,dbname):
+def get_new_pdbs(pdbs,dbhost,dbuser,dbpass,dbname):
 	try:
 		con = MySQLdb.connect(host=dbhost,user=dbuser,passwd=dbpass,db=dbname)
 		c = con.cursor()
 	except MySQLdb.Error as e:
 		print "There was an error connecting to the database.\n%s"%e
 		sys.exit(1)
-	c.execute("SELECT * FROM PDBInfo WHERE pdbid=%s",pdb_id)
-	res = c.fetchone()
+	#c.execute("SELECT * FROM PDBInfo WHERE pdbid=%s",pdb_id)
+	c.execute("SELECT pdbid FROM PDBInfo")
+	#res = c.fetchone()
+	res = [tup[0] for tup in c.fetchall()]
+	new_pdbs = [(pdb_id,pdb_file) for pdb_id,pdb_file in pdbs.iteritems() if pdb_id not in res]
 	con.close()
-	return res
+	#return res
+	return new_pdbs
 
 def create_new_db(dbhost,dbuser,dbpass,dbname):
 	try:
