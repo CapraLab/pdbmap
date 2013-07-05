@@ -179,7 +179,7 @@ def load_pdb(pdb_id,pdb_file):
 	# Pull local processing information
 	c.execute("SELECT unp,chain FROM chains")
 	unp_chains = c.fetchall()
-	c.execute("SELECT chain,seqres FROM seqadv WHERE conflict='ENGINEERED MUTATION'")
+	c.execute("SELECT chain,seqres FROM seqadv WHERE conflict='ENGINEERED MUTATION' OR conflict='MODIFIED RESIDUE'")
 	seqadv_protected = c.fetchall()
 	con.close()	# Close the local SQLite connection
 
@@ -287,10 +287,14 @@ def read_seqadv(line,c):
 	"""Parses a SEQADV field from a PDB file"""
 	aa = line[12:15]
 	chain = line[16]
-	seqres = int(line[18:22])
+	seqres = line[18:22].strip()
+	# Check the seqres not blank
+	if seqres:
+		seqres = int(seqres)
+	# Check that seqres has no insertion code
 	idcode = line[22].strip()
 	conflict = line[49:70].strip()
-	if not idcode:
+	if seqres and not idcode:
 		c.execute("INSERT INTO seqadv VALUES (?,?,?,?)",(chain,seqres,aa,conflict))
 
 def read_atom(line,c):
