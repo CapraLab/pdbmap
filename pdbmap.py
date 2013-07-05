@@ -164,9 +164,9 @@ def load_pdb(pdb_id,pdb_file):
 	con.commit()
 	fin.close()
 
-	# Remove residues with unwanted conflicts
+	# Remove any residues with conflicts not explicitly allowed
 	print("\tRemoving SEQADV conflicts...")
-	c.execute("SELECT chain,seqres FROM seqadv WHERE conflict='EXPRESSION TAG'")
+	c.execute("SELECT chain,seqres FROM seqadv WHERE conflict!='ENGINEERED MUTATION' AND conflict!='MODIFIED RESIDUE'")
 	for chain,seqres in c.fetchall():
 		print("\t\tSEQADV %s,%s removed"%(chain,seqres))
 		print("\t\tConflict: EXPRESSION TAG")
