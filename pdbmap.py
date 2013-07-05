@@ -288,8 +288,10 @@ def read_seqadv(line,c):
 	aa = line[12:15]
 	chain = line[16]
 	seqres = int(line[18:22])
+	idcode = line[22].strip()
 	conflict = line[49:70].strip()
-	c.execute("INSERT INTO seqadv VALUES (?,?,?,?)",(chain,seqres,aa,conflict))
+	if not idcode:
+		c.execute("INSERT INTO seqadv VALUES (?,?,?,?)",(chain,seqres,aa,conflict))
 
 def read_atom(line,c):
 	"""Parses a ATOM field from a PDB file"""
@@ -298,12 +300,14 @@ def read_atom(line,c):
 	if c.fetchone():
 		serialnum = int(line[6:11])
 		seqres = int(line[22:26])
+		idcode = line[26].strip()
 		aminoacid = line[17:20]
 		aminoacid_oneletter = aa_code_map[aminoacid.lower()]
 		x = float(line[30:38])
 		y = float(line[38:46])
 		z = float(line[46:54])
-		c.execute("INSERT INTO coords VALUES (?,?,?,?,?,?,?,?)",(chain,serialnum,seqres,aminoacid,aminoacid_oneletter,x,y,z))
+		if not idcode:
+			c.execute("INSERT INTO coords VALUES (?,?,?,?,?,?,?,?)",(chain,serialnum,seqres,aminoacid,aminoacid_oneletter,x,y,z))
 
 def write_pdb_data(pdb_id,c,con):
 	"""Averages the 3D coordinates and outputs the PDB data to tabular for MySQL upload"""
