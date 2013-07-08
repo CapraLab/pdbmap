@@ -279,14 +279,16 @@ def read_dbref(line,c,pdb_id,species):
 		dbstart = int(line[55:60])
 		offset = dbstart - pdbstart
 		# This easy fix should handle peptide deletions with the same offset
-		c.execute("SELECT unp,offset FROM chains WHERE chain=?",(chain,))
-		res = c.fetchone()
-		if not res or (unp_id==res[0] and offset=res[1]):
+		# Removed until the decision is made whether to include chains with
+		# large deletions.
+		#c.execute("SELECT unp,offset FROM chains WHERE chain=?",(chain,))
+		#res = c.fetchone()
+		if not res:# or (unp_id==res[0] and offset=res[1]):
 			c.execute("INSERT INTO chains VALUES (?,?,?,?,?,?)",(chain,unp_id,pdb_id,pdbstart,offset,species))
 		else:
 			# The fix cannot handle insertions of a different protein
 			# or deletions with different offsets
-			raise Exception("PDB chain contains insertion or offset deletion")
+			raise Exception("PDB chain contains insertion or deletion")
 
 def read_seqres(line,c):
 	"""Parses a SEQRES field from a PDB file"""
