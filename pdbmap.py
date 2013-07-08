@@ -50,9 +50,6 @@ parser.add_argument("-f", "--force", action='store_true', help="Force configurat
 def main():
 	"""Map each PDB to its genomic coordinates and upload to the specified database"""
 
-	# Profiler
-	t0 = time.time()
-
 	# If a new database needs to be created, create one.
 	if args.create_new_db:
 		create_new_db(args.dbhost,args.dbuser,args.dbpass,args.dbname)
@@ -64,25 +61,31 @@ def main():
 		pdb_files = [args.pdb_dir]
 	pdbs   = dict((os.path.basename(pdb_file).split('.')[0][-4:].upper(),pdb_file) for pdb_file in pdb_files)
 
-	
-
 	# Load each PDB structure
 	pdb_count     = 0
 	skipped_count = 0
+	mapped_count  = 0
 	print "\n%d PDB file(s) found."%len(pdb_files)
 	new_pdbs = get_new_pdbs(pdbs,args.dbhost,args.dbuser,args.dbpass,args.dbname)
-	#new_pdbs = [(pdb_id,pdb_file) for pdb_id,pdb_file in pdbs.iteritems() if not pdb_in_db(pdb_id,args.dbhost,args.dbuser,args.dbpass,args.dbname)]
-	#for pdb_id,pdb_file in pdbs.iteritems():
 	print "%d/%d PDB file(s) not found in database."%(len(new_pdbs),len(pdb_files))
+
+	# Success profiler
+	t_elapsed_success = 0
+	# Failure profiler
+	t_elapsed_fail    = 0
+
 	for pdb_id,pdb_file in new_pdbs:
-		#if not pdb_in_db(pdb_id,args.dbhost,args.dbuser,args.dbpass,args.dbname):
 		print "\nProcessing PDB %s..."%pdb_id
 		try:
-			status = load_pdb(pdb_id,pdb_file)
+			t0 = time.time() # Profiler
+			status,num_matches = load_pdb(pdb_id,pdb_file)
 			if status:
 				skipped_count += 1
+				t_elapsed_fail += time.time()-t0 # Profiler
 			else:
 				pdb_count += 1
+				t_elapsed_success += time.time()-t0 # Profiler
+			mapped_count += num_matches
 		except (KeyboardInterrupt,SystemExit):
 			print("\nExiting...")
 			sys.exit(0)
@@ -91,19 +94,24 @@ def main():
 			sys.stdout.write("\tPDB %s could not be processed.\n"%pdb_id)
 			sys.stdout.write("\t%s\n\n"%e)
 			skipped_count += 1
-		sys.stdout.flush()	# Flush all output for this PDB file
+			t_elapsed_fail += time.time()-t0 # Profiler
 	
-	# Profiler
-	t_elapsed = time.time() - t0
+	# Success profiler
 	if pdb_count > 0:
-		t_average = t_elapsed / pdb_count
+		t_average_success = t_elapsed_success / pdb_count
 	else:
-		t_average = 0
+		t_average_success = 0
+	if skipped_count > 0:
+		t_average_fail = t_elapsed_fail / skipped_count
+	else:
+		t_average_fail = 0
 	print "\n#----------------------------------#\n"
 	print "Number of PDBs skipped: %d"%skipped_count
 	print "Number of PDBs processed: %d"%pdb_count
+	print "Number of PDBs mapped: %d"%mapped_count
 	print "Total execution time: %f"%t_elapsed
-	print "Average execution time per PDB: %f"%t_average
+	print "Average execution time for successful PDB: %2.2f"%t_average_success
+	print "Average execution time for skipped PDB: %2.2f"%t_average_fail
 	print "\nComplete."
 
 def sqlite_init():
@@ -216,9 +224,9 @@ def load_pdb(pdb_id,pdb_file):
 
 	# Upload to the database
 	num_matches = sanitize_data(pdb_id,seqadv_protected)
-	print("\t#----#\n\t%d transcripts found.\n\t#----#"%num_matches)
+	print("\t%d transcripts found.\n"%num_matches)
 	publish_data(pdb_id,args.dbhost,args.dbuser,args.dbpass,args.dbname,num_matches)
-	return 0
+	return 0,(num_matches > 0)
 
 
 def read_species(fin):
