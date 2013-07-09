@@ -1,0 +1,32 @@
+	PDB 4GS0 could not be processed.
+	'unk'
+--
+	PDB 3LZB could not be processed.
+	'unk'
+--
+	PDB 3ED7 could not be processed.
+	'unk'
+--
+	PDB 4FZV could not be processed.
+	'unk'
+--
+	PDB 3HVE could not be processed.
+	'unk'
+--
+	PDB 3BFN could not be processed.
+	'unk'
+--
+	PDB 2H26 could not be processed.
+	'unk'
+--
+	PDB 3CXE could not be processed.
+	'unk'
+--
+	PDB 2NN6 could not be processed.
+	'unk'
+--
+	PDB 3L8J could not be processed.
+	'unk'
+--
+	PDB 2BVK could not be processed.
+	%d format: a number is required, not NoneType
