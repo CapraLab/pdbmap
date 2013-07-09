@@ -141,11 +141,11 @@ def load_pdb(pdb_id,pdb_file):
 	if not species:
 		print("\tSkipping:")
 		sys.stdout.write("\tPDB contained no species information.\n")
-		return 1
+		return 1,0
 	elif (not species.lower() in ['human','homo sapien','homo sapiens']) and args.disable_human_homologue:
 		print("\tSkipping:")
 		sys.stdout.write("\tSpecies is %s and human homologue mapping is disabled.\n"%species)
-		return 1
+		return 1,0
 
 	experiment_type = None
 	best_model      = None
@@ -207,7 +207,7 @@ def load_pdb(pdb_id,pdb_file):
 				ung = unp2ung(unp)
 				if not ung:
 					sys.stdout.write("No UniGene entry found -> pdb: %s, chain: %s, unp: %s, species: %s"%(pdb_id,chain,unp,species))
-					return 1
+					return 1,0
 				else:
 					print "\tSearching for human homologues -> pdb: %s, chain: %s, unp: %s, ung: %s, species: %s"%(pdb_id,chain,unp,ung,species)
 					exit_code = subprocess.call(["./unigene_to_homologue_genomic.pl",pdb_id,chain,ung,species])
@@ -216,11 +216,11 @@ def load_pdb(pdb_id,pdb_file):
 				raise KeyboardInterrupt
 			print("\tSkipping:")
 			print("\tCanceled by user.")
-			return 1
+			return 1,0
 		if exit_code:
 			print("\tSkipping:")
 			sys.stdout.write("\tPerl script returned a non-zero exit status.\n")
-			return 1
+			return 1,0
 
 	# Upload to the database
 	num_matches = sanitize_data(pdb_id,seqadv_protected)
@@ -281,8 +281,8 @@ def read_dbref(line,c,pdb_id,species):
 		# This easy fix should handle peptide deletions with the same offset
 		# Removed until the decision is made whether to include chains with
 		# large deletions.
-		#c.execute("SELECT unp,offset FROM chains WHERE chain=?",(chain,))
-		#res = c.fetchone()
+		c.execute("SELECT unp,offset FROM chains WHERE chain=?",(chain,))
+		res = c.fetchone()
 		if not res:# or (unp_id==res[0] and offset=res[1]):
 			c.execute("INSERT INTO chains VALUES (?,?,?,?,?,?)",(chain,unp_id,pdb_id,pdbstart,offset,species))
 		else:
