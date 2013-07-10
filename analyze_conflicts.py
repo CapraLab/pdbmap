@@ -94,6 +94,7 @@ def main():
 			sys.stdout.write("\tPDB %s could not be processed.\n"%pdb_id)
 			sys.stdout.write("\t%s\n\n"%e)
 			skipped_count += 1
+			os.system('rm -f %s.tab'%pdb_id)
 			t_elapsed_fail += time.time()-t0 # Profiler
 	
 	# Success profiler
@@ -432,7 +433,7 @@ def sanitize_data(pdb_id,seqadv_protected):
 
 		# Report the transcript issues
 		#trans_issues = mismatch_issues + range_issues
-		# if num_issues > 0:
+		if num_issues > 0:
 			# print("Transcript %s had %d conflicts.\t\t%2.2f%% conflict."%(transcript,trans_issues,float(trans_issues)/len(pdb_c_sub)*100))
 			# print("Transcript %s had %d range conflicts.\t%2.2f%% conflict."%(transcript,range_issues,float(range_issues)/len(pdb_c_sub)*100))
 			# print("Transcript %s had %d mismatch conflicts.\t%2.2f%% conflict."%(transcript,mismatch_issues,float(mismatch_issues)/len(pdb_c_sub)*100))
@@ -440,10 +441,10 @@ def sanitize_data(pdb_id,seqadv_protected):
 
 			# PDB Transcript conflict %conflict range %range mismatch %mismatch
 			#print("%s\t%s\t%d\t%2.2f\t%d\t%2.2f\t%d\t%2.2f"%(pdb_id,transcript,trans_issues,float(trans_issues)/len(pdb_c_sub),range_issues,float(range_issues)/len(pdb_c_sub),mismatch_issues,float(mismatch_issues)/len(pdb_c_sub)))
-		print('')
-		print("%s.%s -> %s: %2.2f conflict"%(pdb_id,chain,transcript,num_issues/tot_len))
-		print 'm:',''.join(mismatch_issues)
-		print 'r:',''.join(range_issues)
+			print('')
+			print("%s.%s -> %s: %2.2f conflict"%(pdb_id,chain,transcript,num_issues/tot_len))
+			print 'm:',''.join(mismatch_issues)
+			print 'r:',''.join(range_issues)
 
 	# Report the PDB issues
 	# if num_issues > 0:
