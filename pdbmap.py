@@ -94,6 +94,7 @@ def main():
 			sys.stdout.write("\tPDB %s could not be processed.\n"%pdb_id)
 			sys.stdout.write("\t%s\n\n"%e)
 			skipped_count += 1
+			os.system('rm -f %s.tab'%pdb_id)
 			t_elapsed_fail += time.time()-t0 # Profiler
 	
 	# Success profiler
@@ -136,17 +137,9 @@ def load_pdb(pdb_id,pdb_file):
 	if os.path.splitext(pdb_file)[-1] == '.gz':
 		fin = gzip.open(pdb_file,'r')
 	else:
-		fin = open(pdb_file,'r')
-	species = read_species(fin)
-	if not species:
-		print("\tSkipping:")
-		sys.stdout.write("\tPDB contained no species information.\n")
-		return 1,0
-	elif (not species.lower() in ['human','homo sapien','homo sapiens']) and args.disable_human_homologue:
-		print("\tSkipping:")
-		sys.stdout.write("\tSpecies is %s and human homologue mapping is disabled.\n"%species)
-		return 1,0
+		fin = open(pdb_file,'r')	
 
+	species         = []
 	experiment_type = None
 	best_model      = None
 	cur_model       = None
@@ -158,14 +151,26 @@ def load_pdb(pdb_id,pdb_file):
 				experiment_type   = read_experiment_type(line,c)
 			elif experiment_type == "NMR" and not best_model:
 				best_model = read_best_model(line,c)
-		if field == "MODEL":
+		elif field == "SOURCE" and line[11:30] == "ORGANISM_SCIENTIFIC":
+			species.append(read_species(line))
+		elif field == "MODEL":
 			cur_model = int(line[10:14])
 		elif field == "DBREF":
-			read_dbref(line,c,pdb_id,species)
+			read_dbref(line,c,pdb_id)
 		elif field == "SEQADV":
 			read_seqadv(line,c)
 		elif field == "ATOM"   and cur_model == best_model:
 			read_atom(line,c)
+
+	if len(species) < 1:
+		print("\tSkipping:")
+		sys.stdout.write("\tPDB contained no species information.\n")
+		return 1,0
+	elif args.disable_human_homologue and len([spec for spec in species if spec not in ['homo_sapien','homo_sapiens']]) > 0:
+		print("\tSkipping:")
+		sys.stdout.write("\tPDB contains %s and human homologue mapping is disabled.\n"%','.join(species))
+		return 1,0
+
 	print("\tExperiment type: %s"%experiment_type)
 	if experiment_type == "NMR":
 		print("\tBest Model: %d"%best_model)
@@ -185,7 +190,7 @@ def load_pdb(pdb_id,pdb_file):
 	write_pdb_data(pdb_id,c,con)
 
 	# Pull local processing information
-	c.execute("SELECT unp,chain FROM chains")
+	c.execute("SELECT unp,chain,species FROM chains")
 	unp_chains = c.fetchall()
 	c.execute("SELECT chain,seqres FROM seqadv WHERE conflict='ENGINEERED MUTATION' OR conflict='MODIFIED RESIDUE'")
 	seqadv_protected = c.fetchall()
@@ -199,8 +204,9 @@ def load_pdb(pdb_id,pdb_file):
 	for unp_chain in unp_chains:
 		unp = str(unp_chain[0])
 		chain = str(unp_chain[1])
+		species = str(unp_chain[2])
 		try:
-			if species.lower() in ['human','homo sapien','homo sapiens']:
+			if species.lower()=="human":
 				print "\tLoading -> pdb: %s, chain: %s, unp: %s, species: %s"%(pdb_id,chain,unp,species)
 				exit_code = subprocess.call(["./protein_to_genomic.pl",pdb_id,chain,unp,species])
 			else:
@@ -223,35 +229,18 @@ def load_pdb(pdb_id,pdb_file):
 			return 1,0
 
 	# Upload to the database
-	num_matches = sanitize_data(pdb_id,seqadv_protected)
+	num_matches = compute_conflict(pdb_id,seqadv_protected)
 	print("\t%d transcripts found.\n"%num_matches)
 	publish_data(pdb_id,args.dbhost,args.dbuser,args.dbpass,args.dbname,num_matches)
 	return 0,(num_matches > 0)
 
 
-def read_species(fin):
+def read_species(line):
 	"""Parses the species field from a PDB file"""
-	flag = 0
-	common = ''
-	scientific = ''
-	for line in fin:
-		if line[0:6] == "SOURCE":
-			flag = 1
-			if line[11:26] == "ORGANISM_COMMON":
-				common = line[28:].split(';')[0].strip()
-				if common in species_map:
-					common = species_map[common]
-			if line[11:30] == "ORGANISM_SCIENTIFIC":
-				scientific = line[32:].split(';')[0].strip()
-				if scientific in species_map:
-					scientific = species_map[scientific]
-		elif flag:
-			if common: # Return common if found
-				return common
-			elif scientific: # Return scientific if not
-				return scientific
-			else: # Empty return if no species information
-				return
+	scientific = line[32:].split(';')[0].strip().replace(' ','_')
+	if scientific in species_map:
+		scientific = species_map[scientific]
+	return scientific.lower()
 
 def read_experiment_type(line,c):
 	"""Parses a REMARK 2** field for experiment type"""
@@ -270,11 +259,12 @@ def read_best_model(line,c):
 	else:
 		return None
 
-def read_dbref(line,c,pdb_id,species):
+def read_dbref(line,c,pdb_id):
 	"""Parses a DBREF field from a PDB file"""
 	if line[26:32].strip() == "UNP":
 		chain = line[12]
 		unp_id = line[33:41].strip()
+		species = line[42:54].strip().split('_')[-1]
 		pdbstart = int(line[14:18])
 		dbstart = int(line[55:60])
 		offset = dbstart - pdbstart
@@ -359,8 +349,10 @@ def unp2ung(unp):
 	page = response.read(200000)
 	return page.split()[-1]
 
-def sanitize_data(pdb_id,seqadv_protected):
-	print("\tSanitizing transcript maps...")
+def compute_conflict(pdb_id,seqadv_protected):
+	if pdb_id=='1JU5':
+		sys.exit(1)
+	print("\tIdentifying undocumented conflicts...")
 	with open('GenomicCoords.tab','r') as fin:
 		reader = csv.reader(fin,delimiter='\t')
 		gc = {(row[0],row[1]): row[2] for row in reader}
@@ -373,10 +365,17 @@ def sanitize_data(pdb_id,seqadv_protected):
 		reader = csv.reader(fin,delimiter='\t')
 		pdb_c = {(row[0],row[4]): row[6] for row in reader}
 	sanitize = []
+
+	# For each mapping
+	pdb_t_conflict = []
 	for transcript,chain,homologue in pdb_t:
+
+		# Track the number of conflicts
+		num_conflicts = 0
+
 		# Reduce by first key and remove
-		test1 = [key[0] for key in gc if key[0]==transcript]
-		test2 = [key[0] for key in pdb_c if key[0]==chain]
+		# test1 = [key[0] for key in gc if key[0]==transcript]
+		# test2 = [key[0] for key in pdb_c if key[0]==chain]
 		gc_sub    = {int(key[1]):gc[key]    for key in gc    if key[0]==transcript}
 		pdb_c_sub = {int(key[1]):pdb_c[key] for key in pdb_c if key[0]==chain}
 		# Join by second key and compare values
@@ -386,34 +385,56 @@ def sanitize_data(pdb_id,seqadv_protected):
 				pass
 			# If the transcript does not contain the seqres, discard
 			elif seqres not in gc_sub:
-				print("\t\tTranscript %s sanitized. Conflict SEQRES: %s"%(transcript,seqres))
-				print("\t\tChain: %s"%chain)
-				print("\t\tCause: SEQRES out of transcript range.")
-				print("\t\tTranscript range: %d - %d"%(min(gc_sub.keys()),max(gc_sub.keys())))
-				print("\t\t#-------------#")
-				sanitize.append((transcript,chain,homologue))
-				break
+				# print("\t\tTranscript %s sanitized. Conflict SEQRES: %s"%(transcript,seqres))
+				# print("\t\tChain: %s"%chain)
+				# print("\t\tCause: SEQRES out of transcript range.")
+				# print("\t\tTranscript range: %d - %d"%(min(gc_sub.keys()),max(gc_sub.keys())))
+				# print("\t\t#-------------#")
+				num_conflicts += 1
+				# sanitize.append((transcript,chain,homologue))
+				# break
 			# Or the amino acid is different at that seqres, discard
 			elif gc_sub[seqres] != pdb_c_sub[seqres]:
-				print("\t\tTranscript %s sanitized. Conflict SEQRES: %s"%(transcript,seqres))
-				print("\t\tChain: %s"%chain)
-				print("\t\tCause: Amino acid mismatch.")
-				print("\t\tPDB.aa: %s, Transcript.aa: %s"%(pdb_c_sub[seqres],gc_sub[seqres]))
-				print("\t\t#-------------#")
-				sanitize.append((transcript,chain,homologue))
-				break
+				# print("\t\tTranscript %s sanitized. Conflict SEQRES: %s"%(transcript,seqres))
+				# print("\t\tChain: %s"%chain)
+				# print("\t\tCause: Amino acid mismatch.")
+				# print("\t\tPDB.aa: %s, Transcript.aa: %s"%(pdb_c_sub[seqres],gc_sub[seqres]))
+				# print("\t\t#-------------#")
+				num_conflicts += 1
+				# sanitize.append((transcript,chain,homologue))
+				# break
 
-	# Remove the transcript->chain map
-	for transcript,chain,homologue in sanitize:
-		pdb_t.remove((transcript,chain,homologue))
+		# Determine % conflict
+		if len(pdb_c_sub) > 0:
+			perc_conflict = num_conflicts / float(len(pdb_c_sub))
+		else:
+			print("%s.%s length is 0, setting to 100%% conflict."%(pdb_id,transcript))
+			perc_conflict = 1.0
+
+		# Queue for sanitation if >90% conflict
+		# if perc_conflict > 0.90:
+		# 	sanitize.append((transcript,chain,homologue))
+		# Retain if conflict < 90%
+		print "\t%s.%s -> %s: %2.2f conflict,"%(pdb_id,chain,transcript,perc_conflict),
+		if perc_conflict < 0.90:
+			print ''
+			pdb_t_conflict.append((transcript,chain,homologue,perc_conflict))
+		else:
+			print "Sanitizing."
+
+	# Sanitize failing chain/transcript maps
+	# for transcript,chain,homologue in sanitize:
+	# 	pdb_t.remove((transcript,chain,homologue))
+
 	# And write the sanitized mappings back to file
 	with open('PDBTranscript.tab','w') as fout:
 		writer = csv.writer(fout,delimiter='\t')
-		for transcript,chain,homologue in pdb_t:
-			writer.writerow([pdb_id,chain,transcript,homologue])
+		# for transcript,chain,homologue in pdb_t:
+		for transcript,chain,homologue,conflict in pdb_t_conflict:
+			writer.writerow([pdb_id,chain,transcript,homologue,conflict])
 
 	# Return the number of remaining matches
-	return len(pdb_t)
+	return len(pdb_t_conflict)
 
 def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname,num_matches):
 	try:
@@ -479,7 +500,7 @@ def create_new_db(dbhost,dbuser,dbpass,dbname):
 	query.append("CREATE TABLE %s.GenomicCoords (transcript VARCHAR(20),seqres INT,aa1 VARCHAR(1),start BIGINT,end BIGINT,chr INT,strand INT,PRIMARY KEY(transcript,seqres),KEY(transcript),KEY(start,end,chr))"%dbname)
 	query.append("CREATE TABLE %s.PDBCoords (pdbid VARCHAR(20),chain VARCHAR(1),seqres INT,aa3 VARCHAR(3),aa1 VARCHAR(1),x DOUBLE,y DOUBLE,z DOUBLE,PRIMARY KEY(pdbid,chain,seqres))"%dbname)
 	query.append("CREATE TABLE %s.PDBInfo (pdbid VARCHAR(20),species VARCHAR(20),chain VARCHAR(1),unp VARCHAR(20),PRIMARY KEY(pdbid,chain))"%dbname)
-	query.append("CREATE TABLE %s.PDBTranscript (pdbid VARCHAR(20),chain VARCHAR(1),transcript VARCHAR(20),homologue BOOLEAN,PRIMARY KEY(pdbid,chain),KEY(transcript))"%dbname)
+	query.append("CREATE TABLE %s.PDBTranscript (pdbid VARCHAR(20),chain VARCHAR(1),transcript VARCHAR(20),homologue BOOLEAN,conflict REAL,PRIMARY KEY(pdbid,chain),KEY(transcript),KEY(conflict))"%dbname)
 	query.append("""CREATE TABLE `%s`.`GenomePDB` (
   		`pdbid` VARCHAR(20) NOT NULL default '',
   		`species` VARCHAR(20) default NULL,
