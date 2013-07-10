@@ -6,7 +6,7 @@
 # homologues for non-human protein structures.
 
 import argparse,ConfigParser
-import os,sys,csv,time,subprocess,gzip
+import os,sys,csv,time,subprocess,gzip,string
 import sqlite3,MySQLdb
 from warnings import filterwarnings	# Disable MySQL warnings
 filterwarnings('ignore',category=MySQLdb.Warning)
@@ -143,6 +143,7 @@ def load_pdb(pdb_id,pdb_file):
 	experiment_type = None
 	best_model      = None
 	cur_model       = None
+	header_read     = False
 	for line in fin:
 		field = line[0:6].strip()
 		code  = line[7:10]
@@ -153,23 +154,19 @@ def load_pdb(pdb_id,pdb_file):
 				best_model = read_best_model(line,c)
 		elif field == "SOURCE" and line[11:30] == "ORGANISM_SCIENTIFIC":
 			species.append(read_species(line))
+		elif field == "SOURCE" and line[11:20] == "SYNTHETIC":
+			species.append("synthetic")
 		elif field == "MODEL":
 			cur_model = int(line[10:14])
 		elif field == "DBREF":
+			if check_species(species):
+				fin.close()
+				return 1,0
 			read_dbref(line,c,pdb_id)
 		elif field == "SEQADV":
 			read_seqadv(line,c)
 		elif field == "ATOM"   and cur_model == best_model:
 			read_atom(line,c)
-
-	if len(species) < 1:
-		print("\tSkipping:")
-		sys.stdout.write("\tPDB contained no species information.\n")
-		return 1,0
-	elif args.disable_human_homologue and len([spec for spec in species if spec not in ['homo_sapien','homo_sapiens']]) > 0:
-		print("\tSkipping:")
-		sys.stdout.write("\tPDB contains %s and human homologue mapping is disabled.\n"%','.join(species))
-		return 1,0
 
 	print("\tExperiment type: %s"%experiment_type)
 	if experiment_type == "NMR":
@@ -234,6 +231,16 @@ def load_pdb(pdb_id,pdb_file):
 	publish_data(pdb_id,args.dbhost,args.dbuser,args.dbpass,args.dbname,num_matches)
 	return 0,(num_matches > 0)
 
+def check_species(species):
+	if len(species) < 1:
+		print("\tSkipping:")
+		sys.stdout.write("\tPDB contained no species information.\n")
+		return 1
+	elif args.disable_human_homologue and len([spec for spec in species if spec not in ['homo_sapien','homo_sapiens']]) > 0:
+		print("\tSkipping:")
+		sys.stdout.write("\tPDB contains %s and human homologue mapping is disabled.\n"%','.join(species))
+		return 1
+	return 0
 
 def read_species(line):
 	"""Parses the species field from a PDB file"""
@@ -253,7 +260,9 @@ def read_best_model(line,c):
 	"""Parses a REMARK 210 field for best NMR model"""
 	if line[11:57] == "BEST REPRESENTATIVE CONFORMER IN THIS ENSEMBLE":
 		best_nmr = line[60:].strip()
-		if best_nmr == "NULL":
+		print(best_nmr)
+		best_nmr = best_nmr.translate(None,string.letters).strip()
+		if best_nmr == '':
 			best_nmr = 1
 		return int(best_nmr)
 	else:
@@ -295,7 +304,8 @@ def read_seqadv(line,c):
 	"""Parses a SEQADV field from a PDB file"""
 	aa = line[12:15]
 	chain = line[16]
-	seqres = line[18:22].strip()
+	# seqres = line[18:22].strip()
+	seqres = line[43:48].strip()
 	# Check the seqres not blank
 	if seqres:
 		seqres = int(seqres)
@@ -408,7 +418,7 @@ def compute_conflict(pdb_id,seqadv_protected):
 		if len(pdb_c_sub) > 0:
 			perc_conflict = num_conflicts / float(len(pdb_c_sub))
 		else:
-			print("%s.%s length is 0, setting to 100%% conflict."%(pdb_id,transcript))
+			print("\t%s.%s length is 0, setting to 100%% conflict."%(pdb_id,transcript))
 			perc_conflict = 1.0
 
 		# Queue for sanitation if >90% conflict
