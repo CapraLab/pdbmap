@@ -107,6 +107,7 @@ def main():
 		t_average_fail = t_elapsed_fail / skipped_count
 	else:
 		t_average_fail = 0
+	t_elapsed = t_elapsed_fail + t_elapsed_success
 	print "\n#----------------------------------#\n"
 	print "Number of PDBs skipped: %d"%skipped_count
 	print "Number of PDBs processed: %d"%pdb_count
@@ -276,11 +277,11 @@ def read_dbref(line,c,pdb_id):
 		pdbstart = int(line[14:18])
 		dbstart = int(line[55:60])
 		offset = dbstart - pdbstart
+		c.execute("SELECT unp,offset FROM chains WHERE chain=?",(chain,))
+		res = c.fetchone()
 		# This easy fix should handle peptide deletions with the same offset
 		# Removed until the decision is made whether to include chains with
 		# large deletions.
-		c.execute("SELECT unp,offset FROM chains WHERE chain=?",(chain,))
-		res = c.fetchone()
 		if not res:# or (unp_id==res[0] and offset=res[1]):
 			c.execute("INSERT INTO chains VALUES (?,?,?,?,?,?)",(chain,unp_id,pdb_id,pdbstart,offset,species))
 		else:
