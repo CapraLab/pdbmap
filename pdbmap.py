@@ -516,7 +516,7 @@ def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname,num_matches):
 		# Only load the rest if there were any successful matches
 		if num_matches > 0:
 			query.append("LOAD DATA LOCAL INFILE 'GenomicCoords.tab' INTO TABLE GenomicCoords FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n' IGNORE 1 LINES")
-			query.append("LOAD DATA LOCAL INFILE 'PDBTranscript.tab' INTO TABLE PDBTranscript FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n' IGNORE 1 LINES")
+			query.append("LOAD DATA LOCAL INFILE 'PDBTranscript.tab' INTO TABLE PDBTranscript FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n'")
 			query.append("LOAD DATA LOCAL INFILE '%s.tab' INTO TABLE PDBCoords FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n' IGNORE 1 LINES (chain,@dummy,@dummy,pdbid,seqres,aa3,aa1,x,y,z)"%pdb_id)
 			# query.append("CALL %s.update_GenomePDB('%s');"%(dbname,pdb_id))
 		end_of_query = ['.','...']
