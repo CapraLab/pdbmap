@@ -25,7 +25,9 @@ defaults = {
 	"pdb_dir" : "./pdb",
 	"disable_human_homologue" : False,
 	"create_new_db" : False,
-	"force" : False
+	"force" : False,
+	"speclist" : "",
+	"transmap" : ""
 	}
 if args.conf_file:
 	config = ConfigParser.SafeConfigParser()
@@ -45,6 +47,8 @@ parser.add_argument("--pdb_dir", help="Directory containing PDB files")
 parser.add_argument("--disable_human_homologue", action='store_true', help="Disable mapping from non-human PDBs to human homologues")
 parser.add_argument("--create_new_db", action='store_true', help="Create a new database prior to uploading PDB data")
 parser.add_argument("-f", "--force", action='store_true', help="Force configuration. No safety checks.")
+parser.add_argument("--speclist", help="Species code -> species map file")
+parser.add_argument("--transmap", help="UniProt ID -> EnsEMBL transcript map file")
 
 
 def main():
@@ -76,7 +80,7 @@ def main():
 
 	new_pdbs.sort()	# For easier post-analysis
 	for pdb_id,pdb_file in new_pdbs:
-		print "\nProcessing PDB %s..."%pdb_id
+		# print "\nProcessing PDB %s..."%pdb_id
 		try:
 			t0 = time.time() # Profiler
 			status,num_matches = load_pdb(pdb_id,pdb_file)
@@ -91,7 +95,8 @@ def main():
 			print("\nExiting...")
 			sys.exit(0)
 		except Exception as e:
-			print("Skipping:")
+			print "\nProcessing PDB %s..."%pdb_id
+			print("\tSkipping:")
 			sys.stdout.write("\tPDB %s could not be processed.\n"%pdb_id)
 			sys.stdout.write("\t%s\n\n"%e)
 			skipped_count += 1
@@ -129,13 +134,14 @@ def sqlite_init():
 
 def load_pdb(pdb_id,pdb_file):
 	"""Parse a PDB file and store the important information into SQLite"""
+	global transmap
 
 	# Initialize a temporary SQLite database
 	c,con = sqlite_init()
 
 	# Load all information from the PDB file
 	# Use gzip if the files appear to be gzipped
-	print "\tParsing info from %s..."%pdb_file
+	# print "\tParsing info from %s..."%pdb_file
 	if os.path.splitext(pdb_file)[-1] == '.gz':
 		fin = gzip.open(pdb_file,'r')
 	else:
@@ -143,12 +149,15 @@ def load_pdb(pdb_id,pdb_file):
 
 	species         = []
 	experiment_type = None
-	best_model      = None
-	cur_model       = None
+	best_model      = 1
+	cur_model       = 1
 	header_read     = False
 	for line in fin:
 		field = line[0:6].strip()
 		code  = line[7:10]
+		# print field
+		# print best_model
+		# print cur_model
 		if field == "REMARK" and code[0] == "2":
 			if not experiment_type:
 				experiment_type   = read_experiment_type(line,c)
@@ -167,13 +176,27 @@ def load_pdb(pdb_id,pdb_file):
 			read_dbref(line,c,pdb_id)
 		elif field == "SEQADV":
 			read_seqadv(line,c)
-		elif field == "ATOM"   and cur_model == best_model:
+		elif field == "ATOM" and cur_model == best_model:
 			read_atom(line,c)
+	con.commit()
+
+	# Check that required fields have some information
+	c.execute("SELECT * FROM chains")
+	if not c.fetchone():
+		return 1,0
+	c.execute("SELECT * FROM coords")
+	if not c.fetchone():
+		return 1,0
+
+	print "\nProcessing PDB %s..."%pdb_id
 
 	print("\tExperiment type: %s"%experiment_type)
 	if experiment_type == "NMR":
 		print("\tBest Model: %d"%best_model)
-	con.commit()
+	c.execute("SELECT * FROM chains")
+	print "\t%d chains"%len(c.fetchall())
+	c.execute("SELECT * FROM coords")
+	print "\t%d atoms"%len(c.fetchall())
 	fin.close()
 
 	# Remove any residues with conflicts not explicitly allowed
@@ -200,47 +223,53 @@ def load_pdb(pdb_id,pdb_file):
 	with open("PDBTranscript.tab","w") as fout:
 		fout.write("pdb\tchain\ttranscript\thomologue\n")
 	for unp_chain in unp_chains:
-		unp = str(unp_chain[0])
+		unp = str(unp_chain[0]).upper()
 		chain = str(unp_chain[1])
 		species = str(unp_chain[2])
 		try:
-			if species.lower()=="human":
-				print "\tLoading -> pdb: %s, chain: %s, unp: %s, species: %s"%(pdb_id,chain,unp,species)
-				exit_code = subprocess.call(["./protein_to_genomic.pl",pdb_id,chain,unp,species])
+			exit_code = subprocess.call(["./protein_to_genomic.pl",pdb_id,chain,unp,species])
+			if unp not in transmap:
+				transcripts = []
 			else:
-				ung = unp2ung(unp)
-				if not ung:
-					sys.stdout.write("No UniGene entry found -> pdb: %s, chain: %s, unp: %s, species: %s"%(pdb_id,chain,unp,species))
-					return 1,0
+				transcripts = transmap[unp]
+			for transcript,id_type in transcripts:
+				if species=="homo_sapiens":
+					# Use both UniParc and Ensembl to look for matching transcripts
+					print "\tLoading -> %s.%s (%s), %s -> %s"%(pdb_id,chain,unp,species,transcript)
+					exit_code += subprocess.call(["./transcript_to_genomic.pl",pdb_id,chain,unp,species,transcript])
 				else:
-					print "\tSearching for human homologues -> pdb: %s, chain: %s, unp: %s, ung: %s, species: %s"%(pdb_id,chain,unp,ung,species)
-					exit_code = subprocess.call(["./unigene_to_homologue_genomic.pl",pdb_id,chain,ung,species])
+					ung = unp2ung(unp)
+					if not ung:
+						sys.stdout.write("No UniGene entry found -> pdb: %s, chain: %s, unp: %s, species: %s"%(pdb_id,chain,unp,species))
+						return 1,0
+					else:
+						print "\tSearching for human homologues -> pdb: %s, chain: %s, unp: %s, ung: %s, species: %s"%(pdb_id,chain,unp,ung,species)
+						exit_code = subprocess.call(["./unigene_to_homologue_genomic.pl",pdb_id,chain,ung,species])
+			if exit_code:
+				print("\tSkipping:")
+				sys.stdout.write("\tPerl returned a non-zero exit status.\n")
+				os.system('rm -f %s.tab'%pdb_id)
+				return 1,0						
 		except KeyboardInterrupt:
 			if raw_input("\nContinue to next PDB? (y/n):") == 'n':
 				raise KeyboardInterrupt
 			print("\tSkipping:")
 			print("\tCanceled by user.")
 			return 1,0
-		if exit_code:
-			print("\tSkipping:")
-			sys.stdout.write("\tPerl script returned a non-zero exit status.\n")
-			return 1,0
 
 	# Upload to the database
-	num_matches = compute_conflict(pdb_id,seqadv_protected)
+	num_matches = best_candidates(pdb_id,seqadv_protected)
 	print("\t%d transcripts found.\n"%num_matches)
 	publish_data(pdb_id,args.dbhost,args.dbuser,args.dbpass,args.dbname,num_matches)
 	return 0,(num_matches > 0)
 
 def check_species(species):
 	if len(species) < 1:
-		print("\tSkipping:")
-		sys.stdout.write("\tPDB contained no species information.\n")
+		# print("\tSkipping:")
+		# sys.stdout.write("\tPDB contained no species information.\n")
 		return 1
 	elif args.disable_human_homologue and len([spec for spec in species if spec not in ['homo_sapien','homo_sapiens']]) > 0:
-		# print("\tSkipping:")
-		# sys.stdout.write("\tPDB contains %s and human homologue mapping is disabled.\n"%','.join(species))
-		print("\tContains non-human organisms. Homologues disabled.")
+		# print("\tContains non-human organisms. Homologues disabled.")
 		return 1
 	return 0
 
@@ -271,13 +300,16 @@ def read_best_model(line,c):
 
 def read_dbref(line,c,pdb_id):
 	"""Parses a DBREF field from a PDB file"""
+	global scientific_speclist
 	if line[26:32].strip() == "UNP":
-		chain = line[12]
-		unp_id = line[33:41].strip()
-		species = line[42:54].strip().split('_')[-1]
-		pdbstart = int(line[14:18])
-		dbstart = int(line[55:60])
-		offset = dbstart - pdbstart
+		chain     = line[12]
+		unp_id    = line[33:41].strip()
+		spec_code = line[42:54].strip().split('_')[-1].lower()
+		species   = scientific_speclist[spec_code]
+		pdbstart  = int(line[14:18])
+		dbstart   = int(line[55:60])
+		offset    = dbstart - pdbstart
+		# print chain,unp_id,pdb_id,pdbstart,offset,species
 		c.execute("SELECT unp,offset FROM chains WHERE chain=?",(chain,))
 		res = c.fetchone()
 		# This easy fix should handle peptide deletions with the same offset
@@ -329,6 +361,7 @@ def read_atom(line,c):
 		x = float(line[30:38])
 		y = float(line[38:46])
 		z = float(line[46:54])
+		# print chain,serialnum,seqres,aminoacid,aminoacid_oneletter,x,y,z
 		if not idcode:
 			c.execute("INSERT INTO coords VALUES (?,?,?,?,?,?,?,?)",(chain,serialnum,seqres,aminoacid,aminoacid_oneletter,x,y,z))
 
@@ -336,10 +369,18 @@ def write_pdb_data(pdb_id,c,con):
 	"""Averages the 3D coordinates and outputs the PDB data to tabular for MySQL upload"""
 	c.execute("CREATE TABLE avgcoords AS SELECT chain,seqres,aa3,aa1,AVG(x) as x,AVG(y) as y,AVG(z) as z FROM coords GROUP BY chain,seqres")
 	con.commit()
-	c.execute("SELECT avgcoords.chain,chains.species,chains.unp,chains.pdb,(avgcoords.seqres+chains.offset) as seqres,aa3,aa1,x,y,z FROM chains,avgcoords WHERE avgcoords.chain=chains.chain AND avgcoords.seqres >= chains.pdbstart ORDER BY avgcoords.chain,avgcoords.seqres")
+	#debug
+	# c.execute("SELECT * FROM chains")
+	# for row in c.fetchall():
+	# 	print row
+	# c.execute("SELECT * FROM coords")
+	# for row in c.fetchall():
+	# 	print row
+	#debug
 	fout = open("%s.tab"%pdb_id,'w')
 	writer = csv.writer(fout,delimiter="\t")
 	writer.writerow(["chain","species","unp","pdbid","seqres","aa3","aa1","x","y","z"])
+	c.execute("SELECT avgcoords.chain,chains.species,chains.unp,chains.pdb,(avgcoords.seqres+chains.offset) as seqres,aa3,aa1,x,y,z FROM chains,avgcoords WHERE avgcoords.chain=chains.chain AND avgcoords.seqres >= chains.pdbstart ORDER BY avgcoords.chain,avgcoords.seqres")
 	writer.writerows(c.fetchall())
 	fout.close()
 
@@ -360,10 +401,7 @@ def unp2ung(unp):
 	page = response.read(200000)
 	return page.split()[-1]
 
-def compute_conflict(pdb_id,seqadv_protected):
-	if pdb_id=='1JU5':
-		sys.exit(1)
-	print("\tIdentifying undocumented conflicts...")
+def best_candidates(pdb_id,seqadv_protected):
 	with open('GenomicCoords.tab','r') as fin:
 		reader = csv.reader(fin,delimiter='\t')
 		gc = {(row[0],row[1]): row[2] for row in reader}
@@ -376,6 +414,10 @@ def compute_conflict(pdb_id,seqadv_protected):
 		reader = csv.reader(fin,delimiter='\t')
 		pdb_c = {(row[0],row[4]): row[6] for row in reader}
 	sanitize = []
+
+	if len(pdb_t) < 1:
+		print "\tNo candidate transcripts."
+		return 0
 
 	# For each mapping
 	pdb_t_conflict = []
@@ -419,33 +461,48 @@ def compute_conflict(pdb_id,seqadv_protected):
 		if len(pdb_c_sub) > 0:
 			perc_conflict = num_conflicts / float(len(pdb_c_sub))
 		else:
-			print("\t%s.%s length is 0, setting to 100%% conflict."%(pdb_id,transcript))
+			# print("\t%s.%s length is 0, setting to 100%% conflict."%(pdb_id,transcript))
 			perc_conflict = 1.0
 
-		# Queue for sanitation if >90% conflict
-		# if perc_conflict > 0.90:
-		# 	sanitize.append((transcript,chain,homologue))
 		# Retain if conflict < 90%
-		print "\t%s.%s -> %s: %2.2f conflict,"%(pdb_id,chain,transcript,perc_conflict),
+		# print "\t%s.%s -> %s: %2.2f conflict,"%(pdb_id,chain,transcript,perc_conflict),
 		if perc_conflict < 0.90:
-			print ''
+			# print ''
 			pdb_t_conflict.append((transcript,chain,homologue,perc_conflict))
-		else:
-			print "Sanitizing."
+		# else:
+			# print "Sanitizing."
 
-	# Sanitize failing chain/transcript maps
-	# for transcript,chain,homologue in sanitize:
-	# 	pdb_t.remove((transcript,chain,homologue))
+	if len(pdb_t_conflict) < 1:
+		print "\tAll transcripts failed QC. <10% match."
+		return 0
 
+	# Sort by chain and display
+	pdb_t_conflict.sort(key=lambda x: x[1])
+	print "\tAll candidates:"
+	for chain,transcript,homologue,perc_conflict in pdb_t_conflict:
+		print "\t\t%s.%s -> %s: %2.2f conflict"%(pdb_id,chain,transcript,perc_conflict)
+
+	# Determine the best transcript match for each chain. Arbitrary tie breaking
+	best_candidates = []
+	for chain in set([chain for x,chain,y,z in pdb_t_conflict]):
+		conflicts = [candidate[3] for candidate in pdb_t_conflict if candidate[1]==chain]
+		min_conflict = min(conflicts)
+		best_candidate = [tup for tup in pdb_t_conflict if tup[1]==chain and tup[3]==min_conflict][0]
+		best_candidates.append(best_candidate)
+
+	best_candidates.sort(key=lambda x: x[1])
+	print "\n\tBest candidates:"
+	for chain,transcript,homologue,perc_conflict in best_candidates:
+		print "\t\t%s.%s -> %s: %2.2f conflict"%(pdb_id,chain,transcript,perc_conflict)
 	# And write the sanitized mappings back to file
 	with open('PDBTranscript.tab','w') as fout:
 		writer = csv.writer(fout,delimiter='\t')
 		# for transcript,chain,homologue in pdb_t:
-		for transcript,chain,homologue,conflict in pdb_t_conflict:
+		for transcript,chain,homologue,conflict in best_candidates:
 			writer.writerow([pdb_id,chain,transcript,homologue,"%2.2f"%conflict])
 
 	# Return the number of remaining matches
-	return len(pdb_t_conflict)
+	return len(best_candidates)
 
 def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname,num_matches):
 	try:
@@ -461,7 +518,7 @@ def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname,num_matches):
 			query.append("LOAD DATA LOCAL INFILE 'GenomicCoords.tab' INTO TABLE GenomicCoords FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n' IGNORE 1 LINES")
 			query.append("LOAD DATA LOCAL INFILE 'PDBTranscript.tab' INTO TABLE PDBTranscript FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n' IGNORE 1 LINES")
 			query.append("LOAD DATA LOCAL INFILE '%s.tab' INTO TABLE PDBCoords FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n' IGNORE 1 LINES (chain,@dummy,@dummy,pdbid,seqres,aa3,aa1,x,y,z)"%pdb_id)
-			query.append("CALL %s.update_GenomePDB('%s');"%(dbname,pdb_id))
+			# query.append("CALL %s.update_GenomePDB('%s');"%(dbname,pdb_id))
 		end_of_query = ['.','...']
 		print("\tUploading staging files to database...")
 		for q in query:
@@ -472,11 +529,11 @@ def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname,num_matches):
 			tqel = time.time()-tq0
 			print("%2.2fs"%tqel)
 	except (KeyboardInterrupt,SystemExit):
-		print("Skipping:")
+		print("\tSkipping:")
 		sys.stdout.write("\tUpload to MySQL was interrupted by user.")
 		raise KeyboardInterrupt
 	except Exception as e:
-		print("Skipping:")
+		print("\tSkipping:")
 		sys.stdout.write("\tUpload to MySQL failed: %s."%e)
 	finally:
 		con.close()	# Close the remote MySQL connection
@@ -526,9 +583,9 @@ def create_new_db(dbhost,dbuser,dbpass,dbname):
   		`end` BIGINT(20) default NULL,
   		`chr` INT(11) default NULL,
   		`strand` INT(11) default NULL,
-  		PRIMARY KEY `transpos` (`transcript`,`start`,`end`,`chr`),
+  		PRIMARY KEY `transpos` (`pdbid`,`chain`,`transcript`,`chr`,`start`,`end`,`strand`),
   		KEY `peptide` (`pdbid`,`chain`,`seqres`),
-  		KEY `genomic` (`start`,`end`,`chr`),
+  		KEY `genomic` (`chr`,`start`,`end`),
   		KEY `pdbid` (`pdbid`)
 		)"""%dbname)
 	format_dict = {'dbuser':dbuser,'dbhost':dbhost}
@@ -565,6 +622,36 @@ species_map = {"PIG" : "sus_scrofa",
 				"BAKER'S YEAST" : "saccharomyces_cerevisiae",
 				"YEAST" : "saccharomyces_cerevisiae"}
 
+def load_speclist(speclist_file):
+	fin = open(speclist_file,'r')
+	scientific_speclist = {}
+	common_speclist = {}
+	spec_code = ''
+	for line in fin:
+		if line[0:5]:
+			spec_code = line[0:5].lower()
+		if line.strip() and line[17].upper() == 'N':
+			scientific_speclist[spec_code] = line[19:].strip().lower().replace(' ','_')
+		elif line.strip() and line[17].upper() == 'C':
+			common_speclist[spec_code] = line[19:].strip().upper()
+	fin.close()
+	return scientific_speclist,common_speclist
+
+def load_transmap(transmap_file):
+	with open(transmap_file) as fin:
+		reader = csv.reader(fin,delimiter='\t')
+		transmap = {}
+		for (unp,id_type,trans) in reader:
+			if unp in transmap:
+				transmap[unp].append((trans,id_type))
+			else:
+				transmap[unp] = [(trans,id_type)]
+	return transmap
+
+# Initialized below
+scientific_speclist = {}
+common_speclist     = {}
+transmap            = {}
 
 if __name__=='__main__':
 	args = parser.parse_args(remaining_argv)
@@ -577,4 +664,9 @@ if __name__=='__main__':
 		if raw_input("Are you sure you want to do this? (y/n):") == 'n':
 			print "Aborting..."
 			sys.exit(0)
+	# Load the species code -> species map
+	scientific_speclist,common_speclist = load_speclist(args.speclist)
+
+	# Load the UNP -> transcript map
+	transmap = load_transmap(args.transmap)
 	main()
