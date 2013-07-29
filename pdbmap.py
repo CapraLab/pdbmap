@@ -564,7 +564,7 @@ def create_new_db(dbhost,dbuser,dbpass,dbname):
 	query = ["DROP DATABASE IF EXISTS %s"%dbname]
 	query.append("CREATE DATABASE IF NOT EXISTS %s"%dbname)
 	query.append("USE %s"%dbname)
-	query.append("CREATE TABLE %s.GenomicCoords (transcript VARCHAR(20),seqres INT,aa1 VARCHAR(1),start BIGINT,end BIGINT,chr INT,strand INT,PRIMARY KEY(transcript,seqres),KEY(transcript),KEY(start,end,chr))"%dbname)
+	query.append("CREATE TABLE %s.GenomicCoords (transcript VARCHAR(20),seqres INT,aa1 VARCHAR(1),start BIGINT,end BIGINT,chr VARCHAR(10),strand INT,PRIMARY KEY(transcript,seqres),KEY(transcript),KEY(start,end,chr))"%dbname)
 	query.append("CREATE TABLE %s.PDBCoords (pdbid VARCHAR(20),chain VARCHAR(1),seqres INT,aa3 VARCHAR(3),aa1 VARCHAR(1),x DOUBLE,y DOUBLE,z DOUBLE,PRIMARY KEY(pdbid,chain,seqres))"%dbname)
 	query.append("CREATE TABLE %s.PDBInfo (pdbid VARCHAR(20),species VARCHAR(20),chain VARCHAR(1),unp VARCHAR(20),PRIMARY KEY(pdbid,chain))"%dbname)
 	query.append("CREATE TABLE %s.PDBTranscript (pdbid VARCHAR(20),chain VARCHAR(1),transcript VARCHAR(20),homologue BOOLEAN,conflict REAL,PRIMARY KEY(pdbid,chain,transcript),KEY(transcript),KEY(conflict))"%dbname)
@@ -581,7 +581,7 @@ def create_new_db(dbhost,dbuser,dbpass,dbname):
   		`z` DOUBLE default NULL,
   		`start` BIGINT(20) default NULL,
   		`end` BIGINT(20) default NULL,
-  		`chr` INT(11) default NULL,
+  		`chr` VARCHAR(10) default NULL,
   		`strand` INT(11) default NULL,
   		PRIMARY KEY `transpos` (`pdbid`,`chain`,`transcript`,`chr`,`start`,`end`,`strand`),
   		KEY `peptide` (`pdbid`,`chain`,`seqres`),
