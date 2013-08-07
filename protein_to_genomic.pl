@@ -39,7 +39,9 @@ foreach my $transcript (@transcripts) {
 	for ($i=0; $i<$peplength; $i++) {
 		my @query = $transcript->pep2genomic($i,$i);
 		my $q_start = @query[0]->start();
-		my $q_end = @query[0]->end();
+		# Adjust the end to match BED range definitions
+		# (inclusive start, exclusive end)
+		my $q_end = @query[0]->end()+1;
 
 		# If pep2genomic returns a gap, infer the strand
 		# from the previous codon. i.e. don't overwrite
