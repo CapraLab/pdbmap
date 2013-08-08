@@ -120,6 +120,10 @@ def main():
 	print "Total execution time: %f"%t_elapsed
 	print "Average execution time for successful PDB: %2.2f"%t_average_success
 	print "Average execution time for skipped PDB: %2.2f"%t_average_fail
+	print "Building GenomePDB..."
+	con = MySQLdb.connect(host=dbhost,user=dbuser,passwd=dbpass,db=dbname)
+	with con.cursor() as c:
+		c.execute("CALL build_GenomePDB();")
 	print "\nComplete."
 
 def sqlite_init():
@@ -590,6 +594,8 @@ def create_new_db(dbhost,dbuser,dbpass,dbname):
 		)"""%dbname)
 	format_dict = {'dbuser':dbuser,'dbhost':dbhost}
 	with open('create_proc_update_GenomePDB.sql','r') as fin:
+		query.append(fin.read()%format_dict)
+	with open('create_proc_build_GenomePDB.sql','r') as fin:
 		query.append(fin.read()%format_dict)
 	for q in query:
 		c.execute(q)
