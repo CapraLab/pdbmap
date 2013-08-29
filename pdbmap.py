@@ -223,7 +223,7 @@ def load_pdb(pdb_id,pdb_file):
 
 	# Create tabulars for the genomic data
 	with open("GenomicCoords.tab","w") as fout:
-		fout.write("transcript\tseqres\taa1\tstart\tend\tchr\tstrand\n")
+		fout.write("transcript\tgene\tseqres\taa1\tstart\tend\tchr\tstrand\n")
 	with open("PDBTranscript.tab","w") as fout:
 		fout.write("pdb\tchain\ttranscript\thomologue\n")
 	for unp_chain in unp_chains:
@@ -231,14 +231,15 @@ def load_pdb(pdb_id,pdb_file):
 		chain = str(unp_chain[1])
 		species = str(unp_chain[2])
 		try:
+			# Use Ensembl to find candidate transcripts
 			exit_code = subprocess.call(["./protein_to_genomic.pl",pdb_id,chain,unp,species])
 			if unp not in transmap:
 				transcripts = []
 			else:
+				# Use UniParc to find candidate transcripts
 				transcripts = transmap[unp]
 			for transcript,id_type in transcripts:
 				if species=="homo_sapiens":
-					# Use both UniParc and Ensembl to look for matching transcripts
 					print "\tLoading -> %s.%s (%s), %s -> %s"%(pdb_id,chain,unp,species,transcript)
 					exit_code += subprocess.call(["./transcript_to_genomic.pl",pdb_id,chain,unp,species,transcript])
 				else:
@@ -247,6 +248,7 @@ def load_pdb(pdb_id,pdb_file):
 						sys.stdout.write("No UniGene entry found -> pdb: %s, chain: %s, unp: %s, species: %s"%(pdb_id,chain,unp,species))
 						return 1,0
 					else:
+						# Use Ensembl to find candidate homologue transcripts
 						print "\tSearching for human homologues -> pdb: %s, chain: %s, unp: %s, ung: %s, species: %s"%(pdb_id,chain,unp,ung,species)
 						exit_code = subprocess.call(["./unigene_to_homologue_genomic.pl",pdb_id,chain,ung,species])
 			if exit_code:
@@ -269,11 +271,8 @@ def load_pdb(pdb_id,pdb_file):
 
 def check_species(species):
 	if len(species) < 1:
-		# print("\tSkipping:")
-		# sys.stdout.write("\tPDB contained no species information.\n")
 		return 1
 	elif args.disable_human_homologue and len([spec for spec in species if spec not in ['homo_sapien','homo_sapiens']]) > 0:
-		# print("\tContains non-human organisms. Homologues disabled.")
 		return 1
 	return 0
 
@@ -431,8 +430,6 @@ def best_candidates(pdb_id,seqadv_protected):
 		num_conflicts = 0
 
 		# Reduce by first key and remove
-		# test1 = [key[0] for key in gc if key[0]==transcript]
-		# test2 = [key[0] for key in pdb_c if key[0]==chain]
 		gc_sub    = {int(key[1]):gc[key]    for key in gc    if key[0]==transcript}
 		pdb_c_sub = {int(key[1]):pdb_c[key] for key in pdb_c if key[0]==chain}
 		# Join by second key and compare values
@@ -442,39 +439,20 @@ def best_candidates(pdb_id,seqadv_protected):
 				pass
 			# If the transcript does not contain the seqres, discard
 			elif seqres not in gc_sub:
-				# print("\t\tTranscript %s sanitized. Conflict SEQRES: %s"%(transcript,seqres))
-				# print("\t\tChain: %s"%chain)
-				# print("\t\tCause: SEQRES out of transcript range.")
-				# print("\t\tTranscript range: %d - %d"%(min(gc_sub.keys()),max(gc_sub.keys())))
-				# print("\t\t#-------------#")
 				num_conflicts += 1
-				# sanitize.append((transcript,chain,homologue))
-				# break
 			# Or the amino acid is different at that seqres, discard
 			elif gc_sub[seqres] != pdb_c_sub[seqres]:
-				# print("\t\tTranscript %s sanitized. Conflict SEQRES: %s"%(transcript,seqres))
-				# print("\t\tChain: %s"%chain)
-				# print("\t\tCause: Amino acid mismatch.")
-				# print("\t\tPDB.aa: %s, Transcript.aa: %s"%(pdb_c_sub[seqres],gc_sub[seqres]))
-				# print("\t\t#-------------#")
 				num_conflicts += 1
-				# sanitize.append((transcript,chain,homologue))
-				# break
 
 		# Determine % conflict
 		if len(pdb_c_sub) > 0:
 			perc_conflict = num_conflicts / float(len(pdb_c_sub))
 		else:
-			# print("\t%s.%s length is 0, setting to 100%% conflict."%(pdb_id,transcript))
 			perc_conflict = 1.0
 
 		# Retain if conflict < 90%
-		# print "\t%s.%s -> %s: %2.2f conflict,"%(pdb_id,chain,transcript,perc_conflict),
 		if perc_conflict < 0.90:
-			# print ''
 			pdb_t_conflict.append((transcript,chain,homologue,perc_conflict))
-		# else:
-			# print "Sanitizing."
 
 	if len(pdb_t_conflict) < 1:
 		print "\tAll transcripts failed QC. <10% match."
@@ -568,7 +546,7 @@ def create_new_db(dbhost,dbuser,dbpass,dbname):
 	query = ["DROP DATABASE IF EXISTS %s"%dbname]
 	query.append("CREATE DATABASE IF NOT EXISTS %s"%dbname)
 	query.append("USE %s"%dbname)
-	query.append("CREATE TABLE %s.GenomicCoords (transcript VARCHAR(20),seqres INT,aa1 VARCHAR(1),start BIGINT,end BIGINT,chr VARCHAR(10),strand INT,PRIMARY KEY(transcript,seqres),KEY(transcript),KEY(start,end,chr))"%dbname)
+	query.append("CREATE TABLE %s.GenomicCoords (transcript VARCHAR(20),gene VARCHAR(20), seqres INT,aa1 VARCHAR(1),start BIGINT,end BIGINT,chr VARCHAR(10),strand INT,PRIMARY KEY(transcript,seqres),KEY(transcript),KEY(start,end,chr))"%dbname)
 	query.append("CREATE TABLE %s.PDBCoords (pdbid VARCHAR(20),chain VARCHAR(1),seqres INT,aa3 VARCHAR(3),aa1 VARCHAR(1),x DOUBLE,y DOUBLE,z DOUBLE,PRIMARY KEY(pdbid,chain,seqres))"%dbname)
 	query.append("CREATE TABLE %s.PDBInfo (pdbid VARCHAR(20),species VARCHAR(20),chain VARCHAR(1),unp VARCHAR(20),PRIMARY KEY(pdbid,chain))"%dbname)
 	query.append("CREATE TABLE %s.PDBTranscript (pdbid VARCHAR(20),chain VARCHAR(1),transcript VARCHAR(20),homologue BOOLEAN,conflict REAL,PRIMARY KEY(pdbid,chain,transcript),KEY(transcript),KEY(conflict))"%dbname)
@@ -577,6 +555,7 @@ def create_new_db(dbhost,dbuser,dbpass,dbname):
   		`species` VARCHAR(20) default NULL,
   		`chain` VARCHAR(1) NOT NULL default '',
   		`unp` VARCHAR(20) default NULL,
+  		`gene` VARCHAR(20) default NULL,
   		`transcript` VARCHAR(20) default NULL,
   		`seqres` INT(11) NOT NULL default '0',
   		`aa1` VARCHAR(1) default NULL,
@@ -588,6 +567,7 @@ def create_new_db(dbhost,dbuser,dbpass,dbname):
   		`chr` VARCHAR(10) default NULL,
   		`strand` INT(11) default NULL,
   		PRIMARY KEY `transpos` (`pdbid`,`chain`,`transcript`,`chr`,`start`,`end`,`strand`),
+  		KEY `gene` (`gene`),
   		KEY `peptide` (`pdbid`,`chain`,`seqres`),
   		KEY `genomic` (`chr`,`start`,`end`),
   		KEY `pdbid` (`pdbid`)
