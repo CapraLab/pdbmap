@@ -121,9 +121,9 @@ def main():
 	print "Average execution time for successful PDB: %2.2f"%t_average_success
 	print "Average execution time for skipped PDB: %2.2f"%t_average_fail
 	print "Building GenomePDB..."
-	con = MySQLdb.connect(host=dbhost,user=dbuser,passwd=dbpass,db=dbname)
-	with con.cursor() as c:
-		c.execute("CALL build_GenomePDB();")
+	con = MySQLdb.connect(host=args.dbhost,user=args.dbuser,passwd=args.dbpass,db=args.dbname)
+	# with con.cursor() as c:
+	# 	c.execute("CALL build_GenomePDB();")
 	print "\nComplete."
 
 def sqlite_init():
@@ -169,8 +169,8 @@ def load_pdb(pdb_id,pdb_file):
 				best_model = read_best_model(line,c)
 		elif field == "SOURCE" and line[11:30] == "ORGANISM_SCIENTIFIC":
 			species.append(read_species(line))
-		elif field == "SOURCE" and line[11:20] == "SYNTHETIC":
-			species.append("synthetic")
+		# elif field == "SOURCE" and line[11:20] == "SYNTHETIC":
+		# 	species.append("synthetic")
 		elif field == "MODEL":
 			cur_model = int(line[10:14])
 		elif field == "DBREF":
@@ -407,7 +407,7 @@ def unp2ung(unp):
 def best_candidates(pdb_id,seqadv_protected):
 	with open('GenomicCoords.tab','r') as fin:
 		reader = csv.reader(fin,delimiter='\t')
-		gc = {(row[0],row[1]): row[2] for row in reader}
+		gc = {(row[0],row[2]): row[3] for row in reader}
 	with open('PDBTranscript.tab','r') as fin:
 		pdb_t_header = fin.next()
 		reader = csv.reader(fin,delimiter='\t')
