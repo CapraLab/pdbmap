@@ -209,7 +209,7 @@ def load_pdb(pdb_id,pdb_file):
 	for chain,seqres,conflict in c.fetchall():
 		print("\t\tSEQADV %s,%s removed. Conflict: %s"%(chain,seqres,conflict))
 		c.execute("DELETE FROM coords WHERE chain=? AND seqres=?",(chain,seqres))
-	con.commit()		
+	con.commit()
 
 	# Write data to tabular for MySQL upload
 	write_pdb_data(pdb_id,c,con)

@@ -1,0 +1,582 @@
+
+-------------------- WARNING ----------------------
+MSG: hirudo_medicinalis is not a valid species name (check DB and API version)
+FILE: Bio/EnsEMBL/Registry.pm LINE: 1187
+CALLED BY: Bio/EnsEMBL/Registry.pm  LINE: 972
+Date (localtime)    = Wed Aug  7 10:56:36 2013
+Ensembl API version = 71
+---------------------------------------------------
+
+-------------------- EXCEPTION --------------------
+MSG: Can not find internal name for species 'hirudo_medicinalis'
+STACK Bio::EnsEMBL::Registry::get_adaptor /usr/analysis/software/ensembl-api/ensembl/modules/Bio/EnsEMBL/Registry.pm:974
+STACK toplevel ./protein_to_genomic.pl:18
+Date (localtime)    = Wed Aug  7 10:56:36 2013
+Ensembl API version = 71
+---------------------------------------------------
+
+-------------------- WARNING ----------------------
+MSG: hirudo_medicinalis is not a valid species name (check DB and API version)
+FILE: Bio/EnsEMBL/Registry.pm LINE: 1187
+CALLED BY: Bio/EnsEMBL/Registry.pm  LINE: 972
+Date (localtime)    = Wed Aug  7 10:57:06 2013
+Ensembl API version = 71
+---------------------------------------------------
+
+-------------------- EXCEPTION --------------------
+MSG: Can not find internal name for species 'hirudo_medicinalis'
+STACK Bio::EnsEMBL::Registry::get_adaptor /usr/analysis/software/ensembl-api/ensembl/modules/Bio/EnsEMBL/Registry.pm:974
+STACK toplevel ./protein_to_genomic.pl:18
+Date (localtime)    = Wed Aug  7 10:57:06 2013
+Ensembl API version = 71
+---------------------------------------------------
+
+-------------------- WARNING ----------------------
+MSG: hirudo_medicinalis is not a valid species name (check DB and API version)
+FILE: Bio/EnsEMBL/Registry.pm LINE: 1187
+CALLED BY: Bio/EnsEMBL/Registry.pm  LINE: 972
+Date (localtime)    = Wed Aug  7 10:59:29 2013
+Ensembl API version = 71
+---------------------------------------------------
+
+-------------------- EXCEPTION --------------------
+MSG: Can not find internal name for species 'hirudo_medicinalis'
+STACK Bio::EnsEMBL::Registry::get_adaptor /usr/analysis/software/ensembl-api/ensembl/modules/Bio/EnsEMBL/Registry.pm:974
+STACK toplevel ./protein_to_genomic.pl:18
+Date (localtime)    = Wed Aug  7 10:59:29 2013
+Ensembl API version = 71
+---------------------------------------------------
+
+-------------------- WARNING ----------------------
+MSG: gallus_gallus is not a valid species name (check DB and API version)
+FILE: Bio/EnsEMBL/Registry.pm LINE: 1187
+CALLED BY: Bio/EnsEMBL/Registry.pm  LINE: 972
+Date (localtime)    = Wed Aug  7 11:11:28 2013
+Ensembl API version = 71
+---------------------------------------------------
+
+-------------------- EXCEPTION --------------------
+MSG: Can not find internal name for species 'gallus_gallus'
+STACK Bio::EnsEMBL::Registry::get_adaptor /usr/analysis/software/ensembl-api/ensembl/modules/Bio/EnsEMBL/Registry.pm:974
+STACK toplevel ./protein_to_genomic.pl:18
+Date (localtime)    = Wed Aug  7 11:11:28 2013
+Ensembl API version = 71
+---------------------------------------------------
+
+-------------------- WARNING ----------------------
+MSG: gallus_gallus is not a valid species name (check DB and API version)
+FILE: Bio/EnsEMBL/Registry.pm LINE: 1187
+CALLED BY: Bio/EnsEMBL/Registry.pm  LINE: 972
+Date (localtime)    = Wed Aug  7 11:14:58 2013
+Ensembl API version = 71
+---------------------------------------------------
+
+-------------------- EXCEPTION --------------------
+MSG: Can not find internal name for species 'gallus_gallus'
+STACK Bio::EnsEMBL::Registry::get_adaptor /usr/analysis/software/ensembl-api/ensembl/modules/Bio/EnsEMBL/Registry.pm:974
+STACK toplevel ./protein_to_genomic.pl:18
+Date (localtime)    = Wed Aug  7 11:14:58 2013
+Ensembl API version = 71
+---------------------------------------------------
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+
+-------------------- WARNING ----------------------
+MSG: murine_sarcoma_virus_ns.c58 is not a valid species name (check DB and API version)
+FILE: Bio/EnsEMBL/Registry.pm LINE: 1187
+CALLED BY: Bio/EnsEMBL/Registry.pm  LINE: 972
+Date (localtime)    = Wed Aug  7 11:57:52 2013
+Ensembl API version = 71
+---------------------------------------------------
+
+-------------------- EXCEPTION --------------------
+MSG: Can not find internal name for species 'murine_sarcoma_virus_ns.c58'
+STACK Bio::EnsEMBL::Registry::get_adaptor /usr/analysis/software/ensembl-api/ensembl/modules/Bio/EnsEMBL/Registry.pm:974
+STACK toplevel ./protein_to_genomic.pl:18
+Date (localtime)    = Wed Aug  7 11:57:52 2013
+Ensembl API version = 71
+---------------------------------------------------
+
+-------------------- WARNING ----------------------
+MSG: hirudo_medicinalis is not a valid species name (check DB and API version)
+FILE: Bio/EnsEMBL/Registry.pm LINE: 1187
+CALLED BY: Bio/EnsEMBL/Registry.pm  LINE: 972
+Date (localtime)    = Wed Aug  7 12:03:24 2013
+Ensembl API version = 71
+---------------------------------------------------
+
+-------------------- EXCEPTION --------------------
+MSG: Can not find internal name for species 'hirudo_medicinalis'
+STACK Bio::EnsEMBL::Registry::get_adaptor /usr/analysis/software/ensembl-api/ensembl/modules/Bio/EnsEMBL/Registry.pm:974
+STACK toplevel ./protein_to_genomic.pl:18
+Date (localtime)    = Wed Aug  7 12:03:24 2013
+Ensembl API version = 71
+---------------------------------------------------
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+
+-------------------- WARNING ----------------------
+MSG: hirudo_medicinalis is not a valid species name (check DB and API version)
+FILE: Bio/EnsEMBL/Registry.pm LINE: 1187
+CALLED BY: Bio/EnsEMBL/Registry.pm  LINE: 972
+Date (localtime)    = Wed Aug  7 12:08:19 2013
+Ensembl API version = 71
+---------------------------------------------------
+
+-------------------- EXCEPTION --------------------
+MSG: Can not find internal name for species 'hirudo_medicinalis'
+STACK Bio::EnsEMBL::Registry::get_adaptor /usr/analysis/software/ensembl-api/ensembl/modules/Bio/EnsEMBL/Registry.pm:974
+STACK toplevel ./protein_to_genomic.pl:18
+Date (localtime)    = Wed Aug  7 12:08:19 2013
+Ensembl API version = 71
+---------------------------------------------------
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+
+-------------------- WARNING ----------------------
+MSG: hamster_polyomavirus is not a valid species name (check DB and API version)
+FILE: Bio/EnsEMBL/Registry.pm LINE: 1187
+CALLED BY: Bio/EnsEMBL/Registry.pm  LINE: 972
+Date (localtime)    = Wed Aug  7 12:32:44 2013
+Ensembl API version = 71
+---------------------------------------------------
+
+-------------------- EXCEPTION --------------------
+MSG: Can not find internal name for species 'hamster_polyomavirus'
+STACK Bio::EnsEMBL::Registry::get_adaptor /usr/analysis/software/ensembl-api/ensembl/modules/Bio/EnsEMBL/Registry.pm:974
+STACK toplevel ./protein_to_genomic.pl:18
+Date (localtime)    = Wed Aug  7 12:32:44 2013
+Ensembl API version = 71
+---------------------------------------------------
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "seq" on an undefined value at ./transcript_to_genomic.pl line 35.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+
+-------------------- WARNING ----------------------
+MSG: mus_musculus is not a valid species name (check DB and API version)
+FILE: Bio/EnsEMBL/Registry.pm LINE: 1187
+CALLED BY: Bio/EnsEMBL/Registry.pm  LINE: 972
+Date (localtime)    = Wed Aug  7 13:08:22 2013
+Ensembl API version = 71
+---------------------------------------------------
+
+-------------------- EXCEPTION --------------------
+MSG: Can not find internal name for species 'mus_musculus'
+STACK Bio::EnsEMBL::Registry::get_adaptor /usr/analysis/software/ensembl-api/ensembl/modules/Bio/EnsEMBL/Registry.pm:974
+STACK toplevel ./protein_to_genomic.pl:18
+Date (localtime)    = Wed Aug  7 13:08:22 2013
+Ensembl API version = 71
+---------------------------------------------------
+
+-------------------- WARNING ----------------------
+MSG: human_immunodeficiency_virus_type_1_group_m_subtype_b_(isolate_bh5) is not a valid species name (check DB and API version)
+FILE: Bio/EnsEMBL/Registry.pm LINE: 1187
+CALLED BY: Bio/EnsEMBL/Registry.pm  LINE: 972
+Date (localtime)    = Wed Aug  7 13:32:42 2013
+Ensembl API version = 71
+---------------------------------------------------
+
+-------------------- EXCEPTION --------------------
+MSG: Can not find internal name for species 'human_immunodeficiency_virus_type_1_group_m_subtype_b_(isolate_bh5)'
+STACK Bio::EnsEMBL::Registry::get_adaptor /usr/analysis/software/ensembl-api/ensembl/modules/Bio/EnsEMBL/Registry.pm:974
+STACK toplevel ./protein_to_genomic.pl:18
+Date (localtime)    = Wed Aug  7 13:32:42 2013
+Ensembl API version = 71
+---------------------------------------------------
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+
+-------------------- WARNING ----------------------
+MSG: hirudo_medicinalis is not a valid species name (check DB and API version)
+FILE: Bio/EnsEMBL/Registry.pm LINE: 1187
+CALLED BY: Bio/EnsEMBL/Registry.pm  LINE: 972
+Date (localtime)    = Wed Aug  7 14:09:00 2013
+Ensembl API version = 71
+---------------------------------------------------
+
+-------------------- EXCEPTION --------------------
+MSG: Can not find internal name for species 'hirudo_medicinalis'
+STACK Bio::EnsEMBL::Registry::get_adaptor /usr/analysis/software/ensembl-api/ensembl/modules/Bio/EnsEMBL/Registry.pm:974
+STACK toplevel ./protein_to_genomic.pl:18
+Date (localtime)    = Wed Aug  7 14:09:00 2013
+Ensembl API version = 71
+---------------------------------------------------
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "seq" on an undefined value at ./transcript_to_genomic.pl line 35.
+Can't call method "seq" on an undefined value at ./transcript_to_genomic.pl line 35.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+
+-------------------- WARNING ----------------------
+MSG: saccharomyces_cerevisiae_(strain_atcc_204508_/_s288c) is not a valid species name (check DB and API version)
+FILE: Bio/EnsEMBL/Registry.pm LINE: 1187
+CALLED BY: Bio/EnsEMBL/Registry.pm  LINE: 972
+Date (localtime)    = Wed Aug  7 15:16:50 2013
+Ensembl API version = 71
+---------------------------------------------------
+
+-------------------- EXCEPTION --------------------
+MSG: Can not find internal name for species 'saccharomyces_cerevisiae_(strain_atcc_204508_/_s288c)'
+STACK Bio::EnsEMBL::Registry::get_adaptor /usr/analysis/software/ensembl-api/ensembl/modules/Bio/EnsEMBL/Registry.pm:974
+STACK toplevel ./protein_to_genomic.pl:18
+Date (localtime)    = Wed Aug  7 15:16:50 2013
+Ensembl API version = 71
+---------------------------------------------------
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "seq" on an undefined value at ./transcript_to_genomic.pl line 35.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "seq" on an undefined value at ./transcript_to_genomic.pl line 35.
+Can't call method "seq" on an undefined value at ./transcript_to_genomic.pl line 35.
+Can't call method "seq" on an undefined value at ./transcript_to_genomic.pl line 35.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+
+-------------------- WARNING ----------------------
+MSG: xenopus_laevis is not a valid species name (check DB and API version)
+FILE: Bio/EnsEMBL/Registry.pm LINE: 1187
+CALLED BY: Bio/EnsEMBL/Registry.pm  LINE: 972
+Date (localtime)    = Wed Aug  7 17:58:15 2013
+Ensembl API version = 71
+---------------------------------------------------
+
+-------------------- EXCEPTION --------------------
+MSG: Can not find internal name for species 'xenopus_laevis'
+STACK Bio::EnsEMBL::Registry::get_adaptor /usr/analysis/software/ensembl-api/ensembl/modules/Bio/EnsEMBL/Registry.pm:974
+STACK toplevel ./protein_to_genomic.pl:18
+Date (localtime)    = Wed Aug  7 17:58:15 2013
+Ensembl API version = 71
+---------------------------------------------------
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "seq" on an undefined value at ./transcript_to_genomic.pl line 35.
+Can't call method "seq" on an undefined value at ./transcript_to_genomic.pl line 35.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+
+-------------------- WARNING ----------------------
+MSG: pan_troglodytes is not a valid species name (check DB and API version)
+FILE: Bio/EnsEMBL/Registry.pm LINE: 1187
+CALLED BY: Bio/EnsEMBL/Registry.pm  LINE: 972
+Date (localtime)    = Wed Aug  7 20:57:10 2013
+Ensembl API version = 71
+---------------------------------------------------
+
+-------------------- EXCEPTION --------------------
+MSG: Can not find internal name for species 'pan_troglodytes'
+STACK Bio::EnsEMBL::Registry::get_adaptor /usr/analysis/software/ensembl-api/ensembl/modules/Bio/EnsEMBL/Registry.pm:974
+STACK toplevel ./protein_to_genomic.pl:18
+Date (localtime)    = Wed Aug  7 20:57:10 2013
+Ensembl API version = 71
+---------------------------------------------------
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "seq" on an undefined value at ./transcript_to_genomic.pl line 35.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+
+-------------------- WARNING ----------------------
+MSG: influenza_a_virus is not a valid species name (check DB and API version)
+FILE: Bio/EnsEMBL/Registry.pm LINE: 1187
+CALLED BY: Bio/EnsEMBL/Registry.pm  LINE: 972
+Date (localtime)    = Thu Aug  8 03:21:07 2013
+Ensembl API version = 71
+---------------------------------------------------
+
+-------------------- EXCEPTION --------------------
+MSG: Can not find internal name for species 'influenza_a_virus'
+STACK Bio::EnsEMBL::Registry::get_adaptor /usr/analysis/software/ensembl-api/ensembl/modules/Bio/EnsEMBL/Registry.pm:974
+STACK toplevel ./protein_to_genomic.pl:18
+Date (localtime)    = Thu Aug  8 03:21:07 2013
+Ensembl API version = 71
+---------------------------------------------------
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+
+-------------------- WARNING ----------------------
+MSG: human_immunodeficiency_virus_type_1_group_m_subtype_b_(isolate_bru/lai) is not a valid species name (check DB and API version)
+FILE: Bio/EnsEMBL/Registry.pm LINE: 1187
+CALLED BY: Bio/EnsEMBL/Registry.pm  LINE: 972
+Date (localtime)    = Thu Aug  8 03:54:34 2013
+Ensembl API version = 71
+---------------------------------------------------
+
+-------------------- EXCEPTION --------------------
+MSG: Can not find internal name for species 'human_immunodeficiency_virus_type_1_group_m_subtype_b_(isolate_bru/lai)'
+STACK Bio::EnsEMBL::Registry::get_adaptor /usr/analysis/software/ensembl-api/ensembl/modules/Bio/EnsEMBL/Registry.pm:974
+STACK toplevel ./protein_to_genomic.pl:18
+Date (localtime)    = Thu Aug  8 03:54:34 2013
+Ensembl API version = 71
+---------------------------------------------------
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "seq" on an undefined value at ./transcript_to_genomic.pl line 35.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.
+Can't call method "stable_id" on an undefined value at ./transcript_to_genomic.pl line 26.

@@ -1,0 +1,11 @@
+/.cvsignore/1.1/Thu Nov 23 09:32:45 2006//Trelease-0_7
+/INSTALL/1.3/Thu Mar 15 12:02:54 2007//Trelease-0_7
+D/bin////
+D/cgi-bin////
+D/conf////
+D/das////
+D/htdocs////
+D/lib////
+D/logs////
+D/scripts////
+D/t////
