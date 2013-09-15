@@ -99,6 +99,7 @@ def main():
 			print("\tSkipping:")
 			sys.stdout.write("\tPDB %s could not be processed.\n"%pdb_id)
 			sys.stdout.write("\t%s\n\n"%e)
+			sys.stderr.write("%s was removed for an unhandled exception: %s\n"%(pdb_id,str(e).strip().replace('\n','.')))
 			skipped_count += 1
 			os.system('rm -f %s.tab'%pdb_id)
 			t_elapsed_fail += time.time()-t0 # Profiler
@@ -176,8 +177,10 @@ def load_pdb(pdb_id,pdb_file):
 		elif field == "DBREF":
 			if check_species(species):
 				fin.close()
+				sys.stderr.write("%s was removed for failing the species check.\n"%pdb_id)
 				return 1,0
-			read_dbref(line,c,pdb_id)
+			if (read_dbref(line,c,pdb_id)):
+				sys.stderr.write("%s was removed because it contains an insertion or deletion.\n"%pdb_id)
 		elif field == "SEQADV":
 			read_seqadv(line,c)
 		elif field == "ATOM" and cur_model == best_model:
@@ -187,9 +190,11 @@ def load_pdb(pdb_id,pdb_file):
 	# Check that required fields have some information
 	c.execute("SELECT * FROM chains")
 	if not c.fetchone():
+		sys.stderr.write("%s was removed because no chains were parsed.\n"%pdb_id)
 		return 1,0
 	c.execute("SELECT * FROM coords")
 	if not c.fetchone():
+		sys.stderr.write("%s was removed because no atoms were parsed.\n"%pdb_id)
 		return 1,0
 
 	print "\nProcessing PDB %s..."%pdb_id
@@ -237,7 +242,7 @@ def load_pdb(pdb_id,pdb_file):
 				transcripts = []
 			else:
 				# Use UniParc to find candidate transcripts
-				transcripts = transmap[unp]
+				transcripts = transmap.get(unp,[])
 			for transcript,id_type in transcripts:
 				if species=="homo_sapiens":
 					print "\tLoading -> %s.%s (%s), %s -> %s"%(pdb_id,chain,unp,species,transcript)
@@ -246,6 +251,7 @@ def load_pdb(pdb_id,pdb_file):
 					ung = unp2ung(unp)
 					if not ung:
 						sys.stdout.write("No UniGene entry found -> pdb: %s, chain: %s, unp: %s, species: %s"%(pdb_id,chain,unp,species))
+						sys.stderr.write("%s was removed because %s matched no UniGene entry.\n"%(unp,pdb_id))
 						return 1,0
 					else:
 						# Use Ensembl to find candidate homologue transcripts
@@ -255,18 +261,21 @@ def load_pdb(pdb_id,pdb_file):
 				print("\tSkipping:")
 				sys.stdout.write("\tPerl returned a non-zero exit status.\n")
 				os.system('rm -f %s.tab'%pdb_id)
-				return 1,0						
+				sys.stderr.write("%s was removed because a Perl subscript crashed.\n"%pdb_id)
+				return 1,0
 		except KeyboardInterrupt:
 			if raw_input("\nContinue to next PDB? (y/n):") == 'n':
 				raise KeyboardInterrupt
 			print("\tSkipping:")
 			print("\tCanceled by user.")
+			sys.stderr.write("%s was removed because the user canceled the processing\n"%pdb_id)
 			return 1,0
 
 	# Upload to the database
 	num_matches = best_candidates(pdb_id,seqadv_protected)
 	print("\t%d transcripts found.\n"%num_matches)
 	publish_data(pdb_id,args.dbhost,args.dbuser,args.dbpass,args.dbname,num_matches)
+	sys.stderr.write("%s was processed successfully\n"%pdb_id)
 	return 0,(num_matches > 0)
 
 def check_species(species):
@@ -323,7 +332,8 @@ def read_dbref(line,c,pdb_id):
 		else:
 			# The fix cannot handle insertions of a different protein
 			# or deletions with different offsets
-			raise Exception("PDB chain contains insertion or deletion")
+			return 1
+	return 0
 
 def read_seqres(line,c):
 	"""Parses a SEQRES field from a PDB file"""
