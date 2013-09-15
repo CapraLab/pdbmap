@@ -5,7 +5,7 @@
 # and booleans for whether to create a new database or to identify human
 # homologues for non-human protein structures.
 
-import argparse,ConfigParser
+import argparse,ConfigParser,traceback
 import os,sys,csv,time,subprocess,gzip,string
 import sqlite3,MySQLdb
 from warnings import filterwarnings	# Disable MySQL warnings
@@ -94,12 +94,13 @@ def main():
 		except (KeyboardInterrupt,SystemExit):
 			print("\nExiting...")
 			sys.exit(0)
-		except Exception as e:
+		except:
+			tb = traceback.format_exc().replace('\n','::')
 			print "\nProcessing PDB %s..."%pdb_id
 			print("\tSkipping:")
 			sys.stdout.write("\tPDB %s could not be processed.\n"%pdb_id)
-			sys.stdout.write("\t%s\n\n"%e)
-			sys.stderr.write("%s was removed for an unhandled exception: %s\n"%(pdb_id,str(e).strip().replace('\n','.')))
+			sys.stdout.write("\t%s\n\n"%tb)
+			sys.stderr.write("%s was removed for an unhandled exception: %s\n"%(pdb_id,tb))
 			skipped_count += 1
 			os.system('rm -f %s.tab'%pdb_id)
 			t_elapsed_fail += time.time()-t0 # Profiler
@@ -238,11 +239,8 @@ def load_pdb(pdb_id,pdb_file):
 		try:
 			# Use Ensembl to find candidate transcripts
 			exit_code = subprocess.call(["./protein_to_genomic.pl",pdb_id,chain,unp,species])
-			if unp not in transmap:
-				transcripts = []
-			else:
-				# Use UniParc to find candidate transcripts
-				transcripts = transmap.get(unp,[])
+			# Use UniParc to find candidate transcripts
+			transcripts = transmap.get(unp,[])
 			for transcript,id_type in transcripts:
 				if species=="homo_sapiens":
 					print "\tLoading -> %s.%s (%s), %s -> %s"%(pdb_id,chain,unp,species,transcript)
@@ -317,7 +315,9 @@ def read_dbref(line,c,pdb_id):
 		chain     = line[12]
 		unp_id    = line[33:41].strip()
 		spec_code = line[42:54].strip().split('_')[-1].lower()
-		species   = scientific_speclist[spec_code]
+		# If the spec_code isn't specified, assume human
+		# May later choose to drop the structure instead
+		species   = scientific_speclist.get(spec_code,'homo_sapiens')
 		pdbstart  = int(line[14:18])
 		dbstart   = int(line[55:60])
 		offset    = dbstart - pdbstart
