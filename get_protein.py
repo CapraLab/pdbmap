@@ -28,7 +28,8 @@ for row in vars_with_trans:
 	start = row[1]
 	end   = row[2]
 	name  = row[3]
-	trans = row[4]
+	gene  = row[4]
+	trans = row[5]
 	if trans in transmap:
 		for (unp,id_type) in transmap[trans]:
 			writer.writerow([chrom,start,end,name,trans,unp])

@@ -43,6 +43,9 @@ for ($i=0; $i<$peplength; $i++) {
 	my $q_start = @query[0]->start();
 	my $q_end = @query[0]->end();
 
+	# Prevent erroneous Ensembl results
+	if ($q_start < $s_start or $q_end > $s_end) {next;}
+
 	# If pep2genomic returns a gap, infer the strand
 	# from the previous codon. i.e. don't overwrite
 	# the strand variable from the previous iteration.

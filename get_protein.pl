@@ -21,7 +21,9 @@ while (<FIN>) {
 		@transcripts = @{ $transcript_adaptor->fetch_all_by_Slice($slice) };
 		foreach my $transcript (@transcripts) {
 			my $trans_id = $transcript->stable_id();
-			print STDOUT "$chr\t$start\t$end\t$name\t$trans_id\n";
+			my $gene = $transcript->get_Gene();
+			my $g_stable_id = $gene->stable_id();
+			print STDOUT "$chr\t$start\t$end\t$name\t$g_stable_id\t$trans_id\n";
 		}
 	}
 }

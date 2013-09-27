@@ -1,12 +1,16 @@
 CREATE DEFINER=`mike`@`gwar-dev.mc.vanderbilt.edu` PROCEDURE `update_GenomePDB`(new_pdbid VARCHAR(20))
 BEGIN
 INSERT INTO GenomePDB
-SELECT a.pdbid,a.species,a.chain,a.unp,c.gene,c.transcript,b.seqres,b.aa1,b.x,b.y,b.z,d.start,d.end,d.chr,d.strand
+SELECT d.chr,d.start,d.end,d.strand,d.gene,d.transcript,c.trans_seq,d.aa1,a.pdbid,a.chain,a.species,a.unp,c.chain_seq,b.aa1,b.x,b.y,b.z
 FROM PDBInfo as a
-INNER JOIN PDBCoords as b ON a.pdbid=b.pdbid AND a.chain=b.chain
-INNER JOIN PDBTranscript as c ON a.pdbid=c.pdbid AND a.chain=c.chain
-INNER JOIN GenomicCoords as d ON c.transcript=d.transcript AND b.seqres=d.seqres
-WHERE a.pdbid=new_pdbid
-GROUP BY a.pdbid,a.chain,b.seqres
-ORDER BY a.pdbid,a.chain,b.seqres;
+INNER JOIN
+PDBCoords as b
+ON a.pdbid=b.pdbid AND a.chain=b.chain
+INNER JOIN
+Alignment as c
+ON b.pdbid=c.pdbid AND b.chain=c.chain AND b.seqres=c.chain_seq
+INNER JOIN
+GenomicCoords as d
+ON c.transcript=d.transcript AND c.trans_seq=d.seqres
+GROUP BY a.pdbid,a.chain,b.seqres;
 END

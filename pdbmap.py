@@ -5,6 +5,11 @@
 # and booleans for whether to create a new database or to identify human
 # homologues for non-human protein structures.
 
+## ---- Experimental Simple Alignment and Scoring ---- ##
+from Bio import pairwise2
+from Bio.SubsMat import MatrixInfo as matlist
+## --------------------------------------------------- ##
+
 import argparse,ConfigParser,traceback
 import os,sys,csv,time,subprocess,gzip,string
 import sqlite3,MySQLdb
@@ -23,6 +28,7 @@ defaults = {
 	"dbuser" : "user",
 	"dbpass" : "pass",
 	"pdb_dir" : "./pdb",
+	"map_dir" : "./maps",
 	"disable_human_homologue" : False,
 	"create_new_db" : False,
 	"force" : False,
@@ -44,6 +50,7 @@ parser.add_argument("--dbuser", help="Database username")
 parser.add_argument("--dbpass", help="Database password")
 parser.add_argument("--dbname", help="Database name")
 parser.add_argument("--pdb_dir", help="Directory containing PDB files")
+parser.add_argument("--map_dir", help="Directory to save pdbmap BED file")
 parser.add_argument("--disable_human_homologue", action='store_true', help="Disable mapping from non-human PDBs to human homologues")
 parser.add_argument("--create_new_db", action='store_true', help="Create a new database prior to uploading PDB data")
 parser.add_argument("-f", "--force", action='store_true', help="Force configuration. No safety checks.")
@@ -57,6 +64,8 @@ def main():
 	# If a new database needs to be created, create one.
 	if args.create_new_db:
 		create_new_db(args.dbhost,args.dbuser,args.dbpass,args.dbname)
+		print "Database created."
+		sys.exit(0)
 
 	# Identify all PDB structures in pdb_dir
 	if os.path.isdir(args.pdb_dir):
@@ -78,54 +87,72 @@ def main():
 	# Failure profiler
 	t_elapsed_fail    = 0
 
-	new_pdbs.sort()	# For easier post-analysis
-	for pdb_id,pdb_file in new_pdbs:
-		# print "\nProcessing PDB %s..."%pdb_id
-		try:
-			t0 = time.time() # Profiler
-			status,num_matches = load_pdb(pdb_id,pdb_file)
-			if status:
-				skipped_count += 1
-				t_elapsed_fail += time.time()-t0 # Profiler
-			else:
-				pdb_count += 1
-				t_elapsed_success += time.time()-t0 # Profiler
-			mapped_count += num_matches
-		except (KeyboardInterrupt,SystemExit):
-			print("\nExiting...")
-			sys.exit(0)
-		except:
-			tb = traceback.format_exc().replace('\n','::')
-			print "\nProcessing PDB %s..."%pdb_id
-			print("\tSkipping:")
-			sys.stdout.write("\tPDB %s could not be processed.\n"%pdb_id)
-			sys.stdout.write("\t%s\n\n"%tb)
-			sys.stderr.write("%s was removed for an unhandled exception: %s\n"%(pdb_id,tb))
-			skipped_count += 1
-			os.system('rm -f %s.tab'%pdb_id)
-			t_elapsed_fail += time.time()-t0 # Profiler
+#FIXME
+	try:
+		from multiprocessing import Pool
+		pool = Pool(processes=10)
+		pool.map(load_pdb_wrapper,new_pdbs)
+	except KeyboardInterrupt:
+		sys.exit(1)
+#ENDFIXME
+
+	# new_pdbs.sort()	# For easier post-analysis
+	# for pdb_id,pdb_file in new_pdbs:
+	# 	# print "\nProcessing PDB %s..."%pdb_id
+	# 	try:
+	# 		t0 = time.time() # Profiler
+	# 		status,num_matches = load_pdb(pdb_id,pdb_file)
+	# 		if status:
+	# 			skipped_count += 1
+	# 			t_elapsed_fail += time.time()-t0 # Profiler
+	# 		else:
+	# 			pdb_count += 1
+	# 			t_elapsed_success += time.time()-t0 # Profiler
+	# 		mapped_count += num_matches
+	# 	except (KeyboardInterrupt,SystemExit):
+	# 		print("\nExiting...")
+	# 		sys.exit(0)
+	# 	except:
+	# 		tb = traceback.format_exc().replace('\n','::')
+	# 		print "\nProcessing PDB %s..."%pdb_id
+	# 		print("\tSkipping:")
+	# 		sys.stdout.write("\tPDB %s could not be processed.\n"%pdb_id)
+	# 		sys.stdout.write("\t%s\n\n"%tb)
+	# 		sys.stderr.write("%s was removed for an unhandled exception: %s\n"%(pdb_id,tb))
+	# 		skipped_count += 1
+	# 		os.system('rm -f %s.tab'%pdb_id)
+	# 		t_elapsed_fail += time.time()-t0 # Profiler
 	
-	# Success profiler
-	if pdb_count > 0:
-		t_average_success = t_elapsed_success / pdb_count
-	else:
-		t_average_success = 0
-	if skipped_count > 0:
-		t_average_fail = t_elapsed_fail / skipped_count
-	else:
-		t_average_fail = 0
-	t_elapsed = t_elapsed_fail + t_elapsed_success
-	print "\n#----------------------------------#\n"
-	print "Number of PDBs skipped: %d"%skipped_count
-	print "Number of PDBs processed: %d"%pdb_count
-	print "Number of PDBs mapped: %d"%mapped_count
-	print "Total execution time: %f"%t_elapsed
-	print "Average execution time for successful PDB: %2.2f"%t_average_success
-	print "Average execution time for skipped PDB: %2.2f"%t_average_fail
+
+	# # Success profiler
+	# if pdb_count > 0:
+	# 	t_average_success = t_elapsed_success / pdb_count
+	# else:
+	# 	t_average_success = 0
+	# if skipped_count > 0:
+	# 	t_average_fail = t_elapsed_fail / skipped_count
+	# else:
+	# 	t_average_fail = 0
+	# t_elapsed = t_elapsed_fail + t_elapsed_success
+	# print "\n#----------------------------------#\n"
+	# print "Number of PDBs skipped: %d"%skipped_count
+	# print "Number of PDBs processed: %d"%pdb_count
+	# print "Number of PDBs mapped: %d"%mapped_count
+	# print "Total execution time: %f"%t_elapsed
+	# print "Average execution time for successful PDB: %2.2f"%t_average_success
+	# print "Average execution time for skipped PDB: %2.2f"%t_average_fail
 	print "Building GenomePDB..."
 	con = MySQLdb.connect(host=args.dbhost,user=args.dbuser,passwd=args.dbpass,db=args.dbname)
-	# with con.cursor() as c:
-	# 	c.execute("CALL build_GenomePDB();")
+	c = con.cursor()
+	c.execute("CALL build_GenomePDB();")
+	con.close() # b/c it may have timed out already anyway
+	print "Generating BED file for %s..."%args.dbname
+	c = con.cursor()
+	c.execute("SELECT * FROM GenomePDB");
+	with open("%s%s.bed"(args.map_dir,args.dbname)) as fin:
+		writer = csv.writer(fin,delimiter='\t')
+		writer.writerows(c.fetchall())
+	con.close()
 	print "\nComplete."
 
 def sqlite_init():
@@ -137,6 +164,24 @@ def sqlite_init():
 	c.execute("CREATE TABLE seqadv (chain VARCHAR(1),seqres INT,aa3 VARCHAR(3),conflict VARCHAR(20),PRIMARY KEY(chain,seqres))")
 	con.commit()
 	return c,con
+
+#FIXME
+def load_pdb_wrapper(pdb):
+	try:
+		pdb_id,pdb_file = pdb
+		return load_pdb(pdb_id,pdb_file)
+	except (KeyboardInterrupt,SystemExit):
+			print("\nExiting...")
+			sys.exit(0)
+	except:
+		tb = traceback.format_exc().replace('\n','::')
+		print "\nProcessing PDB %s..."%pdb_id
+		print("\tSkipping:")
+		sys.stdout.write("\tPDB %s could not be processed.\n"%pdb_id)
+		sys.stdout.write("\t%s\n\n"%tb)
+		sys.stderr.write("%s was removed for an unhandled exception: %s\n"%(pdb_id,tb))
+		os.system('rm -f %s.tab'%pdb_id)
+#ENDFIXME
 
 def load_pdb(pdb_id,pdb_file):
 	"""Parse a PDB file and store the important information into SQLite"""
@@ -209,13 +254,17 @@ def load_pdb(pdb_id,pdb_file):
 	print "\t%d atoms"%len(c.fetchall())
 	fin.close()
 
+	# This was removed when alignment was added
+	# Even if a mutation is known, it needs to be left in the sequence
+	# so that alignment tools have the proper indices in the peptide sequence.
+	# 
 	# Remove any residues with conflicts not explicitly allowed
-	print("\tRemoving SEQADV conflicts...")
-	c.execute("SELECT chain,seqres,conflict FROM seqadv WHERE conflict!='ENGINEERED MUTATION' AND conflict!='MODIFIED RESIDUE'")
-	for chain,seqres,conflict in c.fetchall():
-		print("\t\tSEQADV %s,%s removed. Conflict: %s"%(chain,seqres,conflict))
-		c.execute("DELETE FROM coords WHERE chain=? AND seqres=?",(chain,seqres))
-	con.commit()
+	# print("\tRemoving SEQADV conflicts...")
+	# c.execute("SELECT chain,seqres,conflict FROM seqadv WHERE conflict!='ENGINEERED MUTATION' AND conflict!='MODIFIED RESIDUE'")
+	# for chain,seqres,conflict in c.fetchall():
+	# 	print("\t\tSEQADV %s,%s removed. Conflict: %s"%(chain,seqres,conflict))
+	# 	c.execute("DELETE FROM coords WHERE chain=? AND seqres=?",(chain,seqres))
+	# con.commit()
 
 	# Write data to tabular for MySQL upload
 	write_pdb_data(pdb_id,c,con)
@@ -228,18 +277,19 @@ def load_pdb(pdb_id,pdb_file):
 	con.close()	# Close the local SQLite connection
 
 	# Create tabulars for the genomic data
-	with open("GenomicCoords.tab","w") as fout:
+	with open("%s_GenomicCoords.tab"%pdb_id,"w") as fout:
 		fout.write("transcript\tgene\tseqres\taa1\tstart\tend\tchr\tstrand\n")
-	with open("PDBTranscript.tab","w") as fout:
+	with open("%s_PDBTranscript.tab"%pdb_id,"w") as fout:
 		fout.write("pdb\tchain\ttranscript\thomologue\n")
 	for unp_chain in unp_chains:
 		unp = str(unp_chain[0]).upper()
 		chain = str(unp_chain[1])
 		species = str(unp_chain[2])
 		try:
-			# Use Ensembl to find candidate transcripts
-			exit_code = subprocess.call(["./protein_to_genomic.pl",pdb_id,chain,unp,species])
+			exit_code = 0
 			# Use UniParc to find candidate transcripts
+			# UniParc results will be written first, and be chosen over Ensembl-
+			# identified transcripts in a tie.
 			transcripts = transmap.get(unp,[])
 			for transcript,id_type in transcripts:
 				if species=="homo_sapiens":
@@ -254,7 +304,9 @@ def load_pdb(pdb_id,pdb_file):
 					else:
 						# Use Ensembl to find candidate homologue transcripts
 						print "\tSearching for human homologues -> pdb: %s, chain: %s, unp: %s, ung: %s, species: %s"%(pdb_id,chain,unp,ung,species)
-						exit_code = subprocess.call(["./unigene_to_homologue_genomic.pl",pdb_id,chain,ung,species])
+						exit_code += subprocess.call(["./unigene_to_homologue_genomic.pl",pdb_id,chain,ung,species])
+			# Use Ensembl to find candidate transcripts
+			exit_code += subprocess.call(["./protein_to_genomic.pl",pdb_id,chain,unp,species])
 			if exit_code:
 				print("\tSkipping:")
 				sys.stdout.write("\tPerl returned a non-zero exit status.\n")
@@ -270,8 +322,10 @@ def load_pdb(pdb_id,pdb_file):
 			return 1,0
 
 	# Upload to the database
+	#unaligned,aligned = best_candidates(pdb_id,seqadv_protected)
+	#num_matches = max([unaligned,aligned])
 	num_matches = best_candidates(pdb_id,seqadv_protected)
-	print("\t%d transcripts found.\n"%num_matches)
+	print("\t%d transcript(s) found.\n"%num_matches)
 	publish_data(pdb_id,args.dbhost,args.dbuser,args.dbpass,args.dbname,num_matches)
 	sys.stderr.write("%s was processed successfully\n"%pdb_id)
 	return 0,(num_matches > 0)
@@ -393,7 +447,11 @@ def write_pdb_data(pdb_id,c,con):
 	fout = open("%s.tab"%pdb_id,'w')
 	writer = csv.writer(fout,delimiter="\t")
 	writer.writerow(["chain","species","unp","pdbid","seqres","aa3","aa1","x","y","z"])
-	c.execute("SELECT avgcoords.chain,chains.species,chains.unp,chains.pdb,(avgcoords.seqres+chains.offset) as seqres,aa3,aa1,x,y,z FROM chains,avgcoords WHERE avgcoords.chain=chains.chain AND avgcoords.seqres >= chains.pdbstart ORDER BY avgcoords.chain,avgcoords.seqres")
+	#c.execute("SELECT avgcoords.chain,chains.species,chains.unp,chains.pdb,(avgcoords.seqres+chains.offset) as seqres,aa3,aa1,x,y,z FROM chains,avgcoords WHERE avgcoords.chain=chains.chain AND avgcoords.seqres >= chains.pdbstart ORDER BY avgcoords.chain,avgcoords.seqres")
+	# The offset was removed with the addition of alignment tools
+	# By preserving the original PDB chain seqres values, it will be easier
+	# to refer back to the PDB file if questions arise.
+	c.execute("SELECT avgcoords.chain,chains.species,chains.unp,chains.pdb,avgcoords.seqres as seqres,aa3,aa1,x,y,z FROM chains,avgcoords WHERE avgcoords.chain=chains.chain AND avgcoords.seqres >= chains.pdbstart ORDER BY avgcoords.chain,avgcoords.seqres")
 	writer.writerows(c.fetchall())
 	fout.close()
 
@@ -415,86 +473,185 @@ def unp2ung(unp):
 	return page.split()[-1]
 
 def best_candidates(pdb_id,seqadv_protected):
-	with open('GenomicCoords.tab','r') as fin:
+	with open("%s_GenomicCoords.tab"%pdb_id,'r') as fin:
 		reader = csv.reader(fin,delimiter='\t')
+		# {(transcript,seqres: aa1)}
 		gc = {(row[0],row[2]): row[3] for row in reader}
-	with open('PDBTranscript.tab','r') as fin:
+	with open("%s_PDBTranscript.tab"%pdb_id,'r') as fin:
 		pdb_t_header = fin.next()
 		reader = csv.reader(fin,delimiter='\t')
-		# store list of tuples (transcript,chain,homologue)
+		# [(transcript,chain,homologue)]
 		pdb_t = [(row[2],row[1],row[3]) for row in reader]
 	with open('%s.tab'%pdb_id,'r') as fin:
 		reader = csv.reader(fin,delimiter='\t')
+		# {(chain,seqres): aa1}
 		pdb_c = {(row[0],row[4]): row[6] for row in reader}
 	sanitize = []
 
 	if len(pdb_t) < 1:
 		print "\tNo candidate transcripts."
+		#return 0,0
 		return 0
 
-	# For each mapping
-	pdb_t_conflict = []
+	## ------- Experimental Simple Alignment and Scoring --------- ##
+
+	print "\tAligning sequences..."
+
+	# Store the best alignments
+	best_alignments = {}
+
+	# Loop through each transcript-chain match
 	for transcript,chain,homologue in pdb_t:
 
-		# Track the number of conflicts
-		num_conflicts = 0
-
-		# Reduce by first key and remove
+		# Reduce dictionaries to only this match
+		# seqres : aa1
 		gc_sub    = {int(key[1]):gc[key]    for key in gc    if key[0]==transcript}
 		pdb_c_sub = {int(key[1]):pdb_c[key] for key in pdb_c if key[0]==chain}
-		# Join by second key and compare values
-		for seqres in pdb_c_sub:
-			# If a protected SEQADV conflict, skip
-			if (chain,seqres) in seqadv_protected:
-				pass
-			# If the transcript does not contain the seqres, discard
-			elif seqres not in gc_sub:
-				num_conflicts += 1
-			# Or the amino acid is different at that seqres, discard
-			elif gc_sub[seqres] != pdb_c_sub[seqres]:
-				num_conflicts += 1
 
-		# Determine % conflict
-		if len(pdb_c_sub) > 0:
-			perc_conflict = num_conflicts / float(len(pdb_c_sub))
-		else:
-			perc_conflict = 1.0
+		# Generate sequences for chain and transcript
+		chnseq_start = min(pdb_c_sub.keys())
+		trnseq_start = min(gc_sub.keys())
 
-		# Retain if conflict < 90%
-		if perc_conflict < 0.90:
-			pdb_t_conflict.append((transcript,chain,homologue,perc_conflict))
+		chain_seq = ''.join(pdb_c_sub.values())
+		trans_seq = ''.join(gc_sub.values())
 
-	if len(pdb_t_conflict) < 1:
-		print "\tAll transcripts failed QC. <10% match."
-		return 0
+		# Align the two sequences and return an alignment dictionary
+		# mapping chain seqres to transcript seqres and an alignment score
+		alignment,score,mismatch = align_sequences(chain_seq,trans_seq,chnseq_start,trnseq_start)
 
-	# Sort by chain and display
-	pdb_t_conflict.sort(key=lambda x: x[1])
-	print "\tAll candidates:"
-	for chain,transcript,homologue,perc_conflict in pdb_t_conflict:
-		print "\t\t%s.%s -> %s: %2.2f conflict"%(pdb_id,chain,transcript,perc_conflict)
+		# Add if this transcript-chain match has not been evaluated
+		# or this score exceeds the previous best score
+		if score > best_alignments.get(chain,(0,0,''))[0]:
+			best_alignments[chain] = (score,mismatch,alignment,transcript)
+		# Move to next transcript-chain candidate
 
-	# Determine the best transcript match for each chain. Arbitrary tie breaking
-	best_candidates = []
-	for chain in set([chain for x,chain,y,z in pdb_t_conflict]):
-		conflicts = [candidate[3] for candidate in pdb_t_conflict if candidate[1]==chain]
-		min_conflict = min(conflicts)
-		best_candidate = [tup for tup in pdb_t_conflict if tup[1]==chain and tup[3]==min_conflict][0]
-		best_candidates.append(best_candidate)
+	score_fout = open("%s_AlignmentScores.tab"%pdb_id,'w')
+	score_fout.write("pdbid\tchain\ttranscript\thomologue\tscore\tperc_nongap\tperc_match\n")
+	align_fout = open("%s_Alignment.tab"%pdb_id,'w')
+	align_fout.write("pdbid\tchain\tchain_seq\ttranscript\ttrans_seq\n")
+	score_writer = csv.writer(score_fout,delimiter='\t')
+	align_writer = csv.writer(align_fout,delimiter='\t')
 
-	best_candidates.sort(key=lambda x: x[1])
-	print "\n\tBest candidates:"
-	for chain,transcript,homologue,perc_conflict in best_candidates:
-		print "\t\t%s.%s -> %s: %2.2f conflict"%(pdb_id,chain,transcript,perc_conflict)
-	# And write the sanitized mappings back to file
-	with open('PDBTranscript.tab','w') as fout:
-		writer = csv.writer(fout,delimiter='\t')
-		# for transcript,chain,homologue in pdb_t:
-		for transcript,chain,homologue,conflict in best_candidates:
-			writer.writerow([pdb_id,chain,transcript,homologue,"%2.2f"%conflict])
+	# Loop through each optimally aligned transcript-chain match
+	for chain,(score,mismatch,alignment,transcript) in best_alignments.iteritems():
+
+		# Compute the percent match (incl. permissable mismatches)
+		chain_len      = len(alignment)
+		num_gaps       = len([val for val in alignment.values() if val==-1])
+		perc_nongap    = float(chain_len-num_gaps) / chain_len
+		perc_match     = float(chain_len-num_gaps-mismatch) / chain_len
+
+		# Write the full alignment summary
+		score_writer.writerow([pdb_id,chain,transcript,homologue,"%2.2f"%score,"%2.2f"%perc_nongap,"%2.2f"%perc_match])
+
+		# Write the individual alignment pairs
+		for chain_seq,trans_seq in alignment.iteritems():
+			align_writer.writerow([pdb_id,chain,chain_seq,transcript,trans_seq])
+
+	score_fout.close()
+	align_fout.close()
+	aligned_transcripts = len(best_alignments)
+
+	## ----------------------------------------------------------- ##
+
+	#	Deprecated chain-transcript mapping code 
+	#
+	# # For each mapping
+	# pdb_t_conflict = []
+	# for transcript,chain,homologue in pdb_t:
+
+	# 	# Track the number of conflicts
+	# 	num_conflicts = 0
+
+	# 	# Reduce by first key and remove
+	# 	gc_sub    = {int(key[1]):gc[key]    for key in gc    if key[0]==transcript}
+	# 	pdb_c_sub = {int(key[1]):pdb_c[key] for key in pdb_c if key[0]==chain}
+	# 	# Join by second key and compare values
+	# 	for seqres in pdb_c_sub:
+	# 		# If a protected SEQADV conflict, skip
+	# 		if (chain,seqres) in seqadv_protected:
+	# 			pass
+	# 		# If the transcript does not contain the seqres, discard
+	# 		elif seqres not in gc_sub:
+	# 			num_conflicts += 1
+	# 		# Or the amino acid is different at that seqres, discard
+	# 		elif gc_sub[seqres] != pdb_c_sub[seqres]:
+	# 			num_conflicts += 1
+
+	# 	# Determine % conflict
+	# 	if len(pdb_c_sub) > 0:
+	# 		perc_conflict = num_conflicts / float(len(pdb_c_sub))
+	# 	else:
+	# 		perc_conflict = 1.0
+
+	# 	# Retain if conflict < 90%
+	# 	# if perc_conflict < 0.90:
+	# 	pdb_t_conflict.append((transcript,chain,homologue,perc_conflict))
+
+	# # if len(pdb_t_conflict) < 1:
+	# # 	print "\tAll transcripts failed QC. <10% match."
+	# # 	return 0
+
+	# # Sort by chain and display
+	# pdb_t_conflict.sort(key=lambda x: x[1])
+	# # print "\tAll candidates:"
+	# # for chain,transcript,homologue,perc_conflict in pdb_t_conflict:
+	# # 	print "\t\t%s.%s -> %s: %2.2f conflict"%(pdb_id,chain,transcript,perc_conflict)
+
+	# # Determine the best transcript match for each chain. Arbitrary tie breaking
+	# best_candidates = []
+	# for chain in set([chain for x,chain,y,z in pdb_t_conflict]):
+	# 	conflicts = [candidate[3] for candidate in pdb_t_conflict if candidate[1]==chain]
+	# 	min_conflict = min(conflicts)
+	# 	best_candidate = [tup for tup in pdb_t_conflict if tup[1]==chain and tup[3]==min_conflict][0]
+	# 	best_candidates.append(best_candidate)
+
+	# best_candidates.sort(key=lambda x: x[1])
+	# # print "\n\tBest candidates:"
+	# # for chain,transcript,homologue,perc_conflict in best_candidates:
+	# # 	print "\t\t%s.%s -> %s: %2.2f conflict"%(pdb_id,chain,transcript,perc_conflict)
+	# # And write the sanitized mappings back to file
+	# if len(pdb_t_conflict):
+	# 	with open('PDBTranscript.tab','w') as fout:
+	# 		writer = csv.writer(fout,delimiter='\t')
+	# 		# for transcript,chain,homologue in pdb_t:
+	# 		for transcript,chain,homologue,conflict in best_candidates:
+	# 			writer.writerow([pdb_id,chain,transcript,homologue,"%2.2f"%conflict])
 
 	# Return the number of remaining matches
-	return len(best_candidates)
+	#return len(best_candidates),aligned_transcripts
+	return aligned_transcripts
+
+def align_sequences(seq1,seq2,seq1_start=1,seq2_start=1):
+	""" Experimental inclusion to align sequences """
+	# Default start values ensure 1-indexed results post-gap shift
+	matrix     = matlist.blosum62
+	gap_open   = -10
+	gap_extend = -0.5
+
+	alignments = pairwise2.align.globalds(seq1,seq2,matrix,gap_open,gap_extend)
+	best_align = alignments[0]
+	aln_seq1_str, aln_seq2_str, score, begin, end = best_align
+	aln_seq1   = [aa for aa in aln_seq1_str]
+	aln_seq2   = [aa for aa in aln_seq2_str]
+
+	# Alignment dictionary directed: seq1->seq2
+	seq1_ind = [x for x in gap_shift(aln_seq1,seq1_start)]
+	seq2_ind = [x for x in gap_shift(aln_seq2,seq2_start)]
+	mismatch = sum([int(aln_seq1[i]!=aln_seq2[i]) for i in range(len(aln_seq1)) if seq1_ind[i] > 0 and seq2_ind[i] > 0])
+	aln_dict = dict((seq1_ind[i],seq2_ind[i]) for i in range(len(seq1_ind)) if seq1_ind[i] > 0)
+	return aln_dict,score,mismatch
+	
+def gap_shift(seq,seq_start):
+	""" Experimental inclusion to align sequences """
+	# Returns a dictionary mapping
+	index = seq_start
+	for i in seq:
+		if i != '-':
+			yield index
+			index += 1
+		else:
+			yield -1
 
 def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname,num_matches):
 	try:
@@ -507,8 +664,10 @@ def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname,num_matches):
 		query = ["LOAD DATA LOCAL INFILE '%s.tab' INTO TABLE PDBInfo FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n' IGNORE 1 LINES (chain,species,unp,pdbid,@dummy,@dummy,@dummy,@dummy,@dummy,@dummy)"%pdb_id]
 		# Only load the rest if there were any successful matches
 		if num_matches > 0:
-			query.append("LOAD DATA LOCAL INFILE 'GenomicCoords.tab' INTO TABLE GenomicCoords FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n' IGNORE 1 LINES")
-			query.append("LOAD DATA LOCAL INFILE 'PDBTranscript.tab' INTO TABLE PDBTranscript FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n'")
+			query.append("LOAD DATA LOCAL INFILE '%s_GenomicCoords.tab' INTO TABLE GenomicCoords FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n' IGNORE 1 LINES"%pdb_id)
+			# query.append("LOAD DATA LOCAL INFILE 'PDBTranscript.tab' INTO TABLE PDBTranscript FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n'")
+			query.append("LOAD DATA LOCAL INFILE '%s_AlignmentScores.tab' INTO TABLE AlignmentScores FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n' IGNORE 1 LINES"%pdb_id)
+			query.append("LOAD DATA LOCAL INFILE '%s_Alignment.tab' INTO TABLE Alignment FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n' IGNORE 1 LINES"%pdb_id)
 			query.append("LOAD DATA LOCAL INFILE '%s.tab' INTO TABLE PDBCoords FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n' IGNORE 1 LINES (chain,@dummy,@dummy,pdbid,seqres,aa3,aa1,x,y,z)"%pdb_id)
 			# query.append("CALL %s.update_GenomePDB('%s');"%(dbname,pdb_id))
 		end_of_query = ['.','...']
@@ -529,9 +688,11 @@ def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname,num_matches):
 		sys.stdout.write("\tUpload to MySQL failed: %s."%e)
 	finally:
 		con.close()	# Close the remote MySQL connection
-		os.system('rm -f PDBTranscript.tab')
+		os.system('rm -f %s_PDBTranscript.tab'%pdb_id)
+		os.system('rm -f %s_AlignmentScores.tab'%pdb_id)
+		os.system('rm -f %s_AlignmentScores.tab'%pdb_id)
 		os.system('rm -f %s.tab'%pdb_id)
-		os.system('rm -f GenomicCoords.tab')
+		os.system('rm -f %s_GenomicCoords.tab'%pdb_id)
 
 def get_new_pdbs(pdbs,dbhost,dbuser,dbpass,dbname):
 	try:
@@ -559,29 +720,31 @@ def create_new_db(dbhost,dbuser,dbpass,dbname):
 	query.append("CREATE TABLE %s.GenomicCoords (transcript VARCHAR(20),gene VARCHAR(20), seqres INT,aa1 VARCHAR(1),start BIGINT,end BIGINT,chr VARCHAR(10),strand INT,PRIMARY KEY(transcript,seqres),KEY(transcript),KEY(start,end,chr))"%dbname)
 	query.append("CREATE TABLE %s.PDBCoords (pdbid VARCHAR(20),chain VARCHAR(1),seqres INT,aa3 VARCHAR(3),aa1 VARCHAR(1),x DOUBLE,y DOUBLE,z DOUBLE,PRIMARY KEY(pdbid,chain,seqres))"%dbname)
 	query.append("CREATE TABLE %s.PDBInfo (pdbid VARCHAR(20),species VARCHAR(20),chain VARCHAR(1),unp VARCHAR(20),PRIMARY KEY(pdbid,chain))"%dbname)
-	query.append("CREATE TABLE %s.PDBTranscript (pdbid VARCHAR(20),chain VARCHAR(1),transcript VARCHAR(20),homologue BOOLEAN,conflict REAL,PRIMARY KEY(pdbid,chain,transcript),KEY(transcript),KEY(conflict))"%dbname)
-	query.append("""CREATE TABLE `%s`.`GenomePDB` (
-  		`pdbid` VARCHAR(20) NOT NULL default '',
-  		`species` VARCHAR(20) default NULL,
-  		`chain` VARCHAR(1) NOT NULL default '',
-  		`unp` VARCHAR(20) default NULL,
-  		`gene` VARCHAR(20) default NULL,
-  		`transcript` VARCHAR(20) default NULL,
-  		`seqres` INT(11) NOT NULL default '0',
-  		`aa1` VARCHAR(1) default NULL,
-  		`x` DOUBLE default NULL,
-  		`y` DOUBLE default NULL,
-  		`z` DOUBLE default NULL,
-  		`start` BIGINT(20) default NULL,
-  		`end` BIGINT(20) default NULL,
-  		`chr` VARCHAR(10) default NULL,
-  		`strand` INT(11) default NULL,
-  		PRIMARY KEY `transpos` (`pdbid`,`chain`,`transcript`,`chr`,`start`,`end`,`strand`),
-  		KEY `gene` (`gene`),
-  		KEY `peptide` (`pdbid`,`chain`,`seqres`),
-  		KEY `genomic` (`chr`,`start`,`end`),
-  		KEY `pdbid` (`pdbid`)
-		)"""%dbname)
+	# query.append("CREATE TABLE %s.PDBTranscript (pdbid VARCHAR(20),chain VARCHAR(1),transcript VARCHAR(20),homologue BOOLEAN,conflict REAL,PRIMARY KEY(pdbid,chain,transcript),KEY(transcript),KEY(conflict))"%dbname)
+	query.append("CREATE TABLE %s.AlignmentScores (pdbid VARCHAR(20),chain VARCHAR(1),transcript VARCHAR(20),homologue BOOLEAN,score REAL,perc_nongap REAL,perc_match REAL,PRIMARY KEY(pdbid,chain,transcript),KEY(transcript),KEY(pdbid,chain),KEY(score),KEY(perc_nongap),KEY(perc_match))"%dbname)
+	query.append("CREATE TABLE %s.Alignment (pdbid VARCHAR(20),chain VARCHAR(1),chain_seq INT,transcript VARCHAR(20),trans_seq INT,PRIMARY KEY(pdbid,chain,chain_seq,transcript,trans_seq),KEY(transcript),KEY(pdbid),KEY(pdbid,chain))"%dbname)
+	# query.append("""CREATE TABLE `%s`.`GenomePDB` (
+ #  		`pdbid` VARCHAR(20) NOT NULL default '',
+ #  		`species` VARCHAR(20) default NULL,
+ #  		`chain` VARCHAR(1) NOT NULL default '',
+ #  		`unp` VARCHAR(20) default NULL,
+ #  		`gene` VARCHAR(20) default NULL,
+ #  		`transcript` VARCHAR(20) default NULL,
+ #  		`seqres` INT(11) NOT NULL default '0',
+ #  		`aa1` VARCHAR(1) default NULL,
+ #  		`x` DOUBLE default NULL,
+ #  		`y` DOUBLE default NULL,
+ #  		`z` DOUBLE default NULL,
+ #  		`start` BIGINT(20) default NULL,
+ #  		`end` BIGINT(20) default NULL,
+ #  		`chr` VARCHAR(10) default NULL,
+ #  		`strand` INT(11) default NULL,
+ #  		PRIMARY KEY `transpos` (`pdbid`,`chain`,`transcript`,`chr`,`start`,`end`,`strand`),
+ #  		KEY `gene` (`gene`),
+ #  		KEY `peptide` (`pdbid`,`chain`,`seqres`),
+ #  		KEY `genomic` (`chr`,`start`,`end`),
+ #  		KEY `pdbid` (`pdbid`)
+	# 	)"""%dbname)
 	format_dict = {'dbuser':dbuser,'dbhost':dbhost}
 	with open('create_proc_update_GenomePDB.sql','r') as fin:
 		query.append(fin.read()%format_dict)
