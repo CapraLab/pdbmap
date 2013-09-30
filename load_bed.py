@@ -36,8 +36,19 @@ os.system("mv %s %s"%(bed_temp,var_file))
 ext = var_file.split('.')[-1].lower()
 if ext == 'bed':
   os.system("/usr/analysis/bin/intersectBed -a %s -b %s -wb | cut -f 1-21 > %s"%(pdbmap_file,var_file,intersect_file))
+  # Adjust the start,end,var_start,var_end positions to 1-indexing
+  os.system("""awk -f"\t" -v OFS="\t" 
+    '{print $1,$2-1,$3-1,$4,$5,$6,$7,$8,$9,$10,
+    $11,$12,$13,$14,$15,$16,$17,$18,$19+1,$20+1,$21}' 
+    %s > %sFIX"""%(intersect_file,intersect_file))
 elif ext == 'vcf':
   os.system("/usr/analysis/bin/intersectBed -a %s -b %s -wb | cut -f 1-20 > %s"%(pdbmap_file,var_file,intersect_file))
+  # Adjust the start,end positions to 1-indexing
+  os.system("""awk -f"\t" -v OFS="\t" 
+    '{print $1,$2-1,$3-1,$4,$5,$6,$7,$8,$9,$10,
+    $11,$12,$13,$14,$15,$16,$17,$18,$19,$20}' 
+    %s > %sFIX"""%(intersect_file,intersect_file))
+os.system("""mv -f %sFIX > %s"""%(intersect_file,intersect_file))
 
 # Database Connection
 try:
@@ -94,13 +105,6 @@ query.append("""LOAD DATA LOCAL INFILE '%s' INTO TABLE Intersect_Variants_%s
 if ext == 'vcf':
   query.append("""UPDATE Intersect_Variants_%s SET var_end=var_start+1""")
 
-# Adjust to 1-indexing
-if ext == 'bed':
-  query.append("""UPDATE Intersect_Variants_%s SET var_start=var_start-1""")
-  query.append("""UPDATE Intersect_Variants_%s SET var_end=var_end-1""")
-query.append("""UPDATE Intersect_Variants_%s SET start=start-1""")
-query.append("""UPDATE Intersect_Variants_%s SET end=end-1""")
-
 # Execute intersection queries
 for q in query:
 	c.execute(q)
@@ -109,9 +113,13 @@ con.close()	# Non-intersection pipeline will cause connection timeout
 # Find non-intersections
 os.system("/usr/analysis/bin/intersectBed -v -b %s -a %s > %s"%(pdbmap_file,var_file,nointersect_file))
 
+# Adjust the results to 1-indexing
+os.system("""awk -f"\t" -v OFS="\t" '{print $1,$2+1,$3+1,$4}' %s > %sFIX"""%(nointersect_file,nointersect_file))
+os.system("""mv -f %sFIX > %s"""%(nointersect_file,nointersect_file))
+
 # Annotate the non-intersecting ranges with Ensembl Transcripts and UniProt IDs
 os.system("./get_protein.py %s > %s.temp"%(nointersect_file,nointersect_file))
-os.system("mv %s.temp %s"%(nointersect_file,nointersect_file))
+os.system("mv -f %s.temp %s"%(nointersect_file,nointersect_file))
 
 # Database Connection
 try:
