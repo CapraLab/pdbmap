@@ -18,8 +18,8 @@ Bio::EnsEMBL::Registry->load_registry_from_db(-host=>'gwar-dev.mc.vanderbilt.edu
 
 $transcript_adaptor = Bio::EnsEMBL::Registry->get_adaptor($species,'Core','Transcript');
 
-open(GenomicCoords,">>GenomicCoords.tab");
-open(PDBTranscript,">>PDBTranscript.tab");
+open(GenomicCoords,sprintf(">>%s_GenomicCoords.tab",$pdb));
+open(PDBTranscript,sprintf(">>%s_PDBTranscript.tab",$pdb));
 
 $transcript = $transcript_adaptor->fetch_by_stable_id($transcript_id);
 my $q_strand = 0;
@@ -41,7 +41,9 @@ my @locs = $transcript->pep2genomic(0,$peplength-1);
 for ($i=0; $i<$peplength; $i++) {
 	my @query = $transcript->pep2genomic($i,$i);
 	my $q_start = @query[0]->start();
-	my $q_end = @query[0]->end();
+	# Adjust the end to match BED range definitions
+	# (inclusive start, exclusive end)	
+	my $q_end = @query[0]->end()+1;
 
 	# Prevent erroneous Ensembl results
 	if ($q_start < $s_start or $q_end > $s_end) {next;}

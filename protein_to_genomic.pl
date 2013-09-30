@@ -17,8 +17,8 @@ Bio::EnsEMBL::Registry->load_registry_from_db(-host=>'gwar-dev.mc.vanderbilt.edu
 
 $transcript_adaptor = Bio::EnsEMBL::Registry->get_adaptor($species,'Core','Transcript');
 
-open(GenomicCoords,">>GenomicCoords.tab");
-open(PDBTranscript,">>PDBTranscript.tab");
+open(GenomicCoords,sprintf(">>%s_GenomicCoords.tab",$pdb));
+open(PDBTranscript,sprintf(">>%s_PDBTranscript.tab",$pdb));
 
 @transcripts = @{ $transcript_adaptor->fetch_all_by_external_name($unp,'uniprot%')};
 my $q_strand = 0;

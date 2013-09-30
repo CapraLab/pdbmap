@@ -7,12 +7,14 @@ filterwarnings('ignore',category=MySQLdb.Warning)
 filterwarnings('ignore',"Unknown table.*")
 
 # Command Line Arguments:
-#	Variant .bed file
+#	Variant .bed file or .vcf file
 #	PDBMAP .bed file
 #	Intersection directory
 #	[Optional] variant source name
 if len(sys.argv) < 2:
 	print "load_bed.py BED MAP intersection_dir [dat_name]"
+  print "Ensure that PDBMAP file is 0-indexed, exclusive end"
+  print "  to comply with UCSC BED format."
 	sys.exit(0);
 var_file = sys.argv[1]
 pdbmap_file = sys.argv[2]
@@ -31,7 +33,11 @@ os.system("sed s/^23/X/g %s | sed s/^24/Y/g | sed s/^25/PAR/g | sed s/^26/MT/g >
 os.system("mv %s %s"%(bed_temp,var_file))
 
 # Find intersections
-os.system("/usr/analysis/bin/intersectBed -a %s -b %s -wb > %s"%(pdbmap_file,var_file,intersect_file))
+ext = var_file.split('.')[-1].lower()
+if ext == 'bed':
+  os.system("/usr/analysis/bin/intersectBed -a %s -b %s -wb | cut -f 1-21 > %s"%(pdbmap_file,var_file,intersect_file))
+elif ext == 'vcf':
+  os.system("/usr/analysis/bin/intersectBed -a %s -b %s -wb | cut -f 1-20 > %s"%(pdbmap_file,var_file,intersect_file))
 
 # Database Connection
 try:
@@ -76,7 +82,17 @@ query.append("""CREATE TABLE Intersect_Variants_%s (
 # query.append("""LOAD DATA LOCAL INFILE '%s' INTO TABLE Intersect_Variants_%s
 # 			(chr, start, end, strand, transcript, pdbid, chain, unp, seqres, 
 # 			aa1, x, y, z, species, gene, var_chr, var_start, var_end, var_name)"""%(intersect_file,dat_name))
-query.append("""LOAD DATA LOCAL INFILE '%s' INTO TABLE Intersect_Variants_%s FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n'"""%(intersect_file,dat_name))
+if ext == 'bed':
+  var_file_cols = "var_chr,var_start,var_end,var_name"
+elif ext == 'vcf':
+  var_file_cols = "var_chr,var_start,var_name"
+query.append("""LOAD DATA LOCAL INFILE '%s' INTO TABLE Intersect_Variants_%s 
+                FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n'
+                (chr,start,end,strand,gene,transcript,trans_seq,trans_aa1,
+                 pdbid,chain,species,unp,chain_seq,chain_aa1,x,y,z,
+                 %s)"""%(intersect_file,dat_name,var_file_cols))
+if ext == 'vcf':
+  query.append("""UPDATE Intersect_Variants_%s SET var_end=var_start+1""")
 
 
 # Execute intersection queries

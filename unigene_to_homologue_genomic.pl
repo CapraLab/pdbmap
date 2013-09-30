@@ -13,8 +13,8 @@ my $chain = $ARGV[1];
 my $ung = $ARGV[2];
 my $species = $ARGV[3];
 
-open(GenomicCoords,">>GenomicCoords.tab");
-open(PDBTranscript,">>PDBTranscript.tab");
+open(GenomicCoords,sprintf(">>%s_GenomicCoords.tab",$pdb));
+open(PDBTranscript,sprintf(">>%s_PDBTranscript.tab",$pdb));
 
 $gene_adaptor = Bio::EnsEMBL::Registry->get_adaptor('sus_scrofa','Core','Gene');
 @genes = @{ $gene_adaptor->fetch_all_by_external_name($ung,'unigene')};
@@ -50,7 +50,9 @@ foreach my $gene (@{genes}) {
 				for ($i=0; $i<$peplength; $i++) {
 					my @query = $transcript->pep2genomic($i,$i);
 					my $q_start = @query[0]->start();
-					my $q_end = @query[0]->end();
+					# Adjust the end to match BED range definitions
+					# (inclusive start, exclusive end)
+					my $q_end = @query[0]->end()+1;
 
 					# If pep2genomic returns a gap, infer the strand
 					# from the previous codon. i.e. don't overwrite

@@ -92,7 +92,9 @@ def main():
 		from multiprocessing import Pool
 		pool = Pool(processes=10)
 		pool.map(load_pdb_wrapper,new_pdbs)
+		pool.close()
 	except KeyboardInterrupt:
+		pool.close()
 		sys.exit(1)
 #ENDFIXME
 
@@ -243,7 +245,7 @@ def load_pdb(pdb_id,pdb_file):
 		sys.stderr.write("%s was removed because no atoms were parsed.\n"%pdb_id)
 		return 1,0
 
-	print "\nProcessing PDB %s..."%pdb_id
+	print "\n\nProcessing PDB %s..."%pdb_id
 
 	print("\tExperiment type: %s"%experiment_type)
 	if experiment_type == "NMR":
@@ -466,7 +468,7 @@ def unp2ung(unp):
 	}
 	data = urllib.urlencode(params)
 	request = urllib2.Request(url, data)
-	contact = "mike.sivley@vanderbilt.edu" # Please set your email address here to help us debug in case of problems.
+	contact = "mike.sivley@vanderbilt.edu"
 	request.add_header('User-Agent', 'Python %s' % contact)
 	response = urllib2.urlopen(request)
 	page = response.read(200000)
@@ -551,6 +553,7 @@ def best_candidates(pdb_id,seqadv_protected):
 	score_fout.close()
 	align_fout.close()
 	aligned_transcripts = len(best_alignments)
+	return aligned_transcripts
 
 	## ----------------------------------------------------------- ##
 
@@ -620,7 +623,6 @@ def best_candidates(pdb_id,seqadv_protected):
 
 	# Return the number of remaining matches
 	#return len(best_candidates),aligned_transcripts
-	return aligned_transcripts
 
 def align_sequences(seq1,seq2,seq1_start=1,seq2_start=1):
 	""" Experimental inclusion to align sequences """
@@ -678,7 +680,8 @@ def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname,num_matches):
 			sys.stdout.flush()
 			c.execute(q)
 			tqel = time.time()-tq0
-			print("%2.2fs"%tqel)
+			sys.stdout.write("%2.2fs\n"%tqel)
+			sys.stdout.flush()
 	except (KeyboardInterrupt,SystemExit):
 		print("\tSkipping:")
 		sys.stdout.write("\tUpload to MySQL was interrupted by user.")
