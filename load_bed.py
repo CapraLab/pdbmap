@@ -12,10 +12,10 @@ filterwarnings('ignore',"Unknown table.*")
 #	Intersection directory
 #	[Optional] variant source name
 if len(sys.argv) < 2:
-	print "load_bed.py BED MAP intersection_dir [dat_name]"
+  print "load_bed.py BED MAP intersection_dir [dat_name]"
   print "Ensure that PDBMAP file is 0-indexed, exclusive end"
   print "  to comply with UCSC BED format."
-	sys.exit(0);
+  sys.exit(0);
 var_file = sys.argv[1]
 pdbmap_file = sys.argv[2]
 intersect_dir = sys.argv[3]
@@ -94,6 +94,12 @@ query.append("""LOAD DATA LOCAL INFILE '%s' INTO TABLE Intersect_Variants_%s
 if ext == 'vcf':
   query.append("""UPDATE Intersect_Variants_%s SET var_end=var_start+1""")
 
+# Adjust to 1-indexing
+if ext == 'bed':
+  query.append("""UPDATE Intersect_Variants_%s SET var_start=var_start-1""")
+  query.append("""UPDATE Intersect_Variants_%s SET var_end=var_end-1""")
+query.append("""UPDATE Intersect_Variants_%s SET start=start-1""")
+query.append("""UPDATE Intersect_Variants_%s SET end=end-1""")
 
 # Execute intersection queries
 for q in query:
