@@ -32,4 +32,4 @@ for row in vars_with_trans:
 	trans = row[5]
 	if trans in transmap:
 		for (unp,id_type) in transmap[trans]:
-			writer.writerow([chrom,start,end,name,trans,unp])
+			writer.writerow([chrom,start,end,name,gene,trans,unp])

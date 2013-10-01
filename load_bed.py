@@ -113,7 +113,7 @@ con.close()	# Non-intersection pipeline will cause connection timeout
 # Find non-intersections
 os.system("/usr/analysis/bin/intersectBed -v -b %s -a %s > %s"%(pdbmap_file,var_file,nointersect_file))
 
-# Adjust the results to 1-indexing
+# Adjust the var_start,var_end positions to 1-indexing
 os.system("""awk -f"\t" -v OFS="\t" '{print $1,$2+1,$3+1,$4}' %s > %sFIX"""%(nointersect_file,nointersect_file))
 os.system("""mv -f %sFIX > %s"""%(nointersect_file,nointersect_file))
 
