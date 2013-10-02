@@ -30,7 +30,7 @@ def reset_bfactor(pdbid):
 
 def overwrite_bfactors(pdbid,scores,resis=None,binary=False,displaytype='cartoon',surface=True):
 	if isinstance(scores,str): # if filename, read file
-		fin = open(score_file,'rU')
+		fin = open(scores,'rU')
 		fin.readline() # burn the header
 		reader = csv.reader(fin,delimiter='\t')
 		if resis:
