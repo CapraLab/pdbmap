@@ -28,7 +28,7 @@ def reset_bfactor(pdbid):
 	exp = "b=0.0"
 	cmd.alter(pdbid,exp)
 
-def overwrite_bfactors(pdbid,scores,resis=None,binary=False,displaytype='cartoon',surface=True):
+def overwrite_bfactors(pdbid,scores,resis=None,binary=False,displaytype='cartoon',surface=False,var_spheres=False):
 	if isinstance(scores,str): # if filename, read file
 		fin = open(scores,'rU')
 		fin.readline() # burn the header
@@ -58,6 +58,10 @@ def overwrite_bfactors(pdbid,scores,resis=None,binary=False,displaytype='cartoon
 	cmd.color("grey",exclude)
 	cmd.hide("everything","all")
 	cmd.show(representation=displaytype)
+	cmd.set(name="cartoon_discrete_colors",value="on")
+	if var_spheres:
+			cmd.show(selection="name CA and br. b=1",representation="spheres")
+			cmd.set(name="sphere_scale",value=1)
 	if surface:
 		cmd.show(selection="surface_obj",representation="surface")
 		cmd.set(selection="surface_obj",name="transparency",value=0.5)

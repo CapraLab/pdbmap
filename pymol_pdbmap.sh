@@ -18,14 +18,14 @@ echo "MySQL queries complete";
 
 cmd1="run overwrite_pymol.py; "
 cmd1+="load /scratch/sivleyrm/pdb/structures/all/pdb/pdb$pdbid.ent,$pdbid; "
-cmd1+="overwrite_bfactors('$pdbid','$var_res_file',binary=True); "
+cmd1+="overwrite_bfactors('$pdbid','$var_res_file',binary=True,var_spheres=True); "
 cmd1+="orient;mset 1 x360; movie.roll 1,180,1,axis=y; movie.roll 181,360,1,axis=x; "
-cmd1+="save ${pdbid}_vars.pdb; save ${pdbid}_vars.pse;"
+cmd1+="save ${pdbid}_vars.pdb; save ${pdbid}_vars.pse; png ${pdbid}_vars.png, dpi=300, ray=2400,2400;"
 /usr/local/bin/pymol -c -d "$cmd1"
 
 cmd2="run overwrite_pymol.py; "
 cmd2+="load /scratch/sivleyrm/pdb/structures/all/pdb/pdb$pdbid.ent,$pdbid; "
 cmd2+="show_density('$pdbid','$pdbmap_file','$var_pos_file',radius=$3); "
 cmd2+="orient;mset 1 x360; movie.roll 1,180,1,axis=y; movie.roll 181,360,1,axis=x; "
-cmd2+="save $1_$3_density.pdb; save $1_$3_density.pse;"
+cmd2+="save $1_$3_density.pdb; save $1_$3_density.pse; png ${pdbid}_$3_density.png, dpi=300, ray=2400,2400;"
 /usr/local/bin/pymol -c -d "$cmd2"
