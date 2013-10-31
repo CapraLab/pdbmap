@@ -8,6 +8,7 @@ CREATE TABLE GenomePDB
 chr VARCHAR(10),
 start BIGINT,
 end BIGINT,
+name VARCHAR(20),
 strand INT,
 gene VARCHAR(20), 
 transcript VARCHAR(20),
@@ -27,6 +28,7 @@ KEY `pdbid` (`pdbid`),
 KEY `gene` (`gene`),
 KEY `trans` (`transcript`),
 KEY `peptide` (`pdbid`,`chain`,`chain_seq`),
+KEY `name` (`name`),
 KEY `genomic` (`chr`,`start`,`end`));
 
 INSERT INTO GenomePDB

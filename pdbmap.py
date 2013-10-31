@@ -87,62 +87,51 @@ def main():
 	# Failure profiler
 	t_elapsed_fail    = 0
 
-#FIXME
-	try:
-		from multiprocessing import Pool
-		pool = Pool(processes=10)
-		pool.map(load_pdb_wrapper,new_pdbs)
-		pool.close()
-	except KeyboardInterrupt:
-		pool.close()
-		sys.exit(1)
-#ENDFIXME
-
-	# new_pdbs.sort()	# For easier post-analysis
-	# for pdb_id,pdb_file in new_pdbs:
-	# 	# print "\nProcessing PDB %s..."%pdb_id
-	# 	try:
-	# 		t0 = time.time() # Profiler
-	# 		status,num_matches = load_pdb(pdb_id,pdb_file)
-	# 		if status:
-	# 			skipped_count += 1
-	# 			t_elapsed_fail += time.time()-t0 # Profiler
-	# 		else:
-	# 			pdb_count += 1
-	# 			t_elapsed_success += time.time()-t0 # Profiler
-	# 		mapped_count += num_matches
-	# 	except (KeyboardInterrupt,SystemExit):
-	# 		print("\nExiting...")
-	# 		sys.exit(0)
-	# 	except:
-	# 		tb = traceback.format_exc().replace('\n','::')
-	# 		print "\nProcessing PDB %s..."%pdb_id
-	# 		print("\tSkipping:")
-	# 		sys.stdout.write("\tPDB %s could not be processed.\n"%pdb_id)
-	# 		sys.stdout.write("\t%s\n\n"%tb)
-	# 		sys.stderr.write("%s was removed for an unhandled exception: %s\n"%(pdb_id,tb))
-	# 		skipped_count += 1
-	# 		os.system('rm -f %s.tab'%pdb_id)
-	# 		t_elapsed_fail += time.time()-t0 # Profiler
+	new_pdbs.sort()	# For easier post-analysis
+	for pdb_id,pdb_file in new_pdbs:
+		# print "\nProcessing PDB %s..."%pdb_id
+		try:
+			t0 = time.time() # Profiler
+			status,num_matches = load_pdb(pdb_id,pdb_file)
+			if status:
+				skipped_count += 1
+				t_elapsed_fail += time.time()-t0 # Profiler
+			else:
+				pdb_count += 1
+				t_elapsed_success += time.time()-t0 # Profiler
+			mapped_count += num_matches
+		except (KeyboardInterrupt,SystemExit):
+			print("\nExiting...")
+			sys.exit(0)
+		except:
+			tb = traceback.format_exc().replace('\n','::')
+			print "\nProcessing PDB %s..."%pdb_id
+			print("\tSkipping:")
+			sys.stdout.write("\tPDB %s could not be processed.\n"%pdb_id)
+			sys.stdout.write("\t%s\n\n"%tb)
+			sys.stderr.write("%s was removed for an unhandled exception: %s\n"%(pdb_id,tb))
+			skipped_count += 1
+			os.system('rm -f %s.tab'%pdb_id)
+			t_elapsed_fail += time.time()-t0 # Profiler
 	
 
-	# # Success profiler
-	# if pdb_count > 0:
-	# 	t_average_success = t_elapsed_success / pdb_count
-	# else:
-	# 	t_average_success = 0
-	# if skipped_count > 0:
-	# 	t_average_fail = t_elapsed_fail / skipped_count
-	# else:
-	# 	t_average_fail = 0
-	# t_elapsed = t_elapsed_fail + t_elapsed_success
-	# print "\n#----------------------------------#\n"
-	# print "Number of PDBs skipped: %d"%skipped_count
-	# print "Number of PDBs processed: %d"%pdb_count
-	# print "Number of PDBs mapped: %d"%mapped_count
-	# print "Total execution time: %f"%t_elapsed
-	# print "Average execution time for successful PDB: %2.2f"%t_average_success
-	# print "Average execution time for skipped PDB: %2.2f"%t_average_fail
+	# Success profiler
+	if pdb_count > 0:
+		t_average_success = t_elapsed_success / pdb_count
+	else:
+		t_average_success = 0
+	if skipped_count > 0:
+		t_average_fail = t_elapsed_fail / skipped_count
+	else:
+		t_average_fail = 0
+	t_elapsed = t_elapsed_fail + t_elapsed_success
+	print "\n#----------------------------------#\n"
+	print "Number of PDBs skipped: %d"%skipped_count
+	print "Number of PDBs processed: %d"%pdb_count
+	print "Number of PDBs mapped: %d"%mapped_count
+	print "Total execution time: %f"%t_elapsed
+	print "Average execution time for successful PDB: %2.2f"%t_average_success
+	print "Average execution time for skipped PDB: %2.2f"%t_average_fail
 	print "Building GenomePDB..."
 	con = MySQLdb.connect(host=args.dbhost,user=args.dbuser,passwd=args.dbpass,db=args.dbname)
 	c = con.cursor()
@@ -166,24 +155,6 @@ def sqlite_init():
 	c.execute("CREATE TABLE seqadv (chain VARCHAR(1),seqres INT,aa3 VARCHAR(3),conflict VARCHAR(20),PRIMARY KEY(chain,seqres))")
 	con.commit()
 	return c,con
-
-#FIXME
-def load_pdb_wrapper(pdb):
-	try:
-		pdb_id,pdb_file = pdb
-		return load_pdb(pdb_id,pdb_file)
-	except (KeyboardInterrupt,SystemExit):
-			print("\nExiting...")
-			sys.exit(0)
-	except:
-		tb = traceback.format_exc().replace('\n','::')
-		print "\nProcessing PDB %s..."%pdb_id
-		print("\tSkipping:")
-		sys.stdout.write("\tPDB %s could not be processed.\n"%pdb_id)
-		sys.stdout.write("\t%s\n\n"%tb)
-		sys.stderr.write("%s was removed for an unhandled exception: %s\n"%(pdb_id,tb))
-		os.system('rm -f %s.tab'%pdb_id)
-#ENDFIXME
 
 def load_pdb(pdb_id,pdb_file):
 	"""Parse a PDB file and store the important information into SQLite"""
