@@ -293,6 +293,13 @@ def load_pdb(pdb_id,pdb_file):
 			print("\tCanceled by user.")
 			sys.stderr.write("%s was removed because the user canceled the processing\n"%pdb_id)
 			return 1,0
+		finally:
+			# Clean up any temporary files
+			os.system('rm -f %s_PDBTranscript.tab'%pdb_id)
+			os.system('rm -f %s_AlignmentScores.tab'%pdb_id)
+			os.system('rm -f %s_AlignmentScores.tab'%pdb_id)
+			os.system('rm -f %s.tab'%pdb_id)
+			os.system('rm -f %s_GenomicCoords.tab'%pdb_id)
 
 	# Upload to the database
 	#unaligned,aligned = best_candidates(pdb_id,seqadv_protected)
