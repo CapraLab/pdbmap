@@ -1,0 +1,15 @@
+#!/bin/sh
+
+#PBS -m bae 
+#PBS -M mike.sivley@vanderbilt.edu
+#PBS -l nodes=vision.mc.vanderbilt.edu
+#PBS -l mem=5000mb
+#PBS -l walltime=3:00:00:00
+
+cd /labs/twells/sivleyrm/pdbmap
+for i in {1..22}
+do
+echo $i
+./process_vcf.py mike_vcf/ALL.chr$i.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf >> /scratch/sivleyrm/pdbmap/variants/1kg_release_v3_20110521_hg19_vars/1kg_release_v3_20110521_hg19_vars.bed;
+done
+./process_vcf.py mike_vcf/ALL.chrX.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf >> /scratch/sivleyrm/pdbmap/variants/1kg_release_v3_20110521_hg19_vars/1kg_release_v3_20110521_hg19_vars.bed;
