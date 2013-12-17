@@ -267,7 +267,7 @@ def load_pdb(pdb_id,pdb_file):
 			for transcript,id_type in transcripts:
 				if species=="homo_sapiens":
 					print "\tLoading -> %s.%s (%s), %s -> %s"%(pdb_id,chain,unp,species,transcript)
-					exit_code += subprocess.call(["./transcript_to_genomic.pl",pdb_id,chain,unp,species,transcript])
+					exit_code += subprocess.call(["lib/transcript_to_genomic.pl",pdb_id,chain,unp,species,transcript])
 				else:
 					ung = unp2ung(unp)
 					if not ung:
@@ -277,9 +277,9 @@ def load_pdb(pdb_id,pdb_file):
 					else:
 						# Use Ensembl to find candidate homologue transcripts
 						print "\tSearching for human homologues -> pdb: %s, chain: %s, unp: %s, ung: %s, species: %s"%(pdb_id,chain,unp,ung,species)
-						exit_code += subprocess.call(["./unigene_to_homologue_genomic.pl",pdb_id,chain,ung,species])
+						exit_code += subprocess.call(["lib/unigene_to_homologue_genomic.pl",pdb_id,chain,ung,species])
 			# Use Ensembl to find candidate transcripts
-			exit_code += subprocess.call(["./protein_to_genomic.pl",pdb_id,chain,unp,species])
+			exit_code += subprocess.call(["lib/protein_to_genomic.pl",pdb_id,chain,unp,species])
 			if exit_code:
 				print("\tSkipping:")
 				sys.stdout.write("\tPerl returned a non-zero exit status.\n")
