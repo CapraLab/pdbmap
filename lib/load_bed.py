@@ -35,10 +35,10 @@ os.system("mv %s %s"%(bed_temp,var_file))
 # Find intersections
 ext = var_file.split('.')[-1].lower()
 if ext == 'bed':
-  os.system("/usr/analysis/bin/intersectBed -a %s -b %s -wb | cut -f 1-21 > %s"%(pdbmap_file,var_file,intersect_file))
+  os.system("/usr/analysis/bin/intersectBed -a %s -b %s -wa -wb | cut -f 1-21 > %s"%(pdbmap_file,var_file,intersect_file))
   # Adjust the start,end,var_start,var_end positions to 1-indexing
   cmd  = """awk -F"\t" -v OFS="\t" """
-  cmd += """'{print $1,$2-1,$3-1,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,"""
+  cmd += """'{print $1,$2+1,$3+1,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,"""
   cmd += """$16,$17,$18,$19+1,$20+1,$21}' """
   cmd += """%s > %sFIX"""%(intersect_file,intersect_file)
   os.system(cmd)
@@ -46,7 +46,7 @@ elif ext == 'vcf':
   os.system("/usr/analysis/bin/intersectBed -a %s -b %s -wb | cut -f 1-20 > %s"%(pdbmap_file,var_file,intersect_file))
   # Adjust the start,end positions to 1-indexing
   cmd  = """awk -F"\t" -v OFS="\t" """
-  cmd += """'{print $1,$2-1,$3-1,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,"""
+  cmd += """'{print $1,$2+1,$3+1,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,"""
   cmd += """$16,$17,$18,$19,$20}' """
   cmd += """%s > %sFIX"""%(intersect_file,intersect_file)
   os.system(cmd)
@@ -112,12 +112,15 @@ for q in query:
 	c.execute(q)
 con.close()	# Non-intersection pipeline will cause connection timeout
 
+print "Intersection complete. You may now query the intersect table."
+print "Annotating non-intersecting variants..."
+
 # Find non-intersections
 os.system("/usr/analysis/bin/intersectBed -v -b %s -a %s > %s"%(pdbmap_file,var_file,nointersect_file))
 
 # Adjust the var_start,var_end positions to 1-indexing
 os.system("""awk -F"\t" -v OFS="\t" '{print $1,$2+1,$3+1,$4}' %s > %sFIX"""%(nointersect_file,nointersect_file))
-os.system("""mv -f %sFIX > %s"""%(nointersect_file,nointersect_file))
+os.system("""mv -f %sFIX %s"""%(nointersect_file,nointersect_file))
 
 # Annotate the non-intersecting ranges with Ensembl Transcripts and UniProt IDs
 os.system("lib/get_protein.py %s > %s.temp"%(nointersect_file,nointersect_file))
