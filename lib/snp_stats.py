@@ -260,11 +260,10 @@ def calc_global_fst(snp_list,pop_id_map,pedmap):
     os.system("rm -f %s"%tempfile) # delete temp file
 
 def calc_kwise_fst(snp_fstat,pop_id_map,pedmap,krange,snp_list=None,snp_groups=None,group_snp_dict=None):
-  tuple_fstat = {}
-
+  # Evaluate k-tuples for all k in krange
   for k in krange:
 
-    # If these have been computed before, load k-wise Fst from file
+    # If these k-tuples have been computed before, load k-wise Fst from file
     if os.path.isfile('%s_%d-tuple.fst'%(pedmap,k)):
       print "# Loading %d-wise Fst from log..."%k
       with open('%s_%d-tuple.fst'%(pedmap,k),'rb') as fin:
@@ -272,6 +271,7 @@ def calc_kwise_fst(snp_fstat,pop_id_map,pedmap,krange,snp_list=None,snp_groups=N
         for row in reader:
           snp_fstat[row[0]].setdefault(k,{})[tuple(row[2:])] = float(row[1])
       continue # to next k
+    with open('%s_%d-tuple.fst'%(pedmap,k),'wb'): pass # create k-wise Fst file
 
     # Generate k-tuples
     print "# Calculating tuples for k=%d..."%k
@@ -301,26 +301,21 @@ def calc_kwise_fst(snp_fstat,pop_id_map,pedmap,krange,snp_list=None,snp_groups=N
       cmd = ["calc_fst.r",pop_id_map,pedmap,tempfile]
       p = subprocess.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
       parser = process_parser(p)
-      tuple_fstat[k] = parse_tuples(parser,unique_combns)
+      tuple_fstat = parse_tuples(parser,unique_combns)
+      # Store all k-wise data into snp_fstat and log
+      with open('%s_%d-tuple.fst'%(pedmap,k),'a') as fout:
+        tups = tuple_fstat.keys()
+        for tup in tups:
+          fst = tuple_fstat[tup][6]
+          for snp in tup:
+            partners = tuple([x for x in tup if x!=snp])
+            if snp in snp_fstat:
+              snp_fstat[snp].setdefault(k,{})[partners] = fst
+              fout.write("%s\t%f\t%s\n"%(snp,fst,"\t".join(partners)))
     except: raise
     finally:
       os.system("rm -f %s"%tempfile)
   
-  # Store all k-wise data into snp_fstat
-  ks = tuple_fstat.keys()
-  ks.sort()
-  for k in ks:
-    with open('%s_%d-tuple.fst'%(pedmap,k),'wb') as fout:
-      print "# %d-tuples:"%k
-      tups = tuple_fstat[k].keys()
-      tups.sort()
-      for tup in tups:
-        fst = tuple_fstat[k][tup][6]
-        for snp in tup:
-          partners = tuple([x for x in tup if x!=snp])
-          if snp in snp_fstat:
-            snp_fstat[snp].setdefault(k,{})[partners] = fst
-            fout.write("%s\t%f\t%s\n"%(snp,fst,"\t".join(partners)))
   return snp_fstat
 
 def calc_3d_dist(snp_loc):
