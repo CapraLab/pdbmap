@@ -94,6 +94,7 @@ def aggregate_stats(snp_1d_dist,snp_3d_dist,snp_ld,snp_fst):
   # all snps with 3d structural information and a partner
   res = []
   snps = snp_3d_dist.keys()
+  snps.sort() # only sort just before printing results
   print "rsID\tFst(ind)\tn(1d)\tn(3d)\tFst(n(1d))\tFst(n(3d))\tLD(n(1d))\tLD(n(3d))"
   for snp in snps:
     ind_fst = snp_fst[snp][1]
@@ -182,7 +183,6 @@ def read_groups(snp_groups,snp_map):
   print "# %d SNPs found in PDBMap."%len(all_snps)
   # Pull those SNPs 
   snp_list = list(union_snps)
-  snp_list.sort()
   return group_snp_dict,snp_loc,snp_list
 
 def calc_ld_dist(pedmap,snp_list):
@@ -244,12 +244,10 @@ def calc_global_fst(snp_list,pop_id_map,pedmap):
     print "# # Fst scores:",len(ind_fst)
     print "# # Frequencies:",len(pop_freqs)
     keys = pop_freqs.keys()
-    keys.sort()
     for key in keys:
       snp_popgen[key] = (ind_fst[key],pop_freqs[key])
 
     snps = snp_popgen.keys()
-    snps.sort()
     for snp in snps:
       snp_fstat[snp] = {1:snp_popgen[snp][0]}
     print "# # Fst SNPs:",len(snp_fstat)
