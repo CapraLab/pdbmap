@@ -42,14 +42,14 @@ def main():
 
   ## Read SNP groups if specified
   if snp_groups:
-    group_snp_dict,snp_loc,snp_list = read_groups(snp_groups,snp_map)
+    group_snp_dict,snp_loc,snp_list,snp_exclude = read_groups(snp_groups,snp_map)
     print "# Evaluating %d overlapping SNPs."%len(snp_list)
   # Only group-associated SNPs present in the snp_map are recorded
   # As such, snp_list holds the union of the pedmap and pdbmap SNPs
 
   ## Compute pairwise distance and LD (R^2) for all SNPs
   print "\n# Calculating LD statistics and 1D distances..."
-  snp_ld,snp_bp_dist = calc_ld_dist(pedmap,snp_list)
+  snp_ld,snp_bp_dist = calc_ld_dist(pedmap,snp_list,snp_exclude)
 
   ## Compute pairwise structural distance for all SNPs
   print "# Calculating 3D distances..."
@@ -106,7 +106,9 @@ def aggregate_stats(snp_1d_dist,snp_3d_dist,snp_ld,snp_fst):
       # and select the A->B pair with the shortest distance overall
       n3d = min([(min(snp_3d_dist[snp][snpb][0]),snpb) for snpb in snp_3d_dist[snp]])[1]
       # Lookup Fst for nearest partners
-      fstn1d = snp_fst[snp][2][(n1d,)]
+      # (if the SNP is alone in the gene and associated structures, then no 
+      # (1d Fst was calculated even though the nearest genomic SNP was located)
+      fstn1d = float("NaN") if 2 not in snp_fst[snp] else snp_fst[snp][2][(n1d,)]
       fstn3d = float("NaN") if n3d == "NA" else snp_fst[snp][2][(n3d,)]
       # Lookup LD for nearest partners
       ldn1d  = snp_ld[snp][n1d]
@@ -189,11 +191,13 @@ def read_groups(snp_groups,snp_map):
           snp_loc.setdefault(row[1],{})[(row[2],row[3])] = [float(x) for x in row[4:]]
           union_snps.add(row[1])
   print "# %d SNPs found in PDBMap."%len(all_snps)
-  # Pull those SNPs 
-  snp_list = list(union_snps)
-  return group_snp_dict,snp_loc,snp_list
+  # Include shared SNPs
+  snp_include = list(union_snps)
+  # Exclude PEDMAP SNPs not in PDBMap
+  snp_exclude = list(set(snp_map) - set(snp_include))
+  return group_snp_dict,snp_loc,snp_include,snp_exclude
 
-def calc_ld_dist(pedmap,snp_list):
+def calc_ld_dist(pedmap,snp_list,snp_exclude):
   snp_bp_dist  = {}
   snp_ld = {}
 
@@ -201,13 +205,17 @@ def calc_ld_dist(pedmap,snp_list):
   if not os.path.isfile("%s.ld"%pedmap):
     try:
       print "# Calculating LD with plink..."
-      cmd = "plink --file %s --r2 --ld-window 250000000 --ld-window-kb 250000 --ld-window-r2 0.0 --noweb"%pedmap
+      with open("snp_exclude.txt",'w') as fout:
+        fout.write("\n".join(snp_exclude))
+      cmd = "plink --file %s --exclude snp_exclude.txt --r2 --ld-window 250000000 --ld-window-kb 250000 --ld-window-r2 0.0 --noweb"%pedmap
       p = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
       out,err = p.communicate() # ensure process has finished
       os.system("cp -f plink.ld %s.ld"%pedmap)
     except: raise
     finally:
-      os.system("rm -f plink.*") # remove plink output files
+      # remove plink-related files
+      os.system("rm -f plink.*")
+      os.system("rm -f snp_exclude.txt")
   else:
     print "# Loading LD from log..."
   with open("%s.ld"%pedmap,'rb') as fin:
@@ -260,7 +268,7 @@ def calc_global_fst(snp_list,pop_id_map,pedmap):
     for snp in snps:
       snp_fstat[snp] = {1:snp_popgen[snp][0]}
     print "# # Fst SNPs:",len(snp_fstat)
-    print "# Global Fst: ",global_fst
+    print "# Global Fstats: ",global_fst
     return snp_fstat # not necessary, but improves clarity
   except: raise
   finally:
@@ -280,7 +288,7 @@ def calc_kwise_fst(snp_fstat,pop_id_map,pedmap,krange,snp_groups=None,group_snp_
       continue # to next k
     with open('%s_%d-tuple.fst'%(pedmap,k),'wb'): pass # create k-wise Fst file
 
-    # Generate k-tuples
+    # Generate k-tuples for all gene-paired or pdb-paired SNPs
     print "# Calculating tuples for k=%d..."%k
     combns = []
     if snp_groups:
@@ -301,7 +309,7 @@ def calc_kwise_fst(snp_fstat,pop_id_map,pedmap,krange,snp_groups=None,group_snp_
     try:
       with open(tempfile,'wb') as fout:
           writer = csv.writer(fout,delimiter=' ')
-          for combn in unqiue_combns:
+          for combn in unique_combns:
             writer.writerow(combn)
 
       # Calculate Fst
