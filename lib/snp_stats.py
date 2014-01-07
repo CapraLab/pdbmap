@@ -63,7 +63,7 @@ def main():
   ## Compute Fst for k-wise tuples (k > 1), update snp_fstat
   print "# Calculating k-wise Fst estimates..."
   snp_fstat = calc_kwise_fst(snp_fstat,pop_id_map,pedmap,krange,snp_groups,group_snp_dict)
-  # snp_fstat = calc_kwise_fst(snp_fstat,pop_id_map,pedmap,krange,snp_list)
+  # snp_fstat = calc_kwise_fst(snp_fstat,pop_id_map,pedmap,krange,snp_list=snp_list)
 
   ## Aggregate all the measurements and statistics
   print "# Aggregating results..."
@@ -71,7 +71,7 @@ def main():
 
   ## Save all results
   print "# Saving results..."
-  save_results(pedmap,res)
+  save_results(os.path.basename(pedmap),res)
 
 def save_results(pedmap,res):
   # create results directory
@@ -83,35 +83,43 @@ def save_results(pedmap,res):
   os.system("cp -f `which calc_fst.r` %s/"%resdir)
   # record the original command
   with open("%s/command.txt"%resdir,'wb') as fout:
-    fout.write("\n".join(sys.argv))
+    fout.write(" ".join(sys.argv))
   # save the results
-  with open("%s/%s.stats"%(resdir,pedmap)) as fout:
+  with open("%s/%s.stats"%(resdir,pedmap),'wb') as fout:
     writer = csv.writer(fout,delimiter='\t')
     for row in res:
       writer.writerow(row)
 
 def aggregate_stats(snp_1d_dist,snp_3d_dist,snp_ld,snp_fst):
+  import pdb
   # all snps with 3d structural information and a partner
   res = []
   snps = snp_3d_dist.keys()
   snps.sort() # only sort just before printing results
   print "rsID\tFst(ind)\tn(1d)\tn(3d)\tFst(n(1d))\tFst(n(3d))\tLD(n(1d))\tLD(n(3d))"
-  for snp in snps:
-    ind_fst = snp_fst[snp][1]
-    # get the snp name of the nearest snp in 1d and 3d
-    n1d = min(snp_1d_dist[snp],key=snp_1d_dist[snp].get)
-    # for all partner snps B, find shortest distance b/w A and B
-    # and select the A->B pair with the shortest distance overall
-    n3d = min([(min(snp_3d_dist[snp][snpb][0]),snpb) for snpb in snp_3d_dist[snp]])[1]
-    # Lookup Fst for nearest partners
-    fstn1d = snp_fst[snp][2][(n1d,)]
-    fstn3d = float("NaN") if n3d == "NA" else snp_fst[snp][2][(n3d,)]
-    # Lookup LD for nearest partners
-    ldn1d  = snp_ld[snp][n1d]
-    ldn3d  = float("NaN") if n3d == "NA" else snp_ld[snp][n3d]
-    stats  = [snp,ind_fst,n1d,n3d,fstn1d,fstn3d,ldn1d,ldn3d]
-    print '\t'.join(stats)
-    res.append(stats)
+  try:
+    for snp in snps:
+      ind_fst = snp_fst[snp][1]
+      # get the snp name of the nearest snp in 1d and 3d
+      n1d = min(snp_1d_dist[snp],key=snp_1d_dist[snp].get)
+      # for all partner snps B, find shortest distance b/w A and B
+      # and select the A->B pair with the shortest distance overall
+      n3d = min([(min(snp_3d_dist[snp][snpb][0]),snpb) for snpb in snp_3d_dist[snp]])[1]
+      # Lookup Fst for nearest partners
+      fstn1d = snp_fst[snp][2][(n1d,)]
+      fstn3d = float("NaN") if n3d == "NA" else snp_fst[snp][2][(n3d,)]
+      # Lookup LD for nearest partners
+      ldn1d  = snp_ld[snp][n1d]
+      ldn3d  = float("NaN") if n3d == "NA" else snp_ld[snp][n3d]
+      stats  = [snp,ind_fst,n1d,n3d,fstn1d,fstn3d,ldn1d,ldn3d]
+      print '\t'.join([str(stat) for stat in stats])
+      res.append(stats)
+  except Exception as e:
+    print "failed on snp: %s"%snp
+    print "error:\n%s"%e
+    print "entering debug..."
+    pdb.set_trace()
+    sys.exit(1)
   return res
 
 def read_pop(pop_id_map):
@@ -146,7 +154,8 @@ def qc_freq(snp_map,pedmap):
     except: raise
     finally:
       os.system("rm -f plink.*") # remove plink output files
-  print "# Loading frequency from log..."
+  else:
+    print "# Loading frequency from log..."
   with open("%s.frq"%pedmap,'rb') as fin:
     header = fin.readline()
     for line in fin:
@@ -179,7 +188,6 @@ def read_groups(snp_groups,snp_map):
           # Record the SNP (qualified by pdbid and chain) 3D location
           snp_loc.setdefault(row[1],{})[(row[2],row[3])] = [float(x) for x in row[4:]]
           union_snps.add(row[1])
-    groups = group_snp_dict.keys()
   print "# %d SNPs found in PDBMap."%len(all_snps)
   # Pull those SNPs 
   snp_list = list(union_snps)
@@ -190,7 +198,7 @@ def calc_ld_dist(pedmap,snp_list):
   snp_ld = {}
 
   # If LD has been calculated before, load from log, else compute
-  if not os.path.isfile("plink.ld %s.ld"%pedmap):
+  if not os.path.isfile("%s.ld"%pedmap):
     try:
       print "# Calculating LD with plink..."
       cmd = "plink --file %s --r2 --ld-window 250000000 --ld-window-kb 250000 --ld-window-r2 0.0 --noweb"%pedmap
@@ -200,7 +208,8 @@ def calc_ld_dist(pedmap,snp_list):
     except: raise
     finally:
       os.system("rm -f plink.*") # remove plink output files
-  print "# Loading LD from log..."
+  else:
+    print "# Loading LD from log..."
   with open("%s.ld"%pedmap,'rb') as fin:
     header = fin.readline()
     # CHR_A BP_A SNP_A CHR_B BP_B SNP_B R2
@@ -257,7 +266,7 @@ def calc_global_fst(snp_list,pop_id_map,pedmap):
   finally:
     os.system("rm -f %s"%tempfile) # delete temp file
 
-def calc_kwise_fst(snp_fstat,pop_id_map,pedmap,krange,snp_list=None,snp_groups=None,group_snp_dict=None):
+def calc_kwise_fst(snp_fstat,pop_id_map,pedmap,krange,snp_groups=None,group_snp_dict=None,snp_list=None):
   # Evaluate k-tuples for all k in krange
   for k in krange:
 
@@ -284,7 +293,7 @@ def calc_kwise_fst(snp_fstat,pop_id_map,pedmap,krange,snp_list=None,snp_groups=N
 
     # Some snp-snp duplication possible between groups, reduce to unique
     unique_combns = [tup for tup in combns if tup[0] < tup[1]]
-    unqiue_combns.extend([tup for tup in combns if tup[1] < tup[0] and tup not in unique_combns])
+    unique_combns.extend([tup for tup in combns if tup[1] < tup[0] and tup not in unique_combns])
     del combns # immediately free memory
 
     # Write the k-tuples to temp file
