@@ -32,6 +32,9 @@ defaults = {
 	"disable_human_homologue" : False,
 	"create_new_db" : False,
 	"force" : False,
+	"pdbid" : "",
+	"species" : "",
+	"unp" : "",
 	"speclist" : "",
 	"transmap" : ""
 	}
@@ -54,6 +57,9 @@ parser.add_argument("--map_dir", help="Directory to save pdbmap BED file")
 parser.add_argument("--disable_human_homologue", action='store_true', help="Disable mapping from non-human PDBs to human homologues")
 parser.add_argument("--create_new_db", action='store_true', help="Create a new database prior to uploading PDB data")
 parser.add_argument("-f", "--force", action='store_true', help="Force configuration. No safety checks.")
+parser.add_argument("--pdbid", help="Force pdbid")
+parser.add_argument("--species", help="Force species")
+parser.add_argument("--unp", help="Force unp")
 parser.add_argument("--speclist", help="Species code -> species map file")
 parser.add_argument("--transmap", help="UniProt ID -> EnsEMBL transcript map file")
 
@@ -135,7 +141,14 @@ def main():
 	print "Building GenomePDB..."
 	con = MySQLdb.connect(host=args.dbhost,user=args.dbuser,passwd=args.dbpass,db=args.dbname)
 	c = con.cursor()
-	c.execute("CALL build_GenomePDB();")
+	c.execute("SELECT * FROM GenomePDB LIMIT 1")
+	res = c.fetchone()
+	if not res: # not yet generated
+		c.execute("CALL build_GenomePDB();")
+	else: # adding to existing
+		for pdb_id,pdb_file in new_pdbs:
+			pdb_id = pdb_id if not args.pdbid else args.pdbid
+			c.execute("CALL update_GenomePDB('%s')"%pdb_id)
 	con.close() # b/c it may have timed out already anyway
 	print "Generating BED file for %s..."%args.dbname
 	c = con.cursor()
@@ -169,7 +182,11 @@ def load_pdb(pdb_id,pdb_file):
 	if os.path.splitext(pdb_file)[-1] == '.gz':
 		fin = gzip.open(pdb_file,'r')
 	else:
-		fin = open(pdb_file,'r')	
+		fin = open(pdb_file,'r')
+
+	# Assign all forced variables
+	pdb_id = pdb_id if not args.pdbid else args.pdbid
+	print
 
 	species         = []
 	experiment_type = None
@@ -194,11 +211,11 @@ def load_pdb(pdb_id,pdb_file):
 		elif field == "MODEL":
 			cur_model = int(line[10:14])
 		elif field == "DBREF":
-			if check_species(species):
+			if check_species(species) and not args.force:
 				fin.close()
 				sys.stderr.write("%s was removed for failing the species check.\n"%pdb_id)
 				return 1,0
-			if (read_dbref(line,c,pdb_id)):
+			if read_dbref(line,c,pdb_id) and not args.force:
 				sys.stderr.write("%s was removed because it contains an insertion or deletion.\n"%pdb_id)
 		elif field == "SEQADV":
 			read_seqadv(line,c)
@@ -209,8 +226,12 @@ def load_pdb(pdb_id,pdb_file):
 	# Check that required fields have some information
 	c.execute("SELECT * FROM chains")
 	if not c.fetchone():
-		sys.stderr.write("%s was removed because no chains were parsed.\n"%pdb_id)
-		return 1,0
+		if not args.force:
+			sys.stderr.write("%s was removed because no chains were parsed.\n"%pdb_id)
+			return 1,0
+		else:
+			print "Forcing chain information: chain=A,unp=%s,pdbid=%s,pdbstart=0,offset=0,species=%s"%(args.unp,args.pdbid,args.species)
+			c.execute("INSERT INTO chains VALUES (?,?,?,?,?,?)",('A',args.unp,args.pdbid,0,0,args.species))
 	c.execute("SELECT * FROM coords")
 	if not c.fetchone():
 		sys.stderr.write("%s was removed because no atoms were parsed.\n"%pdb_id)
@@ -292,18 +313,25 @@ def load_pdb(pdb_id,pdb_file):
 			print("\tSkipping:")
 			print("\tCanceled by user.")
 			sys.stderr.write("%s was removed because the user canceled the processing\n"%pdb_id)
-			return 1,0
-		finally:
 			# Clean up any temporary files
 			os.system('rm -f %s_PDBTranscript.tab'%pdb_id)
-			os.system('rm -f %s_AlignmentScores.tab'%pdb_id)
+			os.system('rm -f %s_Alignment.tab'%pdb_id)
 			os.system('rm -f %s_AlignmentScores.tab'%pdb_id)
 			os.system('rm -f %s.tab'%pdb_id)
 			os.system('rm -f %s_GenomicCoords.tab'%pdb_id)
+			return 1,0
+		except Exception as e:
+			print "Unhandled exception chain/transcript mapping:"
+			print e
+			# Clean up any temporary files
+			os.system('rm -f %s_PDBTranscript.tab'%pdb_id)
+			os.system('rm -f %s_Alignment.tab'%pdb_id)
+			os.system('rm -f %s_AlignmentScores.tab'%pdb_id)
+			os.system('rm -f %s.tab'%pdb_id)
+			os.system('rm -f %s_GenomicCoords.tab'%pdb_id)
+			return 1,0
 
 	# Upload to the database
-	#unaligned,aligned = best_candidates(pdb_id,seqadv_protected)
-	#num_matches = max([unaligned,aligned])
 	num_matches = best_candidates(pdb_id,seqadv_protected)
 	print("\t%d transcript(s) found.\n"%num_matches)
 	publish_data(pdb_id,args.dbhost,args.dbuser,args.dbpass,args.dbname,num_matches)
@@ -399,7 +427,7 @@ def read_atom(line,c):
 	"""Parses a ATOM field from a PDB file"""
 	chain = line[21]
 	c.execute("SELECT * FROM chains WHERE chain=?",chain)
-	if c.fetchone():
+	if c.fetchone() or args.force:
 		serialnum = int(line[6:11])
 		seqres = int(line[22:26])
 		idcode = line[26].strip()
@@ -671,7 +699,7 @@ def publish_data(pdb_id,dbhost,dbuser,dbpass,dbname,num_matches):
 		con.close()	# Close the remote MySQL connection
 		os.system('rm -f %s_PDBTranscript.tab'%pdb_id)
 		os.system('rm -f %s_AlignmentScores.tab'%pdb_id)
-		os.system('rm -f %s_AlignmentScores.tab'%pdb_id)
+		os.system('rm -f %s_Alignment.tab'%pdb_id)
 		os.system('rm -f %s.tab'%pdb_id)
 		os.system('rm -f %s_GenomicCoords.tab'%pdb_id)
 
@@ -804,9 +832,12 @@ if __name__=='__main__':
 		if raw_input("Are you sure you want to do this? (y/n):") == 'n':
 			print "Aborting..."
 			sys.exit(0)
+
 	# Load the species code -> species map
 	scientific_speclist,common_speclist = load_speclist(args.speclist)
 
 	# Load the UNP -> transcript map
 	transmap = load_transmap(args.transmap)
+
+	# Begin processing
 	main()
