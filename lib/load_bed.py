@@ -34,6 +34,8 @@ os.system("mv %s %s"%(bed_temp,var_file))
 
 # Find intersections
 ext = var_file.split('.')[-1].lower()
+if ext == 'gz':
+  ext = var_file.split('.')[-2].lower()
 if ext == 'bed':
   os.system("/usr/analysis/bin/intersectBed -a %s -b %s -wa -wb | cut -f 1-21 > %s"%(pdbmap_file,var_file,intersect_file))
   # Adjust the start,end,var_start,var_end positions to 1-indexing
@@ -105,7 +107,7 @@ query.append("""LOAD DATA LOCAL INFILE '%s' INTO TABLE Intersect_Variants_%s
                  pdbid,chain,species,unp,chain_seq,chain_aa1,x,y,z,
                  %s)"""%(intersect_file,dat_name,var_file_cols))
 if ext == 'vcf':
-  query.append("""UPDATE Intersect_Variants_%s SET var_end=var_start+1""")
+  query.append("""UPDATE Intersect_Variants_%s SET var_end=var_start+1"""%dat_name)
 
 # Execute intersection queries
 for q in query:

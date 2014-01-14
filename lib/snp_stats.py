@@ -97,9 +97,31 @@ def aggregate_stats(snp_1d_dist,snp_3d_dist,snp_ld,snp_fst):
   snps = snp_3d_dist.keys()
   snps.sort() # only sort just before printing results
   print "rsID\tFst(ind)\tn(1d)\tn(3d)\tFst(n(1d))\tFst(n(3d))\tLD(n(1d))\tLD(n(3d))"
-  try:
-    for snp in snps:
-      ind_fst = snp_fst[snp][1]
+  for snp in snps:
+
+    # Compute all known information for this SNP
+    for snpB in snps:
+      if snpB in snp_ld[snp]:  # get LD
+        snp_ld  = snp_ld[snp][snpB]
+      else: snp_ld = 'NA'
+      if snpB in snp_fst[snp]: # get Fst
+        snp_fst = snp_fst[snp][2][(snpB,)]
+      else: snp_fst = 'NA'
+      if snpB in snp_1d_dist[snp]: # get genomic distance
+        dist_1d = snp_1d_dist[snp][snpB]
+      else: dist_1d = 'NA'
+      if snpB in snp_3d_dist[snp]: # get structural distance
+        dist_3d,context = snp_3d_dist[snp][snpB]
+        pdbid_chain,loc = context
+        pdbid,chain = tuple(pdbid_chain.split('-'))
+        x,y,z = loc
+      else: dist_3d = pdbid = chain = x = y = z = 'NA'
+      row = [snp,snpB,snp_ld,snp_fst,dist_1d,dist_3d,pdbid,chain,x,y,z]
+      print "\t".join(row) # print the row to stdout
+
+    # Compute only the nearest-neighbor information for this SNP
+    try:
+      ind_fst = snp_fst[snp][1] # Pull the individual Fst
       # get the snp name of the nearest snp in 1d and 3d
       n1d = min(snp_1d_dist[snp],key=snp_1d_dist[snp].get)
       # for all partner snps B, find shortest distance b/w A and B
@@ -116,12 +138,9 @@ def aggregate_stats(snp_1d_dist,snp_3d_dist,snp_ld,snp_fst):
       stats  = [snp,ind_fst,n1d,n3d,fstn1d,fstn3d,ldn1d,ldn3d]
       print '\t'.join([str(stat) for stat in stats])
       res.append(stats)
-  except Exception as e:
-    print "failed on snp: %s"%snp
-    print "error:\n%s"%e
-    print "entering debug..."
-    pdb.set_trace()
-    sys.exit(1)
+    except Exception as e:
+      sys.stderr.write("failed for snp: %s\n"%snp)
+      # Continue processing the remaining SNPs
   return res
 
 def read_pop(pop_id_map):
