@@ -1,3 +1,10 @@
+## Directories ##
+data/
+config/
+results/
+qsub/
+
+## File types ##
 *.pdb
 *.ped
 *.map
@@ -5,7 +12,14 @@
 *.nosex
 *.freq
 *.tab
-*.out
-*.err
-bush/*
-capra/*
+*.o*
+*.e*
+
+## OS Generated files ##
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
