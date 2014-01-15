@@ -102,10 +102,10 @@ def aggregate_stats(snp_1d_dist,snp_3d_dist,snp_ld,snp_fst):
     # Compute all known information for this SNP
     for snpB in snps:
       if snpB in snp_ld[snp]:  # get LD
-        snp_ld  = snp_ld[snp][snpB]
+        ld_snp  = snp_ld[snp][snpB]
       else: snp_ld = 'NA'
       if snpB in snp_fst[snp]: # get Fst
-        snp_fst = snp_fst[snp][2][(snpB,)]
+        fst_snp = snp_fst[snp][2][(snpB,)]
       else: snp_fst = 'NA'
       if snpB in snp_1d_dist[snp]: # get genomic distance
         dist_1d = snp_1d_dist[snp][snpB]
@@ -116,7 +116,7 @@ def aggregate_stats(snp_1d_dist,snp_3d_dist,snp_ld,snp_fst):
         pdbid,chain = tuple(pdbid_chain.split('-'))
         x,y,z = loc
       else: dist_3d = pdbid = chain = x = y = z = 'NA'
-      row = [snp,snpB,snp_ld,snp_fst,dist_1d,dist_3d,pdbid,chain,x,y,z]
+      row = [snp,snpB,ld_snp,fst_snp,dist_1d,dist_3d,pdbid,chain,x,y,z]
       print "\t".join(row) # print the row to stdout
 
     # Compute only the nearest-neighbor information for this SNP
