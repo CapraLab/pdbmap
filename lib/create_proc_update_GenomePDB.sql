@@ -1,4 +1,4 @@
-CREATE DEFINER=`mike`@`gwar-dev.mc.vanderbilt.edu` PROCEDURE `update_GenomePDB`(new_pdbid VARCHAR(20))
+CREATE DEFINER=`mike`@`gwar-dev.mc.vanderbilt.edu` PROCEDURE `update_GenomePDB`(new_pdbid VARCHAR(50))
 BEGIN
 INSERT INTO GenomePDB
 SELECT a.chr,a.start,a.end,a.strand,a.gene,a.transcript,b.trans_seq,a.aa1,d.pdbid,d.chain,d.species,d.unp,b.chain_seq,c.aa1,c.x,c.y,c.z

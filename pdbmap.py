@@ -163,9 +163,9 @@ def sqlite_init():
 	"""Initializes a temporary SQLite instance for local PDB->Genome Mapping"""
 	con = sqlite3.connect(':memory:')
 	c = con.cursor()
-	c.execute("CREATE TABLE chains (chain VARCHAR(1),unp VARCHAR(10),pdb VARCHAR(20),pdbstart INT,offset INT,species VARCHAR(20),PRIMARY KEY(chain))")
-	c.execute("CREATE TABLE coords (chain VARCHAR(1),serialnum INT,seqres INT,aa3 VARCHAR(3), aa1 VARCHAR(1),x DOUBLE,y DOUBLE,z DOUBLE,PRIMARY KEY(chain,serialnum))")
-	c.execute("CREATE TABLE seqadv (chain VARCHAR(1),seqres INT,aa3 VARCHAR(3),conflict VARCHAR(20),PRIMARY KEY(chain,seqres))")
+	c.execute("CREATE TABLE chains (chain VARCHAR(10),unp VARCHAR(20),pdb VARCHAR(50),pdbstart INT,offset INT,species VARCHAR(50),PRIMARY KEY(chain))")
+	c.execute("CREATE TABLE coords (chain VARCHAR(10),serialnum INT,seqres INT,aa3 VARCHAR(3), aa1 VARCHAR(1),x DOUBLE,y DOUBLE,z DOUBLE,PRIMARY KEY(chain,serialnum))")
+	c.execute("CREATE TABLE seqadv (chain VARCHAR(10),seqres INT,aa3 VARCHAR(3),conflict VARCHAR(20),PRIMARY KEY(chain,seqres))")
 	con.commit()
 	return c,con
 
@@ -726,12 +726,12 @@ def create_new_db(dbhost,dbuser,dbpass,dbname):
 	query = ["DROP DATABASE IF EXISTS %s"%dbname]
 	query.append("CREATE DATABASE IF NOT EXISTS %s"%dbname)
 	query.append("USE %s"%dbname)
-	query.append("CREATE TABLE %s.GenomicCoords (transcript VARCHAR(20),gene VARCHAR(20), seqres INT,aa1 VARCHAR(1),start BIGINT,end BIGINT,chr VARCHAR(10),strand INT,PRIMARY KEY(transcript,seqres),KEY(transcript),KEY(start,end,chr))"%dbname)
-	query.append("CREATE TABLE %s.PDBCoords (pdbid VARCHAR(20),chain VARCHAR(1),seqres INT,aa3 VARCHAR(3),aa1 VARCHAR(1),x DOUBLE,y DOUBLE,z DOUBLE,PRIMARY KEY(pdbid,chain,seqres))"%dbname)
-	query.append("CREATE TABLE %s.PDBInfo (pdbid VARCHAR(20),species VARCHAR(20),chain VARCHAR(1),unp VARCHAR(20),PRIMARY KEY(pdbid,chain))"%dbname)
+	query.append("CREATE TABLE %s.GenomicCoords (transcript VARCHAR(50),gene VARCHAR(50), seqres INT,aa1 VARCHAR(1),start BIGINT,end BIGINT,chr VARCHAR(20),strand INT,PRIMARY KEY(transcript,seqres),KEY(transcript),KEY(start,end,chr))"%dbname)
+	query.append("CREATE TABLE %s.PDBCoords (pdbid VARCHAR(50),chain VARCHAR(1),seqres INT,aa3 VARCHAR(3),aa1 VARCHAR(1),x DOUBLE,y DOUBLE,z DOUBLE,PRIMARY KEY(pdbid,chain,seqres))"%dbname)
+	query.append("CREATE TABLE %s.PDBInfo (pdbid VARCHAR(50),species VARCHAR(50),chain VARCHAR(10),unp VARCHAR(50),PRIMARY KEY(pdbid,chain))"%dbname)
 	# query.append("CREATE TABLE %s.PDBTranscript (pdbid VARCHAR(20),chain VARCHAR(1),transcript VARCHAR(20),homologue BOOLEAN,conflict REAL,PRIMARY KEY(pdbid,chain,transcript),KEY(transcript),KEY(conflict))"%dbname)
-	query.append("CREATE TABLE %s.AlignmentScores (pdbid VARCHAR(20),chain VARCHAR(1),transcript VARCHAR(20),homologue BOOLEAN,score REAL,perc_nongap REAL,perc_match REAL,PRIMARY KEY(pdbid,chain,transcript),KEY(transcript),KEY(pdbid,chain),KEY(score),KEY(perc_nongap),KEY(perc_match))"%dbname)
-	query.append("CREATE TABLE %s.Alignment (pdbid VARCHAR(20),chain VARCHAR(1),chain_seq INT,transcript VARCHAR(20),trans_seq INT,PRIMARY KEY(pdbid,chain,chain_seq,transcript,trans_seq),KEY(transcript),KEY(pdbid),KEY(pdbid,chain))"%dbname)
+	query.append("CREATE TABLE %s.AlignmentScores (pdbid VARCHAR(50),chain VARCHAR(10),transcript VARCHAR(50),homologue BOOLEAN,score REAL,perc_nongap REAL,perc_match REAL,PRIMARY KEY(pdbid,chain,transcript),KEY(transcript),KEY(pdbid,chain),KEY(score),KEY(perc_nongap),KEY(perc_match))"%dbname)
+	query.append("CREATE TABLE %s.Alignment (pdbid VARCHAR(50),chain VARCHAR(10),chain_seq INT,transcript VARCHAR(50),trans_seq INT,PRIMARY KEY(pdbid,chain,chain_seq,transcript,trans_seq),KEY(transcript),KEY(pdbid),KEY(pdbid,chain))"%dbname)
 	# query.append("""CREATE TABLE `%s`.`GenomePDB` (
  #  		`pdbid` VARCHAR(50) NOT NULL default '',
  #  		`species` VARCHAR(50) default NULL,
