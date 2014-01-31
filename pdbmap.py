@@ -733,9 +733,9 @@ def create_new_db(dbhost,dbuser,dbpass,dbname):
 	query.append("CREATE TABLE %s.AlignmentScores (pdbid VARCHAR(20),chain VARCHAR(1),transcript VARCHAR(20),homologue BOOLEAN,score REAL,perc_nongap REAL,perc_match REAL,PRIMARY KEY(pdbid,chain,transcript),KEY(transcript),KEY(pdbid,chain),KEY(score),KEY(perc_nongap),KEY(perc_match))"%dbname)
 	query.append("CREATE TABLE %s.Alignment (pdbid VARCHAR(20),chain VARCHAR(1),chain_seq INT,transcript VARCHAR(20),trans_seq INT,PRIMARY KEY(pdbid,chain,chain_seq,transcript,trans_seq),KEY(transcript),KEY(pdbid),KEY(pdbid,chain))"%dbname)
 	# query.append("""CREATE TABLE `%s`.`GenomePDB` (
- #  		`pdbid` VARCHAR(20) NOT NULL default '',
- #  		`species` VARCHAR(20) default NULL,
- #  		`chain` VARCHAR(1) NOT NULL default '',
+ #  		`pdbid` VARCHAR(50) NOT NULL default '',
+ #  		`species` VARCHAR(50) default NULL,
+ #  		`chain` VARCHAR(10) NOT NULL default '',
  #  		`unp` VARCHAR(20) default NULL,
  #  		`gene` VARCHAR(20) default NULL,
  #  		`transcript` VARCHAR(20) default NULL,
@@ -746,7 +746,7 @@ def create_new_db(dbhost,dbuser,dbpass,dbname):
  #  		`z` DOUBLE default NULL,
  #  		`start` BIGINT(20) default NULL,
  #  		`end` BIGINT(20) default NULL,
- #  		`chr` VARCHAR(10) default NULL,
+ #  		`chr` VARCHAR(20) default NULL,
  #  		`strand` INT(11) default NULL,
  #  		PRIMARY KEY `transpos` (`pdbid`,`chain`,`transcript`,`chr`,`start`,`end`,`strand`),
  #  		KEY `gene` (`gene`),
