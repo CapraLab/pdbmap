@@ -21,7 +21,7 @@ pdbmap_file = sys.argv[2]
 intersect_dir = sys.argv[3]
 dat_name = "".join(os.path.basename(var_file).split('.')[:-1])
 if len(sys.argv) > 4:
-	dat_name = sys.argv[4].replace('.','_')
+  dat_name = sys.argv[4].replace('.','_')
 
 # Filename Definitions
 bed_temp         = var_file+".temp"
@@ -37,8 +37,10 @@ os.system("mv %s %s"%(bed_temp,var_file))
 # Find intersections
 ext = var_file.split('.')[-1].lower()
 if ext == 'gz':
+  print "Detected gzipped file."
   ext = var_file.split('.')[-2].lower()
 if ext == 'bed':
+  print "Detected file type: BED"
   os.system("/usr/analysis/bin/intersectBed -a %s -b %s -wa -wb | cut -f 1-21 > %s"%(pdbmap_file,var_file,intersect_file))
   # Adjust the start,end,var_start,var_end positions to 1-indexing
   cmd  = """awk -F"\t" -v OFS="\t" """
@@ -47,6 +49,7 @@ if ext == 'bed':
   cmd += """%s > %sFIX"""%(intersect_file,intersect_file)
   os.system(cmd)
 elif ext == 'vcf':
+  print "Detected file type: VCF"
   os.system("/usr/analysis/bin/intersectBed -a %s -b %s -wb | cut -f 1-20 > %s"%(pdbmap_file,var_file,intersect_file))
   # Adjust the start,end positions to 1-indexing
   cmd  = """awk -F"\t" -v OFS="\t" """
