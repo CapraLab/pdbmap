@@ -103,10 +103,10 @@ def aggregate_stats(snp_1d_dist,snp_3d_dist,snp_ld,snp_fst):
     for snpB in snps:
       if snpB in snp_ld[snp]:  # get LD
         ld_snp  = snp_ld[snp][snpB]
-      else: snp_ld = 'NA'
+      else: ld_snp = 'NA'
       if snpB in snp_fst[snp]: # get Fst
         fst_snp = snp_fst[snp][2][(snpB,)]
-      else: snp_fst = 'NA'
+      else: fst_snp = 'NA'
       if snpB in snp_1d_dist[snp]: # get genomic distance
         dist_1d = snp_1d_dist[snp][snpB]
       else: dist_1d = 'NA'

@@ -26,7 +26,9 @@ if len(sys.argv) > 4:
 # Filename Definitions
 bed_temp         = var_file+".temp"
 intersect_file   = "%s/genome_pdb_%s.intersect"%(intersect_dir,dat_name)
+intersect_file = intersect_file.replace('-','_')
 nointersect_file = "%s/genome_pdb_%s.nointersect"%(intersect_dir,dat_name)
+nointersect_file = nointersect_file.replace('-','_')
 
 # Convert Chromosome 23+ Encoding
 os.system("sed s/^23/X/g %s | sed s/^24/Y/g | sed s/^25/PAR/g | sed s/^26/MT/g > %s"%(var_file,bed_temp))
