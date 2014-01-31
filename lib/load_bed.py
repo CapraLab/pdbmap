@@ -8,7 +8,7 @@ filterwarnings('ignore',"Unknown table.*")
 
 # Command Line Arguments:
 #	Variant .bed file or .vcf file
-#	PDBMAP .bed file
+#	PDBMap .bed file
 #	Intersection directory
 #	[Optional] variant source name
 if len(sys.argv) < 2:
@@ -31,8 +31,10 @@ nointersect_file = "%s/genome_pdb_%s.nointersect"%(intersect_dir,dat_name)
 nointersect_file = nointersect_file.replace('-','_')
 
 # Convert Chromosome 23+ Encoding
-os.system("sed s/^23/X/g %s | sed s/^24/Y/g | sed s/^25/PAR/g | sed s/^26/MT/g > %s"%(var_file,bed_temp))
-os.system("mv %s %s"%(bed_temp,var_file))
+# UPDATE: Chromosome is now stored as chr1, chr12, chrX, etc.
+#       : No conversion is necessary.
+#os.system("sed s/^23/X/g %s | sed s/^24/Y/g | sed s/^25/PAR/g | sed s/^26/MT/g > %s"%(var_file,bed_temp))
+#os.system("mv %s %s"%(bed_temp,var_file))
 
 # Find intersections
 ext = var_file.split('.')[-1].lower()
