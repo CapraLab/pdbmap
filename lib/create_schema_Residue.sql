@@ -1,10 +1,10 @@
 CREATE TABLE IF NOT EXISTS Residue (
 pdbid VARCHAR(50),
 chain VARCHAR(10),
-residue VARCHAR(10),
+resname VARCHAR(10),
+rescode VARCHAR(1),
 seqid INT,
 ins INT,
-rescode VARCHAR(1),
 x DOUBLE,
 y DOUBLE,
 z DOUBLE,

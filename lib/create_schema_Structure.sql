@@ -1,15 +1,21 @@
 CREATE TABLE IF NOT EXISTS Structure (
 pdbid VARCHAR(50),
 tier INT,
-method VARCHAR(100)
+method VARCHAR(100),
 quality DOUBLE,
 resolution DOUBLE,
-release DATE,
+`name` TEXT,
+author TEXT,
+deposition DATE,
+`release` DATE,
+compound TEXT,
 keywords TEXT,
 reference TEXT,
+structure_reference TEXT,
 PRIMARY KEY(pdbid),
 KEY(tier,quality),
 KEY(method),
-KEY(quality)
-KEY(resolution)
+KEY(quality),
+KEY(resolution),
+KEY(`release`)
 )
