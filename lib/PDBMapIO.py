@@ -118,7 +118,6 @@ class PDBMapIO(PDBIO):
         rfields = dict((key,r.__getattribute__(key)) for key in dir(r) 
                         if isinstance(key,collections.Hashable))
         rquery = rquery%rfields
-      # print "Query:\n%s"%rquery[:-1]
       self._c.execute(rquery[:-1])
     self._close()
     return("Structure uploaded to %s."%self.dbname)
