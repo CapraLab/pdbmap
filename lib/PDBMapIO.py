@@ -11,19 +11,12 @@
 # Description    : PDBParser class utilizing Bio.PDB.PDBParser and mysql to
 #                : read and upload structures to the PDBMap.Structure database.
 #=============================================================================#
-# PBS Parameters
-#PBS -M mike.sivley@vanderbilt.edu
-#PBS -m bae
-#PBS -l nodes=vision.mc.vanderbilt.edu
-#PBS -l mem=5000mb
-#PBS -l walltime=1:00:00:00
-#=============================================================================#
 
 # See main check for cmd line parsing
-import argparse
 import sys,os,csv,collections
 from Bio.PDB.PDBParser import PDBParser
 from Bio.PDB.PDBIO import PDBIO
+from PDBMapStructure import PDBMapStructure
 import MySQLdb
 
 class PDBMapParser(PDBParser):
@@ -32,10 +25,9 @@ class PDBMapParser(PDBParser):
     super(PDBMapParser,self).__init__(PERMISSIVE,get_header,
                                       structure_builder,QUIET)
 
-  def get_structure(self,pdbid,fname,tier=0,quality=-1):
+  def get_structure(self,pdbid,fname,tier=-1,quality=-1):
     s = PDBParser.get_structure(self,pdbid,fname)
-    s.tier = tier
-    s.header['quality'] = quality
+    s = PDBMapStructure(s,tier,quality)
 
     # Parse DBREF
     with open(fname,'rb') as fin:
@@ -76,13 +68,14 @@ class PDBMapParser(PDBParser):
     return s
 
 class PDBMapIO(PDBIO):
-  def __init__(self,dbhost,dbuser,dbpass,dbname):
+  def __init__(self,dbhost=None,dbuser=None,dbpass=None,dbname=None):
     super(PDBMapIO,self).__init__()
     self.dbhost = dbhost
     self.dbuser = dbuser
     self.dbpass = dbpass
     self.dbname = dbname
-    self.check_schema()
+    if dbhost:
+      self.check_schema()
 
   def upload_structure(self):
     # Uploads structure to a mysql database
@@ -223,13 +216,3 @@ aa_code_map = {"ala" : "A",
 if __name__== "__main__":
   sys.stderr.write("Class definition. Should not be called from command line.")
   sys.exit(1)
-
-# for c in s.get_chains():
-#     for c in m:
-#       print c.get_id()
-#       print c.unp
-#       for r in c:
-#         if r.id[0].strip(): # no hetero flag
-#           continue
-#         print r.id[1],r.resname,r.id[2]
-#         print sum([a.coord for a in r])
