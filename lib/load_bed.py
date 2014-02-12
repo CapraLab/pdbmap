@@ -19,9 +19,10 @@ if len(sys.argv) < 2:
 var_file = sys.argv[1]
 pdbmap_file = sys.argv[2]
 intersect_dir = sys.argv[3]
-dat_name = "".join(os.path.basename(var_file).split('.')[:-1])
+dat_name = sys.argv[4].replace('.','_')
+append = False
 if len(sys.argv) > 4:
-  dat_name = sys.argv[4].replace('.','_')
+  append = bool(sys.argv[5])
 
 # Filename Definitions
 bed_temp         = var_file+".temp"
@@ -71,36 +72,37 @@ except MySQLdb.Error as e:
 
 # Drop/Create/Load Intersection Table
 c.execute("use pdbmap_v7;")
-query = ["DROP TABLE IF EXISTS Intersect_Variants_%s;"%dat_name]
-query.append("""CREATE TABLE Intersect_Variants_%s (
-  `var_chr` varchar(10) NOT NULL default '',
-  `var_start` int(11) NOT NULL default '0',
-  `var_end` int(11) NOT NULL default '0',
-  `var_name` varchar(50) default NULL,
-  `chr` varchar(10) NOT NULL default '',
-  `start` int(11) NOT NULL default '0',
-  `end` int(11) NOT NULL default '0',
-  `strand`INT default 0,
-  `gene` varchar(20) NOT NULL default '',
-  `transcript` varchar(20) NOT NULL default '',
-  `trans_seq` int(11) default NULL,
-  `trans_aa1` varchar(1) default NULL,
-  `pdbid` varchar(20) NOT NULL default '',
-  `chain` varchar(1) NOT NULL default '',
-  `species` varchar(20) default NULL,
-  `unp` varchar(20) default NULL,
-  `chain_seq` int(11) default NULL,
-  `chain_aa1` varchar(1) default NULL,
-  `x` double default NULL,
-  `y` double default NULL,
-  `z` double default NULL,
-  PRIMARY KEY  (`pdbid`,`chain`,`chain_seq`,`transcript`,`trans_seq`,`chr`,`start`,`end`,`var_chr`,`var_start`,`var_end`,`var_name`),
-  KEY `var_chr` (`var_chr`,`var_start`,`var_end`),
-  KEY `var_name` (`var_name`),
-  KEY `bp` (`chr`,`start`,`end`),
-  KEY `pdbid` (`pdbid`,`chain`,`chain_seq`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-"""%dat_name)
+if not append:
+  query = ["DROP TABLE IF EXISTS Intersect_Variants_%s;"%dat_name]
+  query.append("""CREATE TABLE Intersect_Variants_%s (
+    `var_chr` varchar(10) NOT NULL default '',
+    `var_start` int(11) NOT NULL default '0',
+    `var_end` int(11) NOT NULL default '0',
+    `var_name` varchar(50) default NULL,
+    `chr` varchar(10) NOT NULL default '',
+    `start` int(11) NOT NULL default '0',
+    `end` int(11) NOT NULL default '0',
+    `strand`INT default 0,
+    `gene` varchar(20) NOT NULL default '',
+    `transcript` varchar(20) NOT NULL default '',
+    `trans_seq` int(11) default NULL,
+    `trans_aa1` varchar(1) default NULL,
+    `pdbid` varchar(20) NOT NULL default '',
+    `chain` varchar(1) NOT NULL default '',
+    `species` varchar(20) default NULL,
+    `unp` varchar(20) default NULL,
+    `chain_seq` int(11) default NULL,
+    `chain_aa1` varchar(1) default NULL,
+    `x` double default NULL,
+    `y` double default NULL,
+    `z` double default NULL,
+    PRIMARY KEY  (`pdbid`,`chain`,`chain_seq`,`transcript`,`trans_seq`,`chr`,`start`,`end`,`var_chr`,`var_start`,`var_end`,`var_name`),
+    KEY `var_chr` (`var_chr`,`var_start`,`var_end`),
+    KEY `var_name` (`var_name`),
+    KEY `bp` (`chr`,`start`,`end`),
+    KEY `pdbid` (`pdbid`,`chain`,`chain_seq`)
+    ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+  """%dat_name)
 # query.append("""LOAD DATA LOCAL INFILE '%s' INTO TABLE Intersect_Variants_%s
 # 			(chr, start, end, strand, transcript, pdbid, chain, unp, seqres, 
 # 			aa1, x, y, z, species, gene, var_chr, var_start, var_end, var_name)"""%(intersect_file,dat_name))
@@ -145,20 +147,21 @@ except MySQLdb.Error as e:
 
 # Drop/Create/Load Non-Intersection Table
 c.execute("use pdbmap_v7;")
-query = ["DROP TABLE IF EXISTS Non_Intersect_Variants_%s;"%dat_name]
-query.append("""CREATE TABLE Non_Intersect_Variants_%s (
-  `var_chr` varchar(10) NOT NULL default '',
-  `var_start` int(11) NOT NULL default '0',
-  `var_end` int(11) NOT NULL default '0',
-  `var_name` varchar(50) default NULL,
-  `gene` varchar(50) default NULL,
-  `transcript` varchar(50) default NULL,
-  `unp` varchar(20) default NULL,
-  PRIMARY KEY  (`var_chr`,`var_start`,`var_end`,`transcript`),
-  KEY `var_name` (`var_name`),
-  KEY `uniprot` (`unp`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
-"""%dat_name)
+if not append:
+  query = ["DROP TABLE IF EXISTS Non_Intersect_Variants_%s;"%dat_name]
+  query.append("""CREATE TABLE Non_Intersect_Variants_%s (
+    `var_chr` varchar(10) NOT NULL default '',
+    `var_start` int(11) NOT NULL default '0',
+    `var_end` int(11) NOT NULL default '0',
+    `var_name` varchar(50) default NULL,
+    `gene` varchar(50) default NULL,
+    `transcript` varchar(50) default NULL,
+    `unp` varchar(20) default NULL,
+    PRIMARY KEY  (`var_chr`,`var_start`,`var_end`,`transcript`),
+    KEY `var_name` (`var_name`),
+    KEY `uniprot` (`unp`)
+    ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+  """%dat_name)
 # query.append("""LOAD DATA LOCAL INFILE '%s' INTO TABLE
 # 			Non_Intersect_Variants_%s (var_chr, var_start, var_end, var_name,
 # 			transcript, unp)"""%(nointersect_file,dat_name))
