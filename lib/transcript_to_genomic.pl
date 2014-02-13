@@ -49,5 +49,5 @@ for ($i=0; $i<$peplength; $i++) {
 	}
 	my $amino_acid = substr($peptide,$i,1);
 	my $pep_index = $i+1;
-	print "$t_stable_id\t$g_stable_id\t$pep_index\t$amino_acid\t$q_start\t$q_end\tchr$s_name\t$q_strand\n";
+	print "$t_stable_id\t$g_stable_id\t$pep_index\t$amino_acid\t$q_start\t$q_end\tchr$s_name\t$q_strand\t$peptide\n";
 }

@@ -17,14 +17,16 @@
 # See main check for cmd line parsing
 import sys,os,csv
 from Bio.PDB.Structure import Structure
+from lib.PDBMapTranscript import PDBMapTranscript
 
 class PDBMapStructure(Structure):
 
   def __init__(self,s,tier=-1,quality=-1):
     # Assign the Structure, tier, and quality
-    self.structure = s
-    self.tier      = tier
-    self.quality   = quality
+    self.structure   = s
+    self.tier        = tier
+    self.quality     = quality
+    self.transcripts = []
 
   def __getattr__(self,attr):
     # Defer appropriate calls to the structure
@@ -44,7 +46,22 @@ class PDBMapStructure(Structure):
 
   def get_transcripts(self):
     # Retrieve the corresponding transcript for each chain
-    pass
+    if self.transcripts:
+      return self.transcripts
+    for chain in self.structure[0]:
+      candidate_transcripts = PDBMapTranscript(unpid=chain.unp)
+      # Align candidate transcripts to chain
+      alignment = PDBMapAlignment(chain,candidate_transcripts[0])
+      for trans in candidate_transcripts[1:]:
+        new_alignment = PDBMapAlignment(chain,trans)
+        # Determine best alignment
+        if new_alignment.score > alignment.score:
+          alignment = new_alignment
+        # Store best transcript alignment as element of chain
+       chain.alignment  = alignment
+       chain.transcript = alignment.transcript
+    # Return the matched transcripts
+    return [chain.transcript for chain in self.structure[0]]
 
 # Main check
 if __name__== "__main__":
