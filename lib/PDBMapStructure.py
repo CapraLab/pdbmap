@@ -18,6 +18,7 @@
 import sys,os,csv
 from Bio.PDB.Structure import Structure
 from lib.PDBMapTranscript import PDBMapTranscript
+from lib.PDBMapAlignment import PDBMapAlignment
 
 class PDBMapStructure(Structure):
 
@@ -49,7 +50,8 @@ class PDBMapStructure(Structure):
     if self.transcripts:
       return self.transcripts
     for chain in self.structure[0]:
-      candidate_transcripts = PDBMapTranscript(unpid=chain.unp)
+      # Query all transcripts associated with the chain's UNP ID
+      candidate_transcripts = PDBMapTranscript.query_from_unp(chain.unp)
       # Align candidate transcripts to chain
       alignment = PDBMapAlignment(chain,candidate_transcripts[0])
       for trans in candidate_transcripts[1:]:
@@ -57,11 +59,13 @@ class PDBMapStructure(Structure):
         # Determine best alignment
         if new_alignment.score > alignment.score:
           alignment = new_alignment
-        # Store best transcript alignment as element of chain
-       chain.alignment  = alignment
-       chain.transcript = alignment.transcript
+      # Store best transcript alignment as element of chain
+      chain.alignment  = alignment
+      chain.transcript = alignment.transcript
     # Return the matched transcripts
-    return [chain.transcript for chain in self.structure[0]]
+    self.transcripts = [c.transcript for c in self.structure[0]]
+    self.alignments  = [c.alignment for c in self.structure[0]]
+    return self.transcripts,self.alignments
 
 # Main check
 if __name__== "__main__":

@@ -23,7 +23,7 @@ class PDBMapTranscript():
     self.transcript = transcript
     self.gene       = gene
     # Sequence | key:   seqid
-    # Sequence | value: (aa1,chr,start,end,strand)
+    # Sequence | value: (rescode,chr,start,end,strand)
     self.sequence   = sequence
 
   @classmethod
@@ -32,10 +32,10 @@ class PDBMapTranscript():
     PDBMapTranscript.check_transmap()
     transids = PDBMapTranscript.transmap.get(unpid,[])
     if len(transids) > 1:
-      msg  = "WARNING: Multiple transcripts associated with %s in UniParc\n"%unpid
+      msg  = "WARNING: (UniParc) Multiple transcripts associated with %s\n"%unpid
       sys.stderr.write(msg)
     if len(transids) < 1:
-      msg = "ERROR: No UniParc match for %s"%unpid
+      msg = "ERROR: (UniParc) No match for %s"%unpid
       raise Exception(msg)
     # Query all transcript candidates and return
     res = []
@@ -47,17 +47,25 @@ class PDBMapTranscript():
   def query_from_trans(cls,transid):
     """ Use Ensembl Transcript ID to load transcript information """
     PDBMapTranscript.check_transmap()
-    cmd = "lib/transcript_to_genomic.pl %s"%transid
+    cmd = "perl lib/transcript_to_genomic.pl %s"%transid
     status, output = commands.getstatusoutput(cmd)
     if status > 0:
-      msg = "ERROR: Non-zero exit status from transcript_to_genomic.pl"
+      sys.stderr.write(output+"\n")
+      msg = "ERROR: (transcript_to_genomic.pl) Non-zero exit status"
       raise Exception(msg)
+    sequence = {} # store sequence keyed on seqid
     for line in output.split('\n'):
       if line.startswith('#'): continue
       fields = line.split('\t')
-      transcript = fields[0] if not transcript else transcript
-      gene       = fields[1] if not gene else gene
-      sequence[fields[2]] = tuple(fields[3:9])
+      transcript = fields[0]
+      gene       = fields[1]
+      seqid      = int(fields[2])
+      rescode    = fields[3]
+      start      = int(fields[4])
+      end        = int(fields[5])
+      chr        = fields[6]
+      strand     = int(fields[7])
+      sequence[seqid] = (rescode,chr,start,end,strand)
     # Return a new PDBMapTranscript object
     return PDBMapTranscript(transcript,gene,sequence)
 
@@ -77,7 +85,7 @@ class PDBMapTranscript():
   @classmethod
   def check_transmap(cls):
     if not PDBMapTranscript.transmap:
-      msg  = "ERROR: UniParc transmap must be loaded with "
+      msg  = "ERROR: (UniParc) transmap must be loaded with "
       msg += "PDBMapTranscript.load_transmap(transmap_fname) before "
       msg += "instantiating a PDBMapTranscript object."
       raise Exception(msg)
