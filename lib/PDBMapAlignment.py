@@ -24,7 +24,8 @@ class PDBMapAlignment():
     """ Alignment of PDBMapStructure chain to PDBMapTranscript """
     self.chain      = chain
     self.transcript = transcript
-    self.alignment,self.score,self.mismatch = self.align(chain,transcript)
+    self.alignment,self.score,self.perc_aligned,self.perc_identity \
+                    = self.align(chain,transcript)
 
   def align(self,chain,transcript):
     """ Aligns one chain of a PDBMapStructure to a PDBMapTranscript """
@@ -47,10 +48,6 @@ class PDBMapAlignment():
     aln_chain_str, aln_trans_str, score, begin, end = alignment
     aln_chain   = [aa for aa in aln_chain_str]
     aln_trans   = [aa for aa in aln_trans_str]
-    print chain.unp
-    print transcript.transcript
-    print ''.join(aln_chain)
-    print ''.join(aln_trans)
 
     # Create an alignment map from chain to transcript
     chain_ind = [x for x in self._gap_shift(aln_chain,chain_start)]
@@ -61,7 +58,13 @@ class PDBMapAlignment():
     alignment = dict((chain_ind[i],trans_ind[i]) for i in 
                   range(len(chain_ind)) if chain_ind[i] > 0)
 
-    return alignment,score,mismatch
+    # Calculate percent match and identity
+    chain_len     = len(alignment)
+    num_gaps      = len([val for val in alignment.values() if val==-1])
+    perc_aligned  = float(chain_len-num_gaps) / chain_len
+    perc_identity = float(chain_len-num_gaps-mismatch) / chain_len
+
+    return alignment,score,perc_aligned,perc_identity
 
   def _gap_shift(self,seq,seq_start):
     """ Support generator function for align """

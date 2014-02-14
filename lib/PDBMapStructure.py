@@ -65,7 +65,14 @@ class PDBMapStructure(Structure):
     # Return the matched transcripts
     self.transcripts = [c.transcript for c in self.structure[0]]
     self.alignments  = [c.alignment for c in self.structure[0]]
-    return self.transcripts,self.alignments
+    return self.transcripts
+
+  def get_alignments(self):
+    if not self.alignments:
+      self.get_transcripts()
+    else:
+      return self.alignments
+      
 
 # Main check
 if __name__== "__main__":

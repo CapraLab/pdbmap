@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS Transript (
+CREATE TABLE IF NOT EXISTS Transcript (
 transcript VARCHAR(50),
 gene VARCHAR(50),
 seqid INT,

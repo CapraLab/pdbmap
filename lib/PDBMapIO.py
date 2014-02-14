@@ -77,11 +77,11 @@ class PDBMapIO(PDBIO):
     if dbhost:
       self.check_schema()
 
-  def upload_structure(self):
-    # Uploads structure to a mysql database
+  def upload(self):
     self._connect()
     if 'structure' not in dir(self):
       raise Exception("Structure not set.")
+    # Upload the structure (structure, chains, residues)
     s = self.structure
     h = s.header
     squery  = 'INSERT IGNORE INTO Structure VALUES ('
@@ -91,7 +91,11 @@ class PDBMapIO(PDBIO):
     squery += '"%(journal)s","%(structure_reference)s")'
     sfields = dict((key,s.__getattribute__(key)) for key in dir(s) 
                   if isinstance(key,collections.Hashable))
+    # Add the header fields
     sfields.update(s.header)
+    # Add the internal structure fields
+    sfields.update(dict((key,s.structure.__getattribute__(key)) for key in 
+                    dir(s.structure) if isinstance(key,collections.Hashable)))
     squery = squery%sfields
     self._c.execute(squery)
     for c in s[0]:
@@ -112,6 +116,32 @@ class PDBMapIO(PDBIO):
                         if isinstance(key,collections.Hashable))
         rquery = rquery%rfields
       self._c.execute(rquery[:-1])
+
+    # Upload the transcripts
+    tquery = "INSERT IGNORE INTO Transcript VALUES "
+    for t in s.get_transcripts():
+      for seqid,(rescode,chr,start,end,strand) in t.sequence.iteritems():
+        tquery += '("%s","%s",'%(t.transcript,t.gene)
+        tquery += '%d,"%s",'%(seqid,rescode)
+        tquery += '"%s",%d,%d,%d),'%(chr,start,end,strand)
+      self._c.execute(tquery[:-1])
+
+    # Upload the alignments
+    aquery = "INSERT IGNORE INTO Alignment VALUES "
+    for a in s.get_alignments():
+      for c_seqid,t_seqid in a.alignment.iteritems():
+        aquery += '("%s","%s",%d,'%(s.id,a.chain.id,c_seqid)
+        aquery += '"%s",%d),'%(a.transcript.transcript,t_seqid)
+    self._c.execute(aquery[:-1])
+
+    # Upload the alignment scores
+    asquery = "INSERT IGNORE INTO AlignmentScores VALUES "
+    for a in s.get_alignments():
+      asquery += '("%s","%s","%s",%f,%f,%f),'% \
+                  (s.id,a.chain.id,a.transcript.transcript,
+                   a.score,a.perc_aligned,a.perc_identity)
+    self._c.execute(asquery[:-1])
+    
     self._close()
     return("Structure uploaded to %s."%self.dbname)
 
