@@ -71,15 +71,15 @@ class PDBMapTranscript():
 
   @classmethod
   def load_transmap(cls,transmap_fname):
-    # Method to load the transmap from file
+    # Method to load the UniProt->Ensembl_TRS idmapping
     with open(transmap_fname) as fin:
 		  reader = csv.reader(fin,delimiter='\t')
 		  transmap = {}
-		  for (unp,id_type,trans) in reader:
+		  for (unp,translist) in reader:
 			  if unp in transmap:
-				  transmap[unp].append((trans,id_type))
+				  transmap[unp].extend(translist.split('; '))
 			  else:
-				  transmap[unp] = [(trans,id_type)]
+				  transmap[unp] = translist.split('; ')
     PDBMapTranscript.transmap = transmap
 
   @classmethod
