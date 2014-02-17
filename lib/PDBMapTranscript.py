@@ -28,14 +28,19 @@ class PDBMapTranscript():
 
   @classmethod
   def query_from_unp(cls,unpid):
-    """ Use UniParc to map UNP ID to Ensembl Transcript ID """
+    """ Use UniProt to map UNP ID to Ensembl Transcript ID """
+    if check_sec2prim and unp in PDBMapTranscript.sec2prim:
+      msg  = "WARNING: (UniProt) %s is a secondary UniProt AC\n"%unp
+      unp = sec2prim[unp]
+      msg += "       : Replacing with primary AC: %s"%unp
+      sys.stderr.write(msg)
     PDBMapTranscript.check_transmap()
     transids = PDBMapTranscript.transmap.get(unpid,[])
     if len(transids) > 1:
-      msg  = "WARNING: (UniParc) Multiple transcripts associated with %s\n"%unpid
+      msg  = "WARNING: (UniProt) Multiple transcripts associated with %s\n"%unpid
       sys.stderr.write(msg)
     if len(transids) < 1:
-      msg = "ERROR: (UniParc) No match for %s"%unpid
+      msg = "ERROR: (UniProt) No match for %s"%unpid
       raise Exception(msg)
     # Query all transcript candidates and return
     res = []
@@ -84,11 +89,30 @@ class PDBMapTranscript():
 
   @classmethod
   def check_transmap(cls):
+    # Checks if sec2prim has been loaded
     if not PDBMapTranscript.transmap:
       msg  = "ERROR: (UniParc) transmap must be loaded with "
       msg += "PDBMapTranscript.load_transmap(transmap_fname) before "
       msg += "instantiating a PDBMapTranscript object."
       raise Exception(msg)
+
+
+  @classmethod
+  def load_sec2prim(cls,sec2prim_fname):
+    # Method to load the UniProt secondary -> primary AC mapping
+    with open(sec2prim_fname) as fin:
+      reader = csv.reader(fin,delimiter='\t')
+      sec2prim = {}
+      for (sec,prim) in reader:
+        sec2prim[sec] = prim
+    PDBMapTranscript.sec2prim = sec2prim
+
+  @classmethod
+  def check_sec2prim(cls):
+    # Checks if sec2prim has been loaded
+    if PDBMapTranscript.sec2prim:
+      return True
+    return False
      
 
 # Main check
