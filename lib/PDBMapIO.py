@@ -82,6 +82,7 @@ class PDBMapIO(PDBIO):
     if 'structure' not in dir(self):
       raise Exception("Structure not set.")
     # Upload the structure (structure, chains, residues)
+    queries = []
     s = self.structure
     h = s.header
     squery  = 'INSERT IGNORE INTO Structure VALUES ('
@@ -97,7 +98,7 @@ class PDBMapIO(PDBIO):
     sfields.update(dict((key,s.structure.__getattribute__(key)) for key in 
                     dir(s.structure) if isinstance(key,collections.Hashable)))
     squery = squery%sfields
-    self._c.execute(squery)
+    queries.append(squery)
     for c in s[0]:
       cquery  = "INSERT IGNORE INTO Chain VALUES "
       cquery += '("%(id)s",'%sfields # pdb id
@@ -105,7 +106,7 @@ class PDBMapIO(PDBIO):
       cfields = dict((key,c.__getattribute__(key)) for key in dir(c) 
                       if isinstance(key,collections.Hashable))
       cquery = cquery%cfields
-      self._c.execute(cquery)
+      queries.append(cquery)
       rquery  = "INSERT IGNORE INTO Residue VALUES "
       for r in c:
         rquery += '("%(id)s",'%sfields # pdb id
@@ -115,7 +116,7 @@ class PDBMapIO(PDBIO):
         rfields = dict((key,r.__getattribute__(key)) for key in dir(r) 
                         if isinstance(key,collections.Hashable))
         rquery = rquery%rfields
-      self._c.execute(rquery[:-1])
+      queries.append(rquery[:-1])
 
     # Upload the transcripts
     tquery = "INSERT IGNORE INTO Transcript VALUES "
@@ -124,7 +125,7 @@ class PDBMapIO(PDBIO):
         tquery += '("%s","%s",'%(t.transcript,t.gene)
         tquery += '%d,"%s",'%(seqid,rescode)
         tquery += '"%s",%d,%d,%d),'%(chr,start,end,strand)
-      self._c.execute(tquery[:-1])
+      queries.append(tquery[:-1])
 
     # Upload the alignments
     aquery = "INSERT IGNORE INTO Alignment VALUES "
@@ -132,7 +133,7 @@ class PDBMapIO(PDBIO):
       for c_seqid,t_seqid in a.alignment.iteritems():
         aquery += '("%s","%s",%d,'%(s.id,a.chain.id,c_seqid)
         aquery += '"%s",%d),'%(a.transcript.transcript,t_seqid)
-    self._c.execute(aquery[:-1])
+    queries.append(aquery[:-1])
 
     # Upload the alignment scores
     asquery = "INSERT IGNORE INTO AlignmentScores VALUES "
@@ -140,7 +141,11 @@ class PDBMapIO(PDBIO):
       asquery += '("%s","%s","%s",%f,%f,%f),'% \
                   (s.id,a.chain.id,a.transcript.transcript,
                    a.score,a.perc_aligned,a.perc_identity)
-    self._c.execute(asquery[:-1])
+    queries.append(asquery[:-1])
+
+    # Execute all queries at once to ensure everything completed.
+    for q in queries:
+      self._c.execute(q)
     
     self._close()
     return("Structure uploaded to %s."%self.dbname)

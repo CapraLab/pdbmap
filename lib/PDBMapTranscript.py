@@ -28,11 +28,11 @@ class PDBMapTranscript():
 
   @classmethod
   def query_from_unp(cls,unpid):
-    """ Use UniProt to map UNP ID to Ensembl Transcript ID """
-    if check_sec2prim and unp in PDBMapTranscript.sec2prim:
-      msg  = "WARNING: (UniProt) %s is a secondary UniProt AC\n"%unp
-      unp = sec2prim[unp]
-      msg += "       : Replacing with primary AC: %s"%unp
+    """ Use UniProt to map UniProt ID to Ensembl Transcript ID """
+    if PDBMapTranscript.check_sec2prim and unpid in PDBMapTranscript.sec2prim:
+      msg  = "WARNING: (UniProt) %s is a secondary UniProt AC. "%unpid
+      unpid = PDBMapTranscript.sec2prim[unpid]
+      msg += "Using primary AC: %s\n"%unpid
       sys.stderr.write(msg)
     PDBMapTranscript.check_transmap()
     transids = PDBMapTranscript.transmap.get(unpid,[])
@@ -44,14 +44,13 @@ class PDBMapTranscript():
       raise Exception(msg)
     # Query all transcript candidates and return
     res = []
-    for transid,id_type in transids:
+    for transid in transids:
       res.append(PDBMapTranscript.query_from_trans(transid))
     return res
 
   @classmethod
   def query_from_trans(cls,transid):
     """ Use Ensembl Transcript ID to load transcript information """
-    PDBMapTranscript.check_transmap()
     cmd = "perl lib/transcript_to_genomic.pl %s"%transid
     status, output = commands.getstatusoutput(cmd)
     if status > 0:
