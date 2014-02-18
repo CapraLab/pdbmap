@@ -40,8 +40,9 @@ class PDBMapTranscript():
       msg  = "WARNING: (UniProt) Multiple transcripts associated with %s\n"%unpid
       sys.stderr.write(msg)
     if len(transids) < 1:
-      msg = "ERROR: (UniProt) No match for %s"%unpid
-      raise Exception(msg)
+      msg = "WARNING: (UniProt) No match for %s\n"%unpid
+      # raise Exception(msg)
+      sys.stderr.write(msg)
     # Query all transcript candidates and return
     res = []
     for transid in transids:
@@ -74,24 +75,30 @@ class PDBMapTranscript():
     return PDBMapTranscript(transcript,gene,sequence)
 
   @classmethod
-  def load_transmap(cls,transmap_fname):
+  def load_idmapping(cls,idmapping_fname):
     # Method to load the UniProt->Ensembl_TRS idmapping
-    with open(transmap_fname) as fin:
-		  reader = csv.reader(fin,delimiter='\t')
-		  transmap = {}
-		  for (unp,translist) in reader:
-			  if unp in transmap:
-				  transmap[unp].extend(translist.split('; '))
-			  else:
-				  transmap[unp] = translist.split('; ')
+    with open(idmapping_fname) as fin:
+      reader = csv.reader(fin,delimiter='\t')
+      transmap = {}
+      protmap  = {}
+      for (unp,pdblist,translist) in reader:
+        if unp in transmap:
+      	  transmap[unp].extend(translist.split('; '))
+        else:
+      	  transmap[unp] = translist.split('; ')
+        if unp in protmap:
+          protmap[unp].extend([pdb_chain.split(':') for pdb_chain in pdblist.split('; ')])
+        else:
+          protmap[unp] = [pdb_chain.split(':') for pdb_chain in pdblist.split('; ')]
     PDBMapTranscript.transmap = transmap
+    PDBMapTranscript.protmap  = protmap
 
   @classmethod
   def check_transmap(cls):
     # Checks if sec2prim has been loaded
     if not PDBMapTranscript.transmap:
       msg  = "ERROR: (UniParc) transmap must be loaded with "
-      msg += "PDBMapTranscript.load_transmap(transmap_fname) before "
+      msg += "PDBMapTranscript.load_idmapping(idmapping_fname) before "
       msg += "instantiating a PDBMapTranscript object."
       raise Exception(msg)
 

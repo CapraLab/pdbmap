@@ -13,7 +13,7 @@
 #=============================================================================#
 
 # See main check for cmd line parsing
-import sys,os,csv,collections
+import sys,os,csv,collections,gzip
 from Bio.PDB.PDBParser import PDBParser
 from Bio.PDB.PDBIO import PDBIO
 from PDBMapStructure import PDBMapStructure
@@ -21,32 +21,74 @@ import MySQLdb
 
 class PDBMapParser(PDBParser):
   def __init__(self,PERMISSIVE=True,get_header=True,
-                structure_builder=None,QUIET=False):
+                structure_builder=None,QUIET=True):
     super(PDBMapParser,self).__init__(PERMISSIVE,get_header,
                                       structure_builder,QUIET)
 
   def get_structure(self,pdbid,fname,tier=-1,quality=-1):
-    s = PDBParser.get_structure(self,pdbid,fname)
+    if os.path.basename(fname).split('.')[-1] == 'gz':
+      fin = gzip.open(fname,'rb')
+    else:
+      fin = open(fname,'rb')
+    s = PDBParser.get_structure(self,pdbid,fin)
     s = PDBMapStructure(s,tier,quality)
+    fin.close()
+
+    # Clean up some common header differences
+    if 'structure_method' in s.header and 'structure_methods' not in s.header:
+      s.header['structure_methods'] = s.header['structure_method']
+    if 'expdta' in s.header and 'structure_methods' not in s.header:
+      s.header['structure_methods'] = s.header['expdta']
+    if 'journal_reference' in s.header and 'journal' not in s.header:
+      s.header['journal'] = s.header['journal_reference']
+    if 'jrnl' in s.header and 'journal' not in s.header:
+      s.header['journal'] = s.header['jrnl']
+    if 'keywds' in s.header and 'keywords' not in s.header:
+      s.header['keywords'] = s.header['keywds']
+    if 'compnd' in s.header and 'compound' not in s.header:
+      s.header['compound'] = s.header['compnd']
+
+    # Default any missing fields
+    if 'structure_methods' not in s.header:
+      s.header['structure_methods'] = ''
+    if 'journal' not in s.header:
+      s.header['journal'] = ''
+    if 'keywords' not in s.header:
+      s.header['keywords'] = ''
+    if 'compound' not in s.header:
+      s.header['compound'] = ''
+    if not s.header['resolution']:
+      s.header['resolution'] = -1.0
 
     # Parse DBREF
-    with open(fname,'rb') as fin:
-      dbref = [line for line in fin if line[0:6]=="DBREF " and
-                line[26:32].strip() == "UNP"]
-      for ref in dbref:
-        chain    = ref[12:14].strip()
-        unp      = ref[33:41].strip() 
-        pdbstart = int(ref[14:18])
-        dbstart  = int(ref[55:60])
-        # Documented offset between PDB and canonical sequence
-        offset   = dbstart - pdbstart
-        s[0][chain].unp    = unp
-        s[0][chain].offset = offset
+    if os.path.basename(fname).split('.')[-1] == 'gz':
+      fin = gzip.open(fname,'rb')
+    else:
+      fin = open(fname,'rb')
+    dbref = [line for line in fin if line[0:6]=="DBREF " and
+              line[26:32].strip() == "UNP"]
+    fin.close()
+    for ref in dbref:
+      chain    = ref[12:14].strip()
+      unp      = ref[33:41].strip()
+      species  = ref[42:54].strip().split('_')[-1]
+      pdbstart = int(ref[14:18])
+      dbstart  = int(ref[55:60])
+      # Documented offset between PDB and canonical sequence
+      offset   = dbstart - pdbstart
+      s[0][chain].unp     = unp
+      s[0][chain].offset  = offset
+      s[0][chain].species = species
 
     # Preprocess structure
     for m in s:
       iter_m = [c for c in m] # avoid modification during iteration, shallow
       for c in iter_m:
+        if c.species != 'HUMAN':
+          msg = "WARNING: (PDBMapIO) Ignoring non-human chain: %s (%s)\n"%(c.id,c.species)
+          sys.stderr.write(msg)
+          m.detach_child(c.id)
+          continue
         iter_c = [r for r in c] # avoid modification during iteration, shallow
         for r in iter_c:
           if r.id[0].strip(): # If residue is a heteroatom
@@ -65,6 +107,12 @@ class PDBMapParser(PDBParser):
         else:
           # Parse the chain sequence and store as string within the chain
           c.sequence = "".join([r.rescode for r in c])
+      if not len(m): # If the model only contained non-human species
+        s.detach_child(m.id)
+    if not len(s):
+      msg = "ERROR: (PDBMapIO) %s contains no human protein chains.\n"%pdbid
+      sys.stderr.write(msg)
+      s = None # Return a None object to indicate invalid structure
     return s
 
 class PDBMapIO(PDBIO):
