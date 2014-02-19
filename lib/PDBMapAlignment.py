@@ -8,9 +8,9 @@
 #                : Vanderbilt University Medical Center
 # Email          : mike.sivley@vanderbilt.edu
 # Date           : 2014-02-12
-# Description    : Defines the PDBMapTranscript class for calculating and
+# Description    : Defines the PDBMapAlignment class for calculating and
 #                : representing an alignment between a PDBMapStructure and
-#                : a PDBMapTranscript.
+#                : a PDBMapAlignment.
 #=============================================================================#
 
 # See main check for cmd line parsing
@@ -21,14 +21,14 @@ from Bio.SubsMat import MatrixInfo as matlist
 class PDBMapAlignment():
 
   def __init__(self,chain,transcript):
-    """ Alignment of PDBMapStructure chain to PDBMapTranscript """
+    """ Alignment of PDBMapStructure chain to PDBMapAlignment """
     self.chain      = chain
     self.transcript = transcript
     self.alignment,self.score,self.perc_aligned,self.perc_identity \
                     = self.align(chain,transcript)
 
   def align(self,chain,transcript):
-    """ Aligns one chain of a PDBMapStructure to a PDBMapTranscript """
+    """ Aligns one chain of a PDBMapStructure to a PDBMapAlignment """
     # Determine start indices
     chain_start = min([r.seqid for r in chain.get_residues()])
     trans_start = min(transcript.sequence.keys())

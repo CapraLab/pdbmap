@@ -86,10 +86,13 @@ class PDBMapTranscript():
       	  transmap[unp].extend(translist.split('; '))
         else:
       	  transmap[unp] = translist.split('; ')
+        if pdblist == '':
+          continue
+        # Pull only the PDB associated with the UniProt ID. Ignore chains.
         if unp in protmap:
-          protmap[unp].extend([pdb_chain.split(':') for pdb_chain in pdblist.split('; ')])
+          protmap[unp].extend([pdb_chain.split(':')[0] for pdb_chain in pdblist.split('; ')])
         else:
-          protmap[unp] = [pdb_chain.split(':') for pdb_chain in pdblist.split('; ')]
+          protmap[unp] = [pdb_chain.split(':')[0] for pdb_chain in pdblist.split('; ')]
     PDBMapTranscript.transmap = transmap
     PDBMapTranscript.protmap  = protmap
 

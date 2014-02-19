@@ -26,13 +26,18 @@ class PDBMapParser(PDBParser):
                                       structure_builder,QUIET)
 
   def get_structure(self,pdbid,fname,tier=-1,quality=-1):
-    if os.path.basename(fname).split('.')[-1] == 'gz':
-      fin = gzip.open(fname,'rb')
-    else:
-      fin = open(fname,'rb')
-    s = PDBParser.get_structure(self,pdbid,fin)
-    s = PDBMapStructure(s,tier,quality)
-    fin.close()
+    try:
+      if os.path.basename(fname).split('.')[-1] == 'gz':
+        fin = gzip.open(fname,'rb')
+      else:
+        fin = open(fname,'rb')
+      s = PDBParser.get_structure(self,pdbid,fin)
+      s = PDBMapStructure(s,tier,quality)
+      fin.close()
+    except Exception as e:
+      msg = "ERROR: (PDBMapIO) Error while parsing %s: %s"%(pdbid,str(e).replace('\n',' '))
+      sys.stderr.write(msg)
+      return(None)
 
     # Clean up some common header differences
     if 'structure_method' in s.header and 'structure_methods' not in s.header:
@@ -68,6 +73,10 @@ class PDBMapParser(PDBParser):
     dbref = [line for line in fin if line[0:6]=="DBREF " and
               line[26:32].strip() == "UNP"]
     fin.close()
+    if len(dbref) < 1:
+      msg = "ERROR (PDBMapIO) No DBREF fields in %s. Skipping.\n"%s.id
+      sys.stderr.write(msg)
+      return(None)
     for ref in dbref:
       chain    = ref[12:14].strip()
       unp      = ref[33:41].strip()
@@ -84,6 +93,8 @@ class PDBMapParser(PDBParser):
     for m in s:
       iter_m = [c for c in m] # avoid modification during iteration, shallow
       for c in iter_m:
+        if 'species' not in dir(c):
+          c.species = 'UNKNOWN'
         if c.species != 'HUMAN':
           msg = "WARNING: (PDBMapIO) Ignoring non-human chain: %s (%s)\n"%(c.id,c.species)
           sys.stderr.write(msg)
@@ -95,6 +106,8 @@ class PDBMapParser(PDBParser):
             c.detach_child(r.id) # Remove residue
           else:
             # Assign a 1-letter amino acid code
+            if r.resname.lower() not in aa_code_map:
+              r.resname='SER' # if unknown, dummy code serine for alignment
             r.rescode = aa_code_map[r.resname.lower()]
             # Compute the center of mass for all residues
             r.coord  = sum([a.coord for a in r]) / 3
@@ -116,7 +129,7 @@ class PDBMapParser(PDBParser):
     return s
 
 class PDBMapIO(PDBIO):
-  def __init__(self,dbhost=None,dbuser=None,dbpass=None,dbname=None):
+  def __init__(self,dbhost=None,dbuser=None,dbpass=None,dbname=None,label=""):
     super(PDBMapIO,self).__init__()
     self.dbhost = dbhost
     self.dbuser = dbuser
@@ -124,17 +137,25 @@ class PDBMapIO(PDBIO):
     self.dbname = dbname
     if dbhost:
       self.check_schema()
+    self.label = label
 
-  def upload(self):
+  def upload_structure(self):
     self._connect()
-    if 'structure' not in dir(self):
-      raise Exception("Structure not set.")
-    # Upload the structure (structure, chains, residues)
+    # Check that structure is not already in database
+    query = "SELECT * FROM Structure WHERE pdbid='%s'"%self.structure.id
+    self._c.execute(query)
+    if self._c.fetchone():
+      msg =  "WARNING: (PDBMapIO) Structure %s "%self.structure.id
+      msg += "already in database. Skipping.\n"
+      sys.stderr.write(msg)
+      self._close()
+      return(1)
+    # Upload entire structure (structure, chains, residues)
     queries = []
     s = self.structure
     h = s.header
     squery  = 'INSERT IGNORE INTO Structure VALUES ('
-    squery += '"%(id)s",%(tier)d,"%(structure_method)s",%(quality)f,'
+    squery += '"%(id)s","%(label)s",%(tier)d,"%(structure_method)s",%(quality)f,'
     squery += '%(resolution)f,"%(name)s","%(author)s","%(deposition_date)s",'
     squery += '"%(release_date)s","%(compound)s","%(keywords)s",'
     squery += '"%(journal)s","%(structure_reference)s")'
@@ -145,6 +166,7 @@ class PDBMapIO(PDBIO):
     # Add the internal structure fields
     sfields.update(dict((key,s.structure.__getattribute__(key)) for key in 
                     dir(s.structure) if isinstance(key,collections.Hashable)))
+    sfields["label"] = self.label
     squery = squery%sfields
     queries.append(squery)
     for c in s[0]:
@@ -167,13 +189,18 @@ class PDBMapIO(PDBIO):
       queries.append(rquery[:-1])
 
     # Upload the transcripts
-    tquery = "INSERT IGNORE INTO Transcript VALUES "
-    for t in s.get_transcripts():
-      for seqid,(rescode,chr,start,end,strand) in t.sequence.iteritems():
-        tquery += '("%s","%s",'%(t.transcript,t.gene)
-        tquery += '%d,"%s",'%(seqid,rescode)
-        tquery += '"%s",%d,%d,%d),'%(chr,start,end,strand)
-      queries.append(tquery[:-1])
+    try:
+      tquery = "INSERT IGNORE INTO Transcript VALUES "
+      for t in s.get_transcripts():
+        for seqid,(rescode,chr,start,end,strand) in t.sequence.iteritems():
+          tquery += '("%s","%s",'%(t.transcript,t.gene)
+          tquery += '%d,"%s",'%(seqid,rescode)
+          tquery += '"%s",%d,%d,%d),'%(chr,start,end,strand)
+        queries.append(tquery[:-1])
+    except:
+      msg = "ERROR: (PDBMapIO) Failed to get transcripts for %s.\n"%s.id
+      sys.stderr.write(msg)
+      raise
 
     # Upload the alignments
     aquery = "INSERT IGNORE INTO Alignment VALUES "
@@ -196,31 +223,10 @@ class PDBMapIO(PDBIO):
       self._c.execute(q)
     
     self._close()
-    return("Structure uploaded to %s."%self.dbname)
+    return(0)
 
-  def set_transcript(self):
-    # Stores transcript object for IO operations
-    self._connect()
-    return("Not Implemented: Upload structure to mysql")
-    self._close()
-
-  def upload_transcript(self):
-    # Uploads transcript to a mysql database
-    self._connect()
-    return("Not Implemented: Upload structure to mysql")
-    self._close()
-
-  def set_alignment(self):
-    # Stores alignment object for IO operations
-    self._connect()
-    return("Not Implemented: Upload structure to mysql")
-    self._close()
-
-  def upload_alignment(self):
-    # Uploads alignment to a mysql database
-    self._connect()
-    return("Not Implemented: Upload structure to mysql")
-    self.close()
+  def upload_genomic_data(self,dstream):
+    print "Uploading genomic data stream to database"
 
   def check_schema(self):
     self._connect(usedb=False)
@@ -231,6 +237,7 @@ class PDBMapIO(PDBIO):
                 'lib/create_schema_Transcript.sql',
                 'lib/create_schema_Alignment.sql',
                 'lib/create_schema_AlignmentScore.sql',
+                'lib/create_schema_GenomicData.sql',
                 'lib/create_proc_build_GenomePDB.sql',
                 'lib/create_proc_update_GenomePDB.sql']
     try:
