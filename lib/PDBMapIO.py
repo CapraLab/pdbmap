@@ -89,6 +89,14 @@ class PDBMapParser(PDBParser):
       s[0][chain].offset  = offset
       s[0][chain].species = species
 
+    # Sanitize free text fields
+    s.header["name"]     = str(s.header["name"]).replace("'","")
+    s.header["author"]   = str(s.header["author"]).replace("'","")
+    s.header["keywords"] = str(s.header["keywords"]).replace("'","")
+    s.header["compound"] = str(s.header["compound"]).replace("'","")
+    s.header["structure_method"]    = str(s.header["structure_method"]).replace("'","")
+    s.header["structure_reference"] = str(s.header["structure_reference"]).replace("'","")
+
     # Preprocess structure
     for m in s:
       iter_m = [c for c in m] # avoid modification during iteration, shallow
@@ -140,6 +148,7 @@ class PDBMapIO(PDBIO):
     self.label = label
 
   def upload_structure(self):
+    """ Uploads the current structure in PDBMapIO """
     self._connect()
     # Check that structure is not already in database
     query = "SELECT * FROM Structure WHERE pdbid='%s'"%self.structure.id
@@ -191,12 +200,14 @@ class PDBMapIO(PDBIO):
     # Upload the transcripts
     try:
       tquery = "INSERT IGNORE INTO Transcript VALUES "
+      if len(s.get_transcripts()):
+        raise Exception("No transcripts for structure %s"%s.id)
       for t in s.get_transcripts():
         for seqid,(rescode,chr,start,end,strand) in t.sequence.iteritems():
           tquery += '("%s","%s",'%(t.transcript,t.gene)
           tquery += '%d,"%s",'%(seqid,rescode)
           tquery += '"%s",%d,%d,%d),'%(chr,start,end,strand)
-        queries.append(tquery[:-1])
+      queries.append(tquery[:-1])
     except:
       msg = "ERROR: (PDBMapIO) Failed to get transcripts for %s.\n"%s.id
       sys.stderr.write(msg)
@@ -225,8 +236,21 @@ class PDBMapIO(PDBIO):
     self._close()
     return(0)
 
-  def upload_genomic_data(self,dstream):
+  def upload_genomic_data(self,dstream,dname):
+    """ Uploads genomic data via a PDBMapData generator """
+    # Attach the session label
+    for row in dstream:
+      row['label'] = dname
+    query  = "INSERT IGNORE INTO GenomicData VALUES "
+    query += '"%(name)s","%(label)s","%(chr)s",%(start)d,%(end)d,"%(ref_allele)s","%(gene)s",'
+    query += '"%(gene_alias)s","%(feature)s","%(feature_type)s","%(consequence)s",%(cdna_pos)d,'
+    query += '%(cds_pos)d,%(protein_pos)d,"%(ref_amino_acid)s","%(var_amino_acid)s",'
+    query += '"%(ref_codon)s","%(var_codon)s","%(variation)s",%(aa_maf)f,%(afr_maf)f,%(amr_maf)f,'
+    query += '%(asn_maf)f,%(ea_maf)f,%(eur_maf)f,%(gen_maf)f,"%(biotype)s","%(canonical)s",'
+    query += '"%(ccds)s","%(clin_sig)s",%(distance)d,"%(domains)s","%(ensp)s","%(exon)s","%(intron)s",'
+    query += '"%(hgvsc)s","%(hgvsp)s","%(pubmed)s",%(polyphen)f,%(sift)f'
     print "Uploading genomic data stream to database"
+    print query
 
   def check_schema(self):
     self._connect(usedb=False)

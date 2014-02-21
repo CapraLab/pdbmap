@@ -40,7 +40,7 @@ class PDBMapTranscript():
       msg  = "WARNING: (UniProt) Multiple transcripts associated with %s\n"%unpid
       sys.stderr.write(msg)
     if len(transids) < 1:
-      msg = "WARNING: (UniProt) No match for %s\n"%unpid
+      msg = "WARNING: (UniProt) No transcript match for %s\n"%unpid
       # raise Exception(msg)
       sys.stderr.write(msg)
     # Query all transcript candidates and return
@@ -56,7 +56,7 @@ class PDBMapTranscript():
     status, output = commands.getstatusoutput(cmd)
     if status > 0:
       sys.stderr.write(output+"\n")
-      msg = "ERROR: (transcript_to_genomic.pl) Non-zero exit status"
+      msg = "ERROR: (transcript_to_genomic.pl) Non-zero exit status for %s"%transid
       raise Exception(msg)
     sequence = {} # store sequence keyed on seqid
     for line in output.split('\n'):
@@ -82,6 +82,8 @@ class PDBMapTranscript():
       transmap = {}
       protmap  = {}
       for (unp,pdblist,translist) in reader:
+        if translist == '':
+          continue # don't consider UniProt IDs without transcript-mapping
         if unp in transmap:
       	  transmap[unp].extend(translist.split('; '))
         else:

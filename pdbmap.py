@@ -61,7 +61,7 @@ class PDBMap():
     try:
       io.upload_structure()
     except Exception as e:
-      msg  = "ERROR: (PDBMapIO) %s could not be uploaded.\n"%pdbid
+      msg  = "ERROR: (PDBMap) %s could not be uploaded.\n"%pdbid
       msg += "%s\n"%e
       sys.stderr.write(msg)
       return 1
@@ -86,18 +86,20 @@ class PDBMap():
     ext = dfile.split('.')[-1].lower()
     if ext == 'gz':
       ext = dfile.split('.')[-2].lower()
-    # Process accordingly
+    # Process and accordingly
     if ext == 'vcf':
-      d.load_vcf(dname,dfile)
+      generator = d.load_vcf(dname,dfile)
     elif ext == "bed":
-      d.load_bed(dname,dfile)
+      generator = d.load_bed(dname,dfile)
     elif ext == "vep":
-      d.load_vep(dname,dfile)
+      generator = d.load_vep(dname,dfile)
     elif ext in ["ped","map"] :
-      d.load_pedmap(dname,dfile)
+      generator = d.load_pedmap(dname,dfile)
     else:
       msg = "ERROR (PDBMap) Unsupported file type: %s"%ext
       raise Exception(msg)
+    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,label)
+    io.upload_data(generator,dname)
     
 
   def summarize_pdbmap(self):
