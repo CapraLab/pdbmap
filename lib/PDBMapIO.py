@@ -238,9 +238,9 @@ class PDBMapIO(PDBIO):
 
   def upload_genomic_data(self,dstream,dname):
     """ Uploads genomic data via a PDBMapData generator """
-    # Attach the session label
-    for row in dstream:
-      row['label'] = dname
+    msg = "WARNING: (PDBMapIO) Genomic data upload not yet implemented.\n"
+    sys.stderr.write(msg)
+    self._connect()
     query  = "INSERT IGNORE INTO GenomicData VALUES "
     query += '"%(name)s","%(label)s","%(chr)s",%(start)d,%(end)d,"%(ref_allele)s","%(gene)s",'
     query += '"%(gene_alias)s","%(feature)s","%(feature_type)s","%(consequence)s",%(cdna_pos)d,'
@@ -249,8 +249,29 @@ class PDBMapIO(PDBIO):
     query += '%(asn_maf)f,%(ea_maf)f,%(eur_maf)f,%(gen_maf)f,"%(biotype)s","%(canonical)s",'
     query += '"%(ccds)s","%(clin_sig)s",%(distance)d,"%(domains)s","%(ensp)s","%(exon)s","%(intron)s",'
     query += '"%(hgvsc)s","%(hgvsp)s","%(pubmed)s",%(polyphen)f,%(sift)f'
+    # Attach the session label
+    for row in dstream:
+      row['label'] = dname
+       print query % row
+      #TODO: Upload the query
+      #self._c.execute(query%row)
+    self._close()
+
+  def upload_intersection(self,dstream):
+    """ Uploads an intersection via a process parser generator """
+    msg = "WARNING: (PDBMapIO) Intersection upload not yet implemented.\n"
+    sys.stderr.write(msg)
+    self._connect()
+    query  = ""
+    query += ""
+    for row in dstream:
+      print query % row
+      #TODO: Upload query
+      #self._c.execute(query%row)
+    self._close()
 
   def download_genomic_data(self,dname,generator=True):
+    #FIXME: Poorly conceived. Do not use.
     """ Queries all genomic data with specified name """
     self._connect()
     query = "SELECT * FROM GenomicData WHERE label=%s"
@@ -265,10 +286,22 @@ class PDBMapIO(PDBIO):
 
   def download_structures(self,dname,generator=True):
     """ Queries all structures with specified name """
-    #TODO: Add popular/standard options for query filtering
+    #FIXME: Poorly conceived. Do not use.
     self._connect()
     query = "SELECT * FROM Structure WHERE label=%s"
     self._c.execute(query,(dname,))
+    if not generator:
+      return [list(x) for x in self._c.fetchall()]
+    row = self.c_fetchone()
+    while row:
+      yield list(row)
+      row = self.c_fetchone()
+    self._close()
+
+  def secure_query(self,query,vars,generator=True):
+    """ Executes queries using safe practices """
+    self._connect()
+    self._execute(query,vars)
     if not generator:
       return [list(x) for x in self._c.fetchall()]
     row = self.c_fetchone()
