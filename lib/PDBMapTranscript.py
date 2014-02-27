@@ -79,15 +79,18 @@ class PDBMapTranscript():
     # Method to load the UniProt->Ensembl_TRS idmapping
     with open(idmapping_fname) as fin:
       reader = csv.reader(fin,delimiter='\t')
-      transmap = {}
-      protmap  = {}
-      for (unp,pdblist,translist) in reader:
+      transmap  = {}
+      protmap   = {}
+      refseqmap = {}
+      for (unp,refseqlist,pdblist,translist) in reader:
+        ## Map Transcripts
         if translist == '':
           continue # don't consider UniProt IDs without transcript-mapping
         if unp in transmap:
       	  transmap[unp].extend(translist.split('; '))
         else:
       	  transmap[unp] = translist.split('; ')
+        ## Map Protein Data Bank Structures
         if pdblist == '':
           continue
         # Pull only the PDB associated with the UniProt ID. Ignore chains.
@@ -95,8 +98,14 @@ class PDBMapTranscript():
           protmap[unp].extend([pdb_chain.split(':')[0] for pdb_chain in pdblist.split('; ')])
         else:
           protmap[unp] = [pdb_chain.split(':')[0] for pdb_chain in pdblist.split('; ')]
-    PDBMapTranscript.transmap = transmap
-    PDBMapTranscript.protmap  = protmap
+        ## Map RefSeq IDs
+        if unp in refseqmap:
+          refseqmap[unp].extend(refseqlist.split('; '))
+        else:
+          refseqmap[unp] = refseqlist.split('; ')
+    PDBMapTranscript.transmap  = transmap
+    PDBMapTranscript.protmap   = protmap
+    PDBMapTranscript.refseqmap = refseqmap
 
   @classmethod
   def check_transmap(cls):
