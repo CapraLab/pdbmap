@@ -20,7 +20,7 @@
 # See main check for cmd line parsing
 import argparse,ConfigParser
 import sys,os,csv,time,pdb,glob
-from lib import PDBMapIO,PDBMapStructure,PDBMapTranscript
+from lib import PDBMapIO,PDBMapStructure,PDBMapProtein
 from lib import PDBMapAlignment,PDBMapData
 
 class PDBMap():
@@ -31,9 +31,9 @@ class PDBMap():
       self.refresh_mirrors(idmapping,sec2prim,pdb_dir)
     # Initialize
     if idmapping:
-      PDBMapTranscript.PDBMapTranscript.load_idmapping(idmapping)
+      PDBMapProtein.PDBMapProtein.load_idmapping(idmapping)
     if sec2prim:
-      PDBMapTranscript.PDBMapTranscript.load_sec2prim(sec2prim)
+      PDBMapProtein.PDBMapProtein.load_sec2prim(sec2prim)
     if pdb_dir:
       self.pdb_dir = pdb_dir
     if vep:
@@ -68,7 +68,7 @@ class PDBMap():
 
   def load_unp(self,unp,label=""):
     """ Loads all known PDB structures associated with UniProt ID """
-    pdbids = list(set(PDBMapTranscript.PDBMapTranscript.protmap[unp]))
+    pdbids = list(set(PDBMapProtein.PDBMapProtein.unp2pdb(unp)))
     for pdbid in pdbids:
       print " # Processing %s # "%pdbid
       self.load_pdb(pdbid,label=label)
@@ -228,7 +228,7 @@ if __name__== "__main__":
       # All PDB-mapped UniProt IDs (later expand to all UniProt IDs)
       msg = "WARNING: (PDBMap) Uploading all PDB-associated UniProt IDs.\n"
       sys.stderr.write(msg)
-      all_pdb_unp = PDBMapTranscript.PDBMapTranscript.protmap.keys()
+      all_pdb_unp = PDBMapProtein.PDBMapProtein._unp2pdb.keys()
       for unp in all_pdb_unp:
         print "\n## Processing %s ##"%unp
         pdbmap.load_unp(unp,label="uniprot-pdb")
