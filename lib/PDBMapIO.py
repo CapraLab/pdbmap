@@ -17,7 +17,7 @@ import sys,os,csv,collections,gzip
 from Bio.PDB.PDBParser import PDBParser
 from Bio.PDB.PDBIO import PDBIO
 from PDBMapStructure import PDBMapStructure
-import MySQLdb
+import MySQLdb, MySQLdb.cursors
 
 class PDBMapParser(PDBParser):
   def __init__(self,PERMISSIVE=True,get_header=True,
@@ -249,8 +249,33 @@ class PDBMapIO(PDBIO):
     query += '%(asn_maf)f,%(ea_maf)f,%(eur_maf)f,%(gen_maf)f,"%(biotype)s","%(canonical)s",'
     query += '"%(ccds)s","%(clin_sig)s",%(distance)d,"%(domains)s","%(ensp)s","%(exon)s","%(intron)s",'
     query += '"%(hgvsc)s","%(hgvsp)s","%(pubmed)s",%(polyphen)f,%(sift)f'
-    print "Uploading genomic data stream to database"
-    print query
+
+  def download_genomic_data(self,dname,generator=True):
+    """ Queries all genomic data with specified name """
+    self._connect()
+    query = "SELECT * FROM GenomicData WHERE label=%s"
+    self._c.execute(query,(dname,))
+    if not generator:
+      return [list(x) for x in self._c.fetchall()]
+    row = self._c.fetchone()
+    while row:
+      yield list(row)
+      row = self._c.fetchone()
+    self._close()
+
+  def download_structures(self,dname,generator=True):
+    """ Queries all structures with specified name """
+    #TODO: Add popular/standard options for query filtering
+    self._connect()
+    query = "SELECT * FROM Structure WHERE label=%s"
+    self._c.execute(query,(dname,))
+    if not generator:
+      return [list(x) for x in self._c.fetchall()]
+    row = self.c_fetchone()
+    while row:
+      yield list(row)
+      row = self.c_fetchone()
+    self._close()
 
   def check_schema(self):
     self._connect(usedb=False)
@@ -287,10 +312,12 @@ class PDBMapIO(PDBIO):
     try:
       if usedb:
         self._con = MySQLdb.connect(host=self.dbhost,user=self.dbuser,
-                            passwd=self.dbpass,db=self.dbname)
+                            passwd=self.dbpass,db=self.dbname,
+                            cursorclass = MySQLdb.cursors.SSCursor)
       else:
         self._con = MySQLdb.connect(host=self.dbhost,user=self.dbuser,
-                            passwd=self.dbpass)
+                            passwd=self.dbpass,
+                            cursorclass = MySQLdb.cursors.SSCursor)
       self._c = self._con.cursor()
     except MySQLdb.Error as e:
       print "There was an error connecting to the database.\n%s"%e

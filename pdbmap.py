@@ -21,7 +21,7 @@
 import argparse,ConfigParser
 import sys,os,csv,time,pdb,glob
 from lib import PDBMapIO,PDBMapStructure,PDBMapProtein
-from lib import PDBMapAlignment,PDBMapData
+from lib import PDBMapAlignment,PDBMapData,PDBMapTranscript
 
 class PDBMap():
   def __init__(self,idmapping=None,sec2prim=None,pdb_dir=None,vep=None,
@@ -258,12 +258,3 @@ if __name__== "__main__":
       pdbmap.load_data(dname,dfile)
 
   print "Complete!"
-
-  # Load a single PDB
-  # Load a directory of PDBs
-  # Load a variant set
-  # Load a genotype set
-  # Load a genomic annotation
-  ## Load a UniProt ID
-  ## Load a Transcript ID
-  ## Load a protein sequence

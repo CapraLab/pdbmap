@@ -14,6 +14,9 @@
 #                : instantiated.
 #=============================================================================#
 
+# See main check for cmd line parsing
+import sys,csv
+
 class PDBMapProtein():
   def __init__(self):
     msg = "ERROR: (PDBMapProtein) This class should not be instantiated."
@@ -47,7 +50,7 @@ class PDBMapProtein():
     PDBMapProtein._unp2ensembltrans = {}
     PDBMapProtein._unp2ensemblprot = {}
 
-   with open(idmapping_fname) as fin:
+    with open(idmapping_fname) as fin:
       reader = csv.reader(fin,delimiter='\t')
       for (unp,refseqlist,pdblist,translist,protlist) in reader:
         ## Map UniProt IDs to Ensembl Transcript IDs

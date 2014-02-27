@@ -10,7 +10,8 @@
 # Date           : 2014-02-18
 # Description    : Defines the PDBMapData class. This class is not intended
 #                : to store or retain any data. It's purpose is to manage the 
-#                : upload of annotation files to the PDBMap database.
+#                : upload of annotation files to the PDBMap.GenomicData 
+#                : database.
 #=============================================================================#
 
 # See main check for cmd line parsing
@@ -45,7 +46,7 @@ class PDBMapData():
 
   def load_pedmap(self,fname):
     """ Convert PED/MAP to VCF, pipe VCF through VEP and load VEP output """
-    print "load_pedmap"
+    print "load_pedmap not implemented"
 
   def load_bed(self,fname,vep=False):
     """ Load data from BED """
@@ -53,7 +54,7 @@ class PDBMapData():
       for row in self.load_vep(fname,run=True):
         yield row
     else:
-      print "load_bed"
+      print "load_bed not implemented without VEP"
 
   def load_vep(self,fname,run=False):
     """ Yield VEP rows """
