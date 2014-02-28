@@ -147,19 +147,24 @@ class PDBMapIO(PDBIO):
       self.check_schema()
     self.label = label
 
+  def structure_in_db(self,pdbid):
+    self._connect()
+    query = "SELECT * FROM Structure WHERE pdbid='%s' LIMIT 1"%pdbid
+    self._c.execute(query)
+    res = True if self._c.fetchone() else False
+    self._close()
+    return res
+
   def upload_structure(self):
     """ Uploads the current structure in PDBMapIO """
-    self._connect()
-    # Check that structure is not already in database
-    query = "SELECT * FROM Structure WHERE pdbid='%s'"%self.structure.id
-    self._c.execute(query)
-    if self._c.fetchone():
+    # Verify that structure is not already in database
+    if structure_in_db(self.structure.id):
       msg =  "WARNING: (PDBMapIO) Structure %s "%self.structure.id
       msg += "already in database. Skipping.\n"
       sys.stderr.write(msg)
-      self._close()
       return(1)
     # Upload entire structure (structure, chains, residues)
+    self._connect()
     queries = []
     s = self.structure
     h = s.header
@@ -252,7 +257,7 @@ class PDBMapIO(PDBIO):
     # Attach the session label
     for row in dstream:
       row['label'] = dname
-       print query % row
+      print query % row
       #TODO: Upload the query
       #self._c.execute(query%row)
     self._close()
@@ -270,44 +275,32 @@ class PDBMapIO(PDBIO):
       #self._c.execute(query%row)
     self._close()
 
-  def download_genomic_data(self,dname,generator=True):
+  def download_genomic_data(self,dname):
     #FIXME: Poorly conceived. Do not use.
     """ Queries all genomic data with specified name """
-    self._connect()
+    self._connect(cursorclass=MySQLdb.cursors.SSDictCursor)
     query = "SELECT * FROM GenomicData WHERE label=%s"
     self._c.execute(query,(dname,))
-    if not generator:
-      return [list(x) for x in self._c.fetchall()]
-    row = self._c.fetchone()
-    while row:
-      yield list(row)
-      row = self._c.fetchone()
+    for row in self._c:
+      yield row
     self._close()
 
-  def download_structures(self,dname,generator=True):
+  def download_structures(self,dname):
     """ Queries all structures with specified name """
     #FIXME: Poorly conceived. Do not use.
-    self._connect()
+    self._connect(cursorclass=MySQLdb.cursors.SSDictCursor)
     query = "SELECT * FROM Structure WHERE label=%s"
     self._c.execute(query,(dname,))
-    if not generator:
-      return [list(x) for x in self._c.fetchall()]
-    row = self.c_fetchone()
-    while row:
-      yield list(row)
-      row = self.c_fetchone()
+    for row in self._c:
+      yield row
     self._close()
 
-  def secure_query(self,query,vars,generator=True):
+  def secure_query(self,query,vars):
     """ Executes queries using safe practices """
-    self._connect()
-    self._execute(query,vars)
-    if not generator:
-      return [list(x) for x in self._c.fetchall()]
-    row = self.c_fetchone()
-    while row:
-      yield list(row)
-      row = self.c_fetchone()
+    self._connect(cursorclass=MySQLdb.cursors.SSDictCursor)
+    self._c.execute(query,vars)
+    for row in self._c:
+      yield row
     self._close()
 
   def check_schema(self):
@@ -341,16 +334,16 @@ class PDBMapIO(PDBIO):
   def show(self):
     return(self.__dict__['structure'])
 
-  def _connect(self,usedb=True):
+  def _connect(self,usedb=True,cursorclass=MySQLdb.cursors.DictCursor):
     try:
       if usedb:
         self._con = MySQLdb.connect(host=self.dbhost,user=self.dbuser,
                             passwd=self.dbpass,db=self.dbname,
-                            cursorclass = MySQLdb.cursors.SSCursor)
+                            cursorclass = cursorclass)
       else:
         self._con = MySQLdb.connect(host=self.dbhost,user=self.dbuser,
                             passwd=self.dbpass,
-                            cursorclass = MySQLdb.cursors.SSCursor)
+                            cursorclass = cursorclass)
       self._c = self._con.cursor()
     except MySQLdb.Error as e:
       print "There was an error connecting to the database.\n%s"%e
@@ -358,7 +351,10 @@ class PDBMapIO(PDBIO):
 
   def _close(self):
     try:
-      self._con.close()
+      try:
+        self._c.fetchall() # burn all remaining rows
+      except: pass
+      self._con.close()  # close the connection
     except MySQLdb.Error as e:
       print "There was an error disconnecting from the database.\n%s"%e
       sys.exit(1)

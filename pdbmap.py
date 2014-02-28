@@ -43,6 +43,19 @@ class PDBMap():
 
   def load_pdb(self,pdbid,pdb_fname=None,label=""):
     """ Loads a given PDB into the PDBMap database """
+
+    # Create a PDBMapIO object
+    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,
+                            args.dbpass,args.dbname,label)
+
+    # Check if PDB is already in the database
+    if io.structure_in_db(pdbid):
+      msg =  "WARNING: (PDBMapIO) Structure %s "%pdbid
+      msg += "already in database. Skipping.\n"
+      sys.stderr.write(msg)
+      return 1
+
+    # Load the PDB structure
     if not pdb_fname:
       pdb_fname = "%s/pdb%s.ent.gz"%(self.pdb_dir,pdbid.lower())
       print "Fetching %s from %s"%(pdbid,pdb_fname)
@@ -56,7 +69,6 @@ class PDBMap():
       msg = "ERROR: (PDBMap) Invalid structure: %s.\n"%pdbid
       sys.stderr.write(msg)
       return 1
-    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,label)
     io.set_structure(s)
     try:
       io.upload_structure()
@@ -72,7 +84,6 @@ class PDBMap():
     for pdbid in pdbids:
       print " # Processing %s # "%pdbid
       self.load_pdb(pdbid,label=label)
-    pass
 
   def load_data(self,dname,dfile):
     """ Loads a data file into the PDBMap database """
