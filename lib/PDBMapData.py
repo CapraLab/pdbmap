@@ -128,6 +128,7 @@ class PDBMapData():
     except KeyboardInterrupt:
       msg = "ERROR (PDBMapData) Keyboard interrupt. Canceling VEP...\n"
       sys.stderr.write(msg)
+      raise
     except:
       msg = "ERROR (PDBMapData) Unknown VEP error. Examine stacktrace...\n"
       sys.stderr.write(msg)
@@ -187,15 +188,15 @@ class PDBMapData():
           csq["CANONICAL"] = 1 if csq["CANONICAL"] == "YES" else 0
         # Transform valid 0-indexed positions to 1-indexed positions
         elif csq_header[i] == "Protein_position":
-          if csq['Protein_position'] and csq['Protein_position'] != '?':
+          if csq['Protein_position'] and '?' not in csq['Protein_position']:
             csq["Protein_position"] =  int(csq['Protein_position'].split('-')[0]) + 1
           else: csq["Protein_position"] = None
         elif csq_header[i] == "cDNA_position":
-          if csq['cDNA_position'] and csq['cDNA_position'] != '?':
+          if csq['cDNA_position'] and '?' not in csq['cDNA_position']:
             csq["cDNA_position"] =  int(csq['cDNA_position'].split('-')[0]) + 1
           else: csq["cDNA_position"] = None
         elif csq_header[i] == "CDS_position":
-          if csq['CDS_position'] and csq['CDS_position'] != '?':
+          if csq['CDS_position'] and '?' not in csq['CDS_position']:
             csq["CDS_position"] =  int(csq['CDS_position'].split('-')[0]) + 1
           else: csq["CDS_position"] = None
 
@@ -204,6 +205,14 @@ class PDBMapData():
       ## Edits to make after parsing fields completely (outer loop)
       # Transcript is not canonical if no value was given
       if "CANONICAL" not in csq: csq["CANONICAL"] = 0
+      # Define ref/alt amino acids if not specified
+      if "Amino_acids" not in csq or not csq["Amino_acids"]:
+        csq["Ref_AminoAcid"] = None
+        csq["Alt_AminoAcid"] = None
+      # Define ref/alt codons if not specified
+      if "Codons" not in csq or not csq["Codons"]:
+        csq["Ref_Codon"] = None
+        csq["Alt_Codon"] = None
       # For any field not specified, add with value None
       for header in csq_header:
         if header not in csq:

@@ -22,6 +22,7 @@ import argparse,ConfigParser
 import sys,os,csv,time,pdb,glob
 from lib import PDBMapIO,PDBMapStructure,PDBMapProtein
 from lib import PDBMapAlignment,PDBMapData,PDBMapTranscript
+from lib import PDBMapIntersect
 
 class PDBMap():
   def __init__(self,idmapping=None,sec2prim=None,pdb_dir=None,vep=None,
@@ -110,7 +111,14 @@ class PDBMap():
     io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,dname)
     nrows = io.upload_genomic_data(generator,dname)
     return(nrows)
-    
+  
+  def intersect_data(self,dname,sname=None,dtype="Genomic"):
+    """ Intersects a loaded dataset with the PDBMap structural domain """
+    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,dname)
+    i = PDBMapIntersect.PDBMapIntersect(io)
+    # Note: Only all-structures <-> genomic data intersections supported
+    nrows = i.intersect(dname,sname,dtype)
+    return(nrows) # Return the number of intersections
 
   def summarize_pdbmap(self):
     """ Returns summary statistics for the PDBMap database """
@@ -289,6 +297,19 @@ if __name__== "__main__":
     for dfile,dname in dfiles:
       print "## Processing %s: %s ##"%(dname,dfile)
       nrows = pdbmap.load_data(dname,dfile,args.cores)
-      print " # %d rows uploaded."%nrows
+      print " # %d data rows uploaded."%nrows
+    # Intersect with dataset with PDBMap (One-time operation)
+    print "## Intersecting %s with PDBMap ##"%(dname)
+    print " # (This may take a while.) #"
+    nrows = pdbmap.intersect_data(dname)
+    print " # %d intersection rows uploaded."%nrows
 
+  ## intersect ##
+  elif args.cmd == "intersect":
+    pdbmap = PDBMap()
+    msg  = "WARNING: (PDBMap) If loading data, intersections are automatically determined.\n"
+    msg += "       : (PDBMap) This is a debug command for manual intersections."
+    sys.stderr.write(msg)
+    dname = args.args[0] # Get the dataset name
+    pdbmap.intersect_data(dname)
   print "Complete!"

@@ -261,7 +261,11 @@ class PDBMapIO(PDBIO):
         sys.stderr.write("WARNING (PDBMapIO) MySQL query failed: %s"%msg)
       # Upload each consequence to GenomicConsequence
       for csq in record.CSQ:
-        query  = "INSERT IGNORE INTO GenomicConsequence VALUES ("
+        query  = "INSERT IGNORE INTO GenomicConsequence "
+        query += "(chr,start,end,name,transcript,protein,canonical,allele,"
+        query += "consequence,cdna_pos,cds_pos,protein_pos,ref_amino_acid,"
+        query += "alt_amino_acid,ref_codon,alt_codon,polyphen,sift,biotype,"
+        query += "domains) VALUES ("
         query += "%(CHROM)s,%(START)s,%(END)s,%(ID)s,"
         query += "%(Feature)s,%(ENSP)s,%(CANONICAL)s,%(Allele)s,"
         query += "%(Consequence)s,%(cDNA_position)s,%(CDS_position)s,"
@@ -281,13 +285,14 @@ class PDBMapIO(PDBIO):
     msg = "WARNING: (PDBMapIO) Intersection upload not yet implemented.\n"
     sys.stderr.write(msg)
     self._connect()
-    query  = ""
-    query += ""
-    for row in dstream:
+    query  = "INSERT IGNORE INTO GenomicIntersection VALUES "
+    query += "(%(pdbid)s,%(chain)s,%(seqid)s,%(gc_id)s)" # Direct reference
+    for i,row in enumerate(dstream):
       print query % row
       #TODO: Upload query
       #self._c.execute(query%row)
     self._close()
+    return(i) # Return the number of uploaded rows
 
   def download_genomic_data(self,dname):
     #FIXME: Poorly conceived. Do not use.
@@ -309,9 +314,14 @@ class PDBMapIO(PDBIO):
       yield row
     self._close()
 
-  def secure_query(self,query,vars):
+  def secure_query(self,query,vars,cursorclass='SSDictCursor'):
     """ Executes queries using safe practices """
-    self._connect(cursorclass=MySQLdb.cursors.SSDictCursor)
+    if cursorclass == 'SSDictCursor':
+      self._connect(cursorclass=MySQLdb.cursors.SSDictCursor)
+    elif cursorclass == 'SSCursor':
+      self._connect(cursorclass=MySQLdb.cursors.SSCursor)
+    else:
+      self._connect()
     self._c.execute(query,vars)
     for row in self._c:
       yield row
@@ -328,6 +338,7 @@ class PDBMapIO(PDBIO):
                 'lib/create_schema_AlignmentScore.sql',
                 'lib/create_schema_GenomicData.sql',
                 'lib/create_schema_GenomicConsequence.sql',
+                'lib/create_schema_GenomicIntersection.sql',
                 'lib/create_proc_build_GenomePDB.sql',
                 'lib/create_proc_update_GenomePDB.sql']
     

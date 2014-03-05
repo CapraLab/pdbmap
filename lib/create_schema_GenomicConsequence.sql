@@ -7,7 +7,7 @@ name VARCHAR(100), # Provided name
 # Consequence data
 transcript VARCHAR(100), # Ensembl transcript ID
 protein VARCHAR(100),    # Ensembl protein ID
-canonical BOOLEAN, # Canonical transcript?
+canonical TINYINT, # Canonical transcript?
 allele VARCHAR(50),
 consequence VARCHAR(100),
 cdna_pos INT,
@@ -21,7 +21,9 @@ polyphen DOUBLE, # Score only
 sift DOUBLE,     # Score only
 biotype VARCHAR(100), # of transcript
 domains TEXT, # formatted list as string
+gc_id MEDIUMINT NOT NULL AUTO_INCREMENT, # Unique, direct-reference key
 PRIMARY KEY(transcript,chr,start,end),
+KEY(gc_id),
 KEY(chr,start,end),
 KEY(consequence),
 KEY(protein),
