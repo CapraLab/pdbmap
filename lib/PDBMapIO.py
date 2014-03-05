@@ -269,9 +269,9 @@ class PDBMapIO(PDBIO):
         query += "%(Ref_Codon)s,%(Alt_Codon)s,%(PolyPhen)s,%(SIFT)s,"
         query += "%(BIOTYPE)s,%(DOMAINS)s)"
         try: self._c.execute(query,csq)
-        except Exception as e:
+        except:
           msg = self._c._last_executed.replace('\n',';')
-          sys.stderr.write("WARNING (PDBMapIO) MySQL query failed: %s; Reason: %s\n"%(msg,e))
+          sys.stderr.write("WARNING (PDBMapIO) MySQL query failed: %s\n"%msg)
     resetwarnings()
     self._close()
     return i # return the number of uploaded rows
