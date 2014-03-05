@@ -29,8 +29,8 @@ class PDBMapIntersect():
     # Intersects a structure set with a dataset using intersectBed
     # dtype options: Genomic, Protein, Structural
 
-    # Query and write PDBMap ranges to temp file
-    query  = "SELECT chr,start,end,pdbid,chain,seqid FROM "
+    # Query and write PDBMap ranges to temp file, adjusted for UCSC indexing
+    query  = "SELECT chr,start-1,end,pdbid,chain,seqid FROM "
     query += "Transcript as a "
     query += "INNER JOIN Alignment as b "
     query += "ON a.transcript=b.transcript AND a.seqid=b.trans_seqid "
@@ -44,7 +44,7 @@ class PDBMapIntersect():
     
     # Query and write data ranges to temp file
     if dtype == 'Genomic':
-      query  = "SELECT chr,start,end,name FROM "
+      query  = "SELECT chr,start-1,end,name FROM "
       query += "GenomicData WHERE label=%s"
     elif dtype == 'Protein':
       msg = "ERROR: (PDBMapIntersect) Protein intersection not implemented."
@@ -96,6 +96,9 @@ def parse_intersection(parser):
     line = line.strip()
     if not line or line[0] == "#": continue
     row = line.split('\t')
+    # Adjust results back into PDBMap indexing
+    row[1] -= 1 # Transcript start position
+    row[7] -= 1 # Data start position
     yield row[0:10] # original columns, intersected
 
 # Main check

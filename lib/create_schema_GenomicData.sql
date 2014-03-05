@@ -1,58 +1,39 @@
 CREATE TABLE IF NOT EXISTS GenomicData (
 # Standard columns
-name VARCHAR(100),
-label VARCHAR(100),
+label VARCHAR(100), # Dataset label
 chr VARCHAR(10),
-start INT,
-end INT,
-ref_allele VARCHAR(10),
-gene VARCHAR(20),
-gene_alias TEXT, # ("Extra column") list of non-Ensembl gene IDs
-feature VARCHAR(100),
-feature_type VARCHAR(100),
-consequence VARCHAR(100),
-cdna_pos INT,
-cds_pos INT,
-protein_pos INT,
-ref_amino_acid VARCHAR(50),
-var_amino_acid VARCHAR(50),
-ref_codon VARCHAR(50),
-var_codon VARCHAR(50),
-variation VARCHAR(100),
-# "Extra" columns
-aa_maf DOUBLE,
-afr_maf DOUBLE,
-amr_maf DOUBLE,
-asn_maf DOUBLE,
-ea_maf DOUBLE,
-eur_maf DOUBLE,
-gen_maf DOUBLE, # global (general) allele frequency
-biotype VARCHAR(100), # of transcript
-canonical boolean, # is canonical transcript?
-ccds boolean, # is CCDS transcript?
-clinical_sig VARCHAR(100), # dbSNP clinical significance
-dist2trans INT, # distance to transcript
-domains TEXT, # formatted list as string
-ensp VARCHAR(100), # Ensembl protein ID
-exon VARCHAR(10), # what is this ratio?
-intron VARCHAR(10), # what is this ratio?
-hgvsc VARCHAR(100), # HGVS coding sequence name
-hgvsp VARCHAR(100), # HGVS protein sequence name
-pubmed TEXT, # list of PMIDs citing variation
-polyphen DOUBLE,
-sift DOUBLE,
+start INT, # Start site, always specified
+end INT,   # End site, specified by END or assumed start + 1
+name VARCHAR(100),  # Provided name
+variation VARCHAR(100), # Known variation names
+vtype VARCHAR(50),  # Variant Type
+svtype VARCHAR(50), # Structural variant type
+ref_allele VARCHAR(50),
+alt_allele VARCHAR(50),
+svlen INT, # Difference in length between ref and alt alleles
+quality DOUBLE, # Not sure how this is measured
+avgpost DOUBLE, # MaCH/Thunder: Average posterior probability
+rsq DOUBLE,     # MaCH/Thunder: Genotype imputation quality
+erate DOUBLE,   # MaCH/Thunder: Per-marker mutation rate
+theta DOUBLE,   # MaCH/Thunder: Per-marker transition rate
+ldaf DOUBLE,    # MLE allele frequency accounting for LD
+ac INT, # Alternate Allele Count
+an INT, # Total Allele Count
+aa VARCHAR(50), # Ancestral Allele
+maf DOUBLE,     # Allele Frequency: Global (AC/AN)
+amr_af DOUBLE,  # Allele Frequency: American
+asn_af DOUBLE, # Allele Frequency: Asian
+afr_af DOUBLE, # Allele Frequency: African
+eur_af DOUBLE, # Allele Frequency: European
+ens_gene VARCHAR(50), # Ensembl Gene identifier
+hgnc_gene VARCHAR(50), # HGNC Gene identifier
+snpsource VARCHAR(50), # Low coverage or Exome?
 PRIMARY KEY(label,name,chr,start,end),
 KEY(name,chr,start,end),
 KEY(chr,start,end),
-KEY(consequence),
-KEY(gene),
-KEY(ensp),
-KEY(feature),
-KEY(gen_maf),
-KEY(aa_maf),
-KEY(afr_maf),
-KEY(amr_maf),
-KEY(asn_maf),
-KEY(ea_maf),
-KEY(eur_maf)
+KEY(maf),
+KEY(amr_af),
+KEY(asn_af),
+KEY(afr_af),
+KEY(eur_af)
 )

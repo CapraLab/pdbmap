@@ -85,9 +85,9 @@ class PDBMap():
       print " # Processing %s # "%pdbid
       self.load_pdb(pdbid,label=label)
 
-  def load_data(self,dname,dfile):
+  def load_data(self,dname,dfile,j):
     """ Loads a data file into the PDBMap database """
-    d = PDBMapData.PDBMapData(self.vep,self.plink)
+    d = PDBMapData.PDBMapData(self.vep,self.plink,j)
     if not os.path.exists(dfile):
       dfile = "%s.ped"%dfile # Test if PEDMAP basename
       if not os.path.exists(dfile):
@@ -99,18 +99,17 @@ class PDBMap():
       ext = dfile.split('.')[-2].lower()
     # Process and accordingly
     if ext == 'vcf':
-      generator = d.load_vcf(dname,dfile)
+      generator = d.load_vcf(dfile)
     elif ext == "bed":
-      generator = d.load_bed(dname,dfile)
-    elif ext == "vep":
-      generator = d.load_vep(dname,dfile)
+      generator = d.load_bed(dfile)
     elif ext in ["ped","map"] :
-      generator = d.load_pedmap(dname,dfile)
+      generator = d.load_pedmap(dfile)
     else:
       msg = "ERROR (PDBMap) Unsupported file type: %s"%ext
       raise Exception(msg)
-    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,label)
-    io.upload_data(generator,dname)
+    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,dname)
+    nrows = io.upload_genomic_data(generator,dname)
+    return(nrows)
     
 
   def summarize_pdbmap(self):
@@ -157,7 +156,8 @@ if __name__== "__main__":
     "sec2prim" : "",
     "vep" : "variant_effect_predictor.pl",
     "plink" : "plink",
-    "label" : ""
+    "label" : "",
+    "cores" : 1
     }
   if args.conf_file:
     config = ConfigParser.SafeConfigParser()
@@ -168,29 +168,50 @@ if __name__== "__main__":
   parser = argparse.ArgumentParser(parents=[conf_parser],description=__doc__,formatter_class=argparse.RawDescriptionHelpFormatter)
   defaults['create_new_db'] = ('True' == defaults['create_new_db'])
   parser.set_defaults(**defaults)
-  parser.add_argument("-v", "--version", action="version", version="PDBMap version 1.8")
-  parser.add_argument("cmd",nargs='?',help="PDBMap subroutine")
-  parser.add_argument("args",nargs=argparse.REMAINDER,help="Arguments to cmd")
-  parser.add_argument("--dbhost", help="Database hostname")
-  parser.add_argument("--dbuser", help="Database username")
-  parser.add_argument("--dbpass", help="Database password")
-  parser.add_argument("--dbname", help="Database name")
-  parser.add_argument("--pdb_dir", help="Directory containing PDB files")
-  parser.add_argument("--map_dir", help="Directory to save pdbmap flat file")
-  parser.add_argument("--create_new_db", action='store_true', help="Create a new database prior to uploading PDB data")
-  parser.add_argument("-f", "--force", action='store_true', help="Force configuration. No safety checks.")
-  parser.add_argument("--pdbid", help="Force pdbid")
-  parser.add_argument("--unp", help="Force unp")
-  parser.add_argument("--idmapping", help="UniProt ID -> EnsEMBL transcript map file location")
-  parser.add_argument("--sec2prim", help="UniProt secondary -> primary AC map file location")
-  parser.add_argument("--vep", help="Variant Effect Predictor location")
-  parser.add_argument("--plink", help="PLINK location")
-  parser.add_argument("--label", help="Label for this session")
+  parser.add_argument("-v", "--version", action="version", 
+              version="PDBMap version 1.8")
+  parser.add_argument("cmd",nargs='?', 
+              help="PDBMap subroutine")
+  parser.add_argument("args",nargs=argparse.REMAINDER, 
+              help="Arguments to cmd")
+  parser.add_argument("--dbhost", 
+              help="Database hostname")
+  parser.add_argument("--dbuser", 
+              help="Database username")
+  parser.add_argument("--dbpass", 
+              help="Database password")
+  parser.add_argument("--dbname", 
+              help="Database name")
+  parser.add_argument("--pdb_dir", 
+              help="Directory containing PDB files")
+  parser.add_argument("--map_dir", 
+              help="Directory to save pdbmap flat file")
+  parser.add_argument("--create_new_db", action='store_true', 
+              help="Create a new database prior to uploading PDB data")
+  parser.add_argument("-f", "--force", action='store_true', 
+              help="Force configuration. No safety checks.")
+  parser.add_argument("--pdbid", 
+              help="Force pdbid")
+  parser.add_argument("--unp", 
+              help="Force unp")
+  parser.add_argument("--idmapping", 
+              help="UniProt ID -> EnsEMBL transcript map file location")
+  parser.add_argument("--sec2prim", 
+              help="UniProt secondary -> primary AC map file location")
+  parser.add_argument("--vep", 
+              help="Variant Effect Predictor location")
+  parser.add_argument("--plink", 
+              help="PLINK location")
+  parser.add_argument("--label", 
+              help="Label for this session")
+  parser.add_argument("-j", "--cores", type=int, default=1, 
+              help="Number of available processors")
 
   args = parser.parse_args(remaining_argv)
   parser.get_default("vep")
   args.create_new_db = bool(args.create_new_db)
   args.force = bool(args.force)
+  args.cores = int(args.cores)
   if args.create_new_db and not args.force:
     print "You have opted to create a new database."
     print "This will overwrite any existing database by the same name."
@@ -266,6 +287,8 @@ if __name__== "__main__":
     else: # Assign shared label
       dfiles = zip(args.args,[args.label for i in range(len(args.args))])
     for dfile,dname in dfiles:
-      pdbmap.load_data(dname,dfile)
+      print "## Processing %s: %s ##"%(dname,dfile)
+      nrows = pdbmap.load_data(dname,dfile,args.cores)
+      print " # %d rows uploaded."%nrows
 
   print "Complete!"

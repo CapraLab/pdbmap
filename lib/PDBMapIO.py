@@ -18,6 +18,7 @@ from Bio.PDB.PDBParser import PDBParser
 from Bio.PDB.PDBIO import PDBIO
 from PDBMapStructure import PDBMapStructure
 import MySQLdb, MySQLdb.cursors
+from warnings import filterwarnings,resetwarnings
 
 class PDBMapParser(PDBParser):
   def __init__(self,PERMISSIVE=True,get_header=True,
@@ -243,24 +244,37 @@ class PDBMapIO(PDBIO):
 
   def upload_genomic_data(self,dstream,dname):
     """ Uploads genomic data via a PDBMapData generator """
-    msg = "WARNING: (PDBMapIO) Genomic data upload not yet implemented.\n"
-    sys.stderr.write(msg)
     self._connect()
-    query  = "INSERT IGNORE INTO GenomicData VALUES "
-    query += '"%(name)s","%(label)s","%(chr)s",%(start)d,%(end)d,"%(ref_allele)s","%(gene)s",'
-    query += '"%(gene_alias)s","%(feature)s","%(feature_type)s","%(consequence)s",%(cdna_pos)d,'
-    query += '%(cds_pos)d,%(protein_pos)d,"%(ref_amino_acid)s","%(var_amino_acid)s",'
-    query += '"%(ref_codon)s","%(var_codon)s","%(variation)s",%(aa_maf)f,%(afr_maf)f,%(amr_maf)f,'
-    query += '%(asn_maf)f,%(ea_maf)f,%(eur_maf)f,%(gen_maf)f,"%(biotype)s","%(canonical)s",'
-    query += '"%(ccds)s","%(clin_sig)s",%(distance)d,"%(domains)s","%(ensp)s","%(exon)s","%(intron)s",'
-    query += '"%(hgvsc)s","%(hgvsp)s","%(pubmed)s",%(polyphen)f,%(sift)f'
-    # Attach the session label
-    for row in dstream:
-      row['label'] = dname
-      print query % row
-      #TODO: Upload the query
-      #self._c.execute(query%row)
+    filterwarnings('ignore', category = MySQLdb.Warning)
+    for i,record in enumerate(dstream):
+      # Upload all but the consequences to GenomicData
+      record.INFO['LABEL'] = dname
+      query  = "INSERT IGNORE INTO GenomicData VALUES (%(LABEL)s,"
+      query += "%(CHROM)s,%(START)s,%(END)s,%(ID)s,%(EXISTING)s,%(VT)s,%(SVTYPE)s,"
+      query += "%(REF)s,%(ALT)s,%(SVLEN)s,%(QUAL)s,%(AVGPOST)s,%(RSQ)s,"
+      query += "%(ERATE)s,%(THETA)s,%(LDAF)s,%(AC)s,%(AN)s,%(AA)s,"
+      query += "%(AF)s,%(AMR_AF)s,%(ASN_AF)s,%(AFR_AF)s,%(EUR_AF)s,"
+      query += "%(GENE)s,%(HGNC)s,%(SNPSOURCE)s)"
+      try: self._c.execute(query,record.INFO)
+      except:
+        msg = self._c._last_executed.replace('\n',';')
+        sys.stderr.write("WARNING (PDBMapIO) MySQL query failed: %s"%msg)
+      # Upload each consequence to GenomicConsequence
+      for csq in record.CSQ:
+        query  = "INSERT IGNORE INTO GenomicConsequence VALUES ("
+        query += "%(CHROM)s,%(START)s,%(END)s,%(ID)s,"
+        query += "%(Feature)s,%(ENSP)s,%(CANONICAL)s,%(Allele)s,"
+        query += "%(Consequence)s,%(cDNA_position)s,%(CDS_position)s,"
+        query += "%(Protein_position)s,%(Ref_AminoAcid)s,%(Alt_AminoAcid)s,"
+        query += "%(Ref_Codon)s,%(Alt_Codon)s,%(PolyPhen)s,%(SIFT)s,"
+        query += "%(BIOTYPE)s,%(DOMAINS)s)"
+        try: self._c.execute(query,csq)
+        except Exception as e:
+          msg = self._c._last_executed.replace('\n',';')
+          sys.stderr.write("WARNING (PDBMapIO) MySQL query failed: %s; Reason: %s\n"%(msg,e))
+    resetwarnings()
     self._close()
+    return i # return the number of uploaded rows
 
   def upload_intersection(self,dstream):
     """ Uploads an intersection via a process parser generator """
@@ -313,23 +327,23 @@ class PDBMapIO(PDBIO):
                 'lib/create_schema_Alignment.sql',
                 'lib/create_schema_AlignmentScore.sql',
                 'lib/create_schema_GenomicData.sql',
+                'lib/create_schema_GenomicConsequence.sql',
                 'lib/create_proc_build_GenomePDB.sql',
                 'lib/create_proc_update_GenomePDB.sql']
-    try:
-      # Checking for database.
+    
+    filterwarnings('ignore', category = MySQLdb.Warning)
+    try: # Create the database if not exists
       self._c.execute("CREATE DATABASE %s"%self.dbname)
-      self._c.execute("USE %s"%self.dbname)
-    except:
-      # Database found. Using existing.
-      pass
-    else:
-      # Database not found. Creating.
-      for q in queries:
-        query = open(q,'rb').read().replace('\n',' ')
+    except: pass # Database exists. Using existing.
+    finally: self._c.execute("USE %s"%self.dbname)
+    for q in queries:
+      try: # Create the tables and procedures if not exists
+        lines = [line.split('#')[0].rstrip() for line in open(q,'rb')]
+        query = ' '.join(lines)
         self._c.execute(query%format_dict)
-      print "Done."
-    finally:
-      self._close()
+      except: pass # Table exists. Using existing.
+    resetwarnings()
+    self._close()
 
   def show(self):
     return(self.__dict__['structure'])
