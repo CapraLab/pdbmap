@@ -31,8 +31,10 @@ class PDBMapIntersect():
     
     # Query and write data ranges to temp file
     if dtype == 'Genomic':
-      query  = "SELECT chr,start-1,end,gc_id FROM "
-      query += "GenomicData WHERE label=%s"
+      query  = "SELECT a.chr,a.start-1,a.end,a.gc_id FROM "
+      query += "GenomicConsequence as a INNER JOIN GenomicData as b "
+      query += "ON a.chr=b.chr AND a.start=b.start AND a.end=b.end "
+      query += "WHERE b.label=%s"
     elif dtype == 'Protein':
       msg = "ERROR: (PDBMapIntersect) Protein intersection not implemented."
       raise Exception(msg)
@@ -42,7 +44,7 @@ class PDBMapIntersect():
     else:
       msg = "ERROR: (PDBMapIntersect) %s intersection is not a valid option."
       raise Exception(msg%dtype)
-    temp2 = "working/%d.TEMP"%multidigit_rand(10)
+    temp2 = "temp/%d.TEMP"%multidigit_rand(10)
     with open(temp2,'wb') as fout:
       writer = csv.writer(fout)
       data = self.io.secure_query(query,(dlabel,),cursorclass='SSCursor')
@@ -56,11 +58,14 @@ class PDBMapIntersect():
     query += "ON a.transcript=b.transcript AND a.seqid=b.trans_seqid "
     if slabel:
       query += "WHERE b.pdbid=%s"
-    stemp  = "working/%d.TEMP"%multidigit_rand(10)
+    temp1  = "temp/%d.TEMP"%multidigit_rand(10)
     with open(temp1,'wb') as fout:
       writer = csv.writer(fout)
-      pdbmap = self.io.secure_query(query,(slabel,),cursorclass='SSCursor')
-      for row in pdbmap:
+      if slabel:
+        structures = self.io.secure_query(query,(slabel,),cursorclass='SSCursor')
+      else:
+        structures = self.io.secure_query(query,cursorclass='SSCursor')
+      for row in structures:
         writer.writerow(row)
 
     ## Temp files written. Beginning Intersection and upload. ##

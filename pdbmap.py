@@ -308,7 +308,7 @@ if __name__== "__main__":
   elif args.cmd == "intersect":
     pdbmap = PDBMap()
     msg  = "WARNING: (PDBMap) If loading data, intersections are automatically determined.\n"
-    msg += "       : (PDBMap) This is a debug command for manual intersections."
+    msg += "       : (PDBMap) This is a debug command for manual intersections.\n"
     sys.stderr.write(msg)
     dname = args.args[0] # Get the dataset name
     pdbmap.intersect_data(dname)

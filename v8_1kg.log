@@ -1,0 +1,2 @@
+Use of uninitialized value in subtraction (-) at /ant2/Bush_eQTL/sivleyrm/bin/variant_effect_predictor/Bio/EnsEMBL/Variation/StructuralVariationFeature.pm line 355, <GEN0> line 430030.
+Use of uninitialized value in subtraction (-) at /ant2/Bush_eQTL/sivleyrm/bin/variant_effect_predictor/Bio/EnsEMBL/Variation/StructuralVariationFeature.pm line 355, <GEN0> line 430030.

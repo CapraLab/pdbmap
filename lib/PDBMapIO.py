@@ -285,8 +285,9 @@ class PDBMapIO(PDBIO):
     msg = "WARNING: (PDBMapIO) Intersection upload not yet implemented.\n"
     sys.stderr.write(msg)
     self._connect()
-    query  = "INSERT IGNORE INTO GenomicIntersection VALUES "
-    query += "(%(pdbid)s,%(chain)s,%(seqid)s,%(gc_id)s)" # Direct reference
+    query  = "INSERT IGNORE INTO GenomicIntersection "
+    query += "(pdbid,chain,seqid,gc_id) VALUES "
+    query += "(%s,%s,%s,%s)" # Direct reference
     for i,row in enumerate(dstream):
       print query % row
       #TODO: Upload query
@@ -314,7 +315,7 @@ class PDBMapIO(PDBIO):
       yield row
     self._close()
 
-  def secure_query(self,query,vars,cursorclass='SSDictCursor'):
+  def secure_query(self,query,qvars=None,cursorclass='SSDictCursor'):
     """ Executes queries using safe practices """
     if cursorclass == 'SSDictCursor':
       self._connect(cursorclass=MySQLdb.cursors.SSDictCursor)
@@ -322,7 +323,8 @@ class PDBMapIO(PDBIO):
       self._connect(cursorclass=MySQLdb.cursors.SSCursor)
     else:
       self._connect()
-    self._c.execute(query,vars)
+    if qvars: self._c.execute(query,qvars)
+    else:     self._c.execute(query)
     for row in self._c:
       yield row
     self._close()
@@ -376,9 +378,10 @@ class PDBMapIO(PDBIO):
 
   def _close(self):
     try:
-      try:
+      try: # there may be no rows to fetch
         self._c.fetchall() # burn all remaining rows
       except: pass
+      self._c.close()    # close the cursor
       self._con.close()  # close the connection
     except MySQLdb.Error as e:
       print "There was an error disconnecting from the database.\n%s"%e
