@@ -186,18 +186,19 @@ class PDBMapData():
         # Convert canonical flag to boolean
         elif csq_header[i] == "CANONICAL":
           csq["CANONICAL"] = 1 if csq["CANONICAL"] == "YES" else 0
-        # Transform valid 0-indexed positions to 1-indexed positions
+        ##Transform valid 0-indexed positions to 1-indexed positions
+        #UPDATE: Despite initial appearances, positions seem to be correct
         elif csq_header[i] == "Protein_position":
           if csq['Protein_position'] and '?' not in csq['Protein_position']:
-            csq["Protein_position"] =  int(csq['Protein_position'].split('-')[0]) + 1
+            csq["Protein_position"] =  int(csq['Protein_position'].split('-')[0])# + 1
           else: csq["Protein_position"] = None
         elif csq_header[i] == "cDNA_position":
           if csq['cDNA_position'] and '?' not in csq['cDNA_position']:
-            csq["cDNA_position"] =  int(csq['cDNA_position'].split('-')[0]) + 1
+            csq["cDNA_position"] =  int(csq['cDNA_position'].split('-')[0])# + 1
           else: csq["cDNA_position"] = None
         elif csq_header[i] == "CDS_position":
           if csq['CDS_position'] and '?' not in csq['CDS_position']:
-            csq["CDS_position"] =  int(csq['CDS_position'].split('-')[0]) + 1
+            csq["CDS_position"] =  int(csq['CDS_position'].split('-')[0])# + 1
           else: csq["CDS_position"] = None
 
       if not csq: continue # Invalid conseqeunce. Skip the entry.

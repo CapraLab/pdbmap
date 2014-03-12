@@ -282,16 +282,17 @@ class PDBMapIO(PDBIO):
 
   def upload_intersection(self,dstream):
     """ Uploads an intersection via a process parser generator """
-    msg = "WARNING: (PDBMapIO) Intersection upload not yet implemented.\n"
-    sys.stderr.write(msg)
     self._connect()
     query  = "INSERT IGNORE INTO GenomicIntersection "
     query += "(pdbid,chain,seqid,gc_id) VALUES "
     query += "(%s,%s,%s,%s)" # Direct reference
     for i,row in enumerate(dstream):
-      print query % row
-      #TODO: Upload query
-      #self._c.execute(query%row)
+      try:
+        self._c.execute(query,row)
+      except:
+        print query
+        print row
+        raise
     self._close()
     return(i) # Return the number of uploaded rows
 
@@ -378,10 +379,12 @@ class PDBMapIO(PDBIO):
 
   def _close(self):
     try:
-      try: # there may be no rows to fetch
+      try: # If rows to fetch
         self._c.fetchall() # burn all remaining rows
       except: pass
-      self._c.close()    # close the cursor
+      try: # If any SS cursor
+        self._c.close() # close the cursor
+      except: pass
       self._con.close()  # close the connection
     except MySQLdb.Error as e:
       print "There was an error disconnecting from the database.\n%s"%e

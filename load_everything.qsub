@@ -1,0 +1,26 @@
+#!/bin/sh
+#
+# Project        : PDBMap 
+# Filename       : load_everything.qsub
+# Author         : R. Michael Sivley
+# Organization   : Center for Human Genetics Research,
+#                : Department of Biomedical Informatics,
+#                : Vanderbilt University Medical Center
+# Email          : mike.sivley@vanderbilt.edu
+# Date           : 2014-03-12
+# Description    : Loads all UniProt IDs into PDBMap, all 1000 Genomes v3
+#                : variants, and intersects them.
+#=============================================================================#
+# PBS Parameters
+#PBS -M mike.sivley@vanderbilt.edu
+#PBS -m bae
+#PBS -l nodes=vision.mc.vanderbilt.edu
+#PBS -l mem=15000mb
+#PBS -l walltime=5:00:00:00
+#=============================================================================#
+
+cd /projects/Bush_eQTL/sivleyrm/projects/pdbmap;
+
+./pdbmap.py -c config/v8.config load_unp > 1kg-v3_pdbmap.out 2> 1kg-v3_pdbmap.err;
+
+./pdbmap.py -c config/v8.config --label 1kg load_data /scratch/sivleyrm/1kg/ALL.chr*.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz > 1kg-v3_pdbmap-v8.out 2> 1kg-v3_pdbmap-v8.err;
