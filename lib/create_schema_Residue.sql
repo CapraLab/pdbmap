@@ -8,6 +8,6 @@ icode VARCHAR(10),
 x DOUBLE,
 y DOUBLE,
 z DOUBLE,
-PRIMARY KEY(pdbid,chain,seqid,ins),
+PRIMARY KEY(pdbid,chain,seqid,icode),
 KEY(pdbid,x,y,z)
 )

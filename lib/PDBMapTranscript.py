@@ -14,7 +14,7 @@
 
 # See main check for cmd line parsing
 import sys,os,csv,commands
-import PDBMapProtein
+from PDBMapProtein import PDBMapProtein
 
 class PDBMapTranscript():
 	
@@ -34,7 +34,7 @@ class PDBMapTranscript():
       unpid = PDBMapProtein.sec2prim[unpid]
       msg += "Using primary AC: %s\n"%unpid
       sys.stderr.write(msg)
-    transids = PDBMapProtein.unp2ensembltrans(unp)
+    transids = PDBMapProtein.unp2ensembltrans(unpid)
     if len(transids) > 1:
       msg  = "WARNING: (UniProt) Multiple transcripts associated with %s\n"%unpid
       sys.stderr.write(msg)

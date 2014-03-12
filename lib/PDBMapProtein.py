@@ -96,10 +96,11 @@ class PDBMapProtein():
   @classmethod
   def check_loaded(cls):
     # Checks if external database ID mapping has been loaded
-    if not PDBMapProtein.transmap:
-      msg  = "ERROR: (UniParc) transmap must be loaded with "
-      msg += "PDBMapProtein.load_idmapping(idmapping_fname) before "
-      msg += "instantiating a PDBMapProtein object."
+    if not PDBMapProtein._refseq2unp or \
+       not PDBMapProtein._unp2pdb or \
+       not PDBMapProtein._unp2ensembltrans or \
+       not PDBMapProtein._unp2ensemblprot:
+      msg = "ERROR: (UniProt) ID Mapping must be loaded before use."
       raise Exception(msg)
     # Checks if secondary to primary UniProt ID mapping has been loaded
     if not PDBMapProtein.sec2prim:

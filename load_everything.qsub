@@ -21,6 +21,6 @@
 
 cd /projects/Bush_eQTL/sivleyrm/projects/pdbmap;
 
-./pdbmap.py -c config/v8.config load_unp > 1kg-v3_pdbmap.out 2> 1kg-v3_pdbmap.err;
+./pdbmap.py -c config/v8.config load_unp > pdbmap-v8.out 2> pdbmap-v8.err;
 
 ./pdbmap.py -c config/v8.config --label 1kg load_data /scratch/sivleyrm/1kg/ALL.chr*.phase1_release_v3.20101123.snps_indels_svs.genotypes.vcf.gz > 1kg-v3_pdbmap-v8.out 2> 1kg-v3_pdbmap-v8.err;

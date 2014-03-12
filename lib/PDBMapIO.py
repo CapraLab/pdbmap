@@ -159,7 +159,7 @@ class PDBMapIO(PDBIO):
   def upload_structure(self):
     """ Uploads the current structure in PDBMapIO """
     # Verify that structure is not already in database
-    if structure_in_db(self.structure.id):
+    if self.structure_in_db(self.structure.id):
       msg =  "WARNING: (PDBMapIO) Structure %s "%self.structure.id
       msg += "already in database. Skipping.\n"
       sys.stderr.write(msg)
@@ -206,7 +206,7 @@ class PDBMapIO(PDBIO):
     # Upload the transcripts
     try:
       tquery = "INSERT IGNORE INTO Transcript VALUES "
-      if len(s.get_transcripts()):
+      if not len(s.get_transcripts()):
         raise Exception("No transcripts for structure %s"%s.id)
       for t in s.get_transcripts():
         for seqid,(rescode,chr,start,end,strand) in t.sequence.iteritems():
@@ -214,7 +214,8 @@ class PDBMapIO(PDBIO):
           tquery += '%d,"%s",'%(seqid,rescode)
           tquery += '"%s",%d,%d,%d),'%(chr,start,end,strand)
       queries.append(tquery[:-1])
-    except:
+    except Exception as e:
+      print str(e)
       msg = "ERROR: (PDBMapIO) Failed to get transcripts for %s.\n"%s.id
       sys.stderr.write(msg)
       raise
