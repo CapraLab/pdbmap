@@ -52,6 +52,8 @@ class PDBMapStructure(Structure):
     for chain in self.structure[0]:
       # Query all transcripts associated with the chain's UNP ID
       candidate_transcripts = PDBMapTranscript.query_from_unp(chain.unp)
+      if len(candidate_transcripts) < 1:
+        return []
       # Align candidate transcripts to chain
       alignment = PDBMapAlignment(chain,candidate_transcripts[0])
       for trans in candidate_transcripts[1:]:

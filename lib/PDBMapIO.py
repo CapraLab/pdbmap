@@ -91,12 +91,12 @@ class PDBMapParser(PDBParser):
       s[0][chain].species = species
 
     # Sanitize free text fields
-    s.header["name"]     = str(s.header["name"]).replace("'","")
-    s.header["author"]   = str(s.header["author"]).replace("'","")
-    s.header["keywords"] = str(s.header["keywords"]).replace("'","")
-    s.header["compound"] = str(s.header["compound"]).replace("'","")
-    s.header["structure_method"]    = str(s.header["structure_method"]).replace("'","")
-    s.header["structure_reference"] = str(s.header["structure_reference"]).replace("'","")
+    s.header["name"]     = str(s.header["name"]).translate(None,"'\"")
+    s.header["author"]   = str(s.header["author"]).translate(None,"'\"")
+    s.header["keywords"] = str(s.header["keywords"]).translate(None,"'\"")
+    s.header["compound"] = str(s.header["compound"]).translate(None,"'\"")
+    s.header["structure_method"]    = str(s.header["structure_method"]).translate(None,"'\"")
+    s.header["structure_reference"] = str(s.header["structure_reference"]).translate(None,"'\"")
 
     # Preprocess structure
     for m in s:
@@ -214,8 +214,7 @@ class PDBMapIO(PDBIO):
           tquery += '%d,"%s",'%(seqid,rescode)
           tquery += '"%s",%d,%d,%d),'%(chr,start,end,strand)
       queries.append(tquery[:-1])
-    except Exception as e:
-      print str(e)
+    except:
       msg = "ERROR: (PDBMapIO) Failed to get transcripts for %s.\n"%s.id
       sys.stderr.write(msg)
       raise
@@ -237,8 +236,14 @@ class PDBMapIO(PDBIO):
     queries.append(asquery[:-1])
 
     # Execute all queries at once to ensure everything completed.
-    for q in queries:
-      self._c.execute(q)
+    try:
+      for q in queries:
+        self._c.execute(q)
+    except:
+      msg  = "ERROR (PDBMapIO) Query failed for %s: "%s.id
+      msg += "%s\n"%self._c._last_executed
+      sys.stderr.write(msg)
+      return(1)
     
     self._close()
     return(0)

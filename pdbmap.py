@@ -73,11 +73,11 @@ class PDBMap():
     io.set_structure(s)
     try:
       io.upload_structure()
-    except Exception as e:
-      msg  = "ERROR: (PDBMap) %s could not be uploaded.\n"%pdbid
-      msg += "%s\n"%e
+    except:
+      msg = "ERROR: (PDBMap) %s could not be uploaded.\n"%pdbid
       sys.stderr.write(msg)
       return 1
+    return 0
 
   def load_unp(self,unp,label=""):
     """ Loads all known PDB structures associated with UniProt ID """

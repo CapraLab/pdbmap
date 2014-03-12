@@ -40,7 +40,6 @@ class PDBMapTranscript():
       sys.stderr.write(msg)
     if len(transids) < 1:
       msg = "WARNING: (UniProt) No transcript match for %s\n"%unpid
-      # raise Exception(msg)
       sys.stderr.write(msg)
     # Query all transcript candidates and return
     res = []
