@@ -150,8 +150,16 @@ class PDBMapIO(PDBIO):
 
   def structure_in_db(self,pdbid):
     self._connect()
-    query = "SELECT * FROM Structure WHERE pdbid='%s' LIMIT 1"%pdbid
-    self._c.execute(query)
+    query = "SELECT * FROM Structure WHERE pdbid=%s LIMIT 1"
+    self._c.execute(query,pdbid)
+    res = True if self._c.fetchone() else False
+    self._close()
+    return res
+
+  def genomic_datum_in_db(self,name):
+    self._connect()
+    query = "SELECT * FROM Structure WHERE name=%s LIMIT 1"
+    self._c.execute(query,name)
     res = True if self._c.fetchone() else False
     self._close()
     return res
