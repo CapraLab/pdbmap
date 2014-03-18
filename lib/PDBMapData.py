@@ -63,6 +63,11 @@ class PDBMapData():
     # Determine Consequence headers
     csq_headers  = parser.infos['CSQ'].desc.split(': ')[-1].split('|')
     for record in parser:
+      # Check if datum already in the database
+      if io.genomic_datum_in_db(record.INFO["ID"]):
+        msg = "WARNING (PDBMapData) %s is already in the database.\n"%record.INFO["ID"]
+        sys.stderr.write(msg)
+        continue
       # Adjust some specific fields
       if "END" not in record.INFO:
         record.INFO["END"] = int(record.POS) + 1
