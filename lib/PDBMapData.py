@@ -39,6 +39,12 @@ class PDBMapData():
     if registry:
       # Use a local Ensembl database
       self.vep_cmd.extend(['--registry',registry])
+    # Disable the progress bars
+    self.vep_cmd.extend(['--no_progress'])
+    # Specify the species for faster db queries
+    self.vep_cmd.extend(['--species','homo_sapiens'])
+    # Increase buffer size to improve runtime (default 5,000)
+    self.vep_cmd.extend(['--buffer_size','300000']) # ~15GB
     # Annotate with functional info/prediction
     self.vep_cmd.extend(['--sift','s','--polyphen','s','--regulatory'])
     # Annotate with variant, gene, protein, and domain identifiers
@@ -63,6 +69,7 @@ class PDBMapData():
     # Determine Consequence headers
     csq_headers  = parser.infos['CSQ'].desc.split(': ')[-1].split('|')
     for record in parser:
+      print " # Processing %s #"%record.ID
       # Adjust some specific fields
       if "END" not in record.INFO:
         record.INFO["END"] = int(record.POS) + 1
