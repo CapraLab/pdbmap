@@ -26,14 +26,14 @@ class PDBMapParser(PDBParser):
     super(PDBMapParser,self).__init__(PERMISSIVE,get_header,
                                       structure_builder,QUIET)
 
-  def get_structure(self,pdbid,fname,tier=-1,quality=-1):
+  def get_structure(self,pdbid,fname,quality=-1):
     try:
       if os.path.basename(fname).split('.')[-1] == 'gz':
         fin = gzip.open(fname,'rb')
       else:
         fin = open(fname,'rb')
       s = PDBParser.get_structure(self,pdbid,fin)
-      s = PDBMapStructure(s,tier,quality)
+      s = PDBMapStructure(s,quality)
       fin.close()
     except Exception as e:
       msg = "ERROR: (PDBMapIO) Error while parsing %s: %s"%(pdbid,str(e).replace('\n',' '))
@@ -190,7 +190,7 @@ class PDBMapIO(PDBIO):
     s = self.structure
     h = s.header
     squery  = 'INSERT IGNORE INTO Structure VALUES ('
-    squery += '"%(id)s","%(label)s",%(tier)d,"%(structure_method)s",%(quality)f,'
+    squery += '"%(label)s","%(id)s","%(structure_method)s",%(quality)f,'
     squery += '%(resolution)f,"%(name)s","%(author)s","%(deposition_date)s",'
     squery += '"%(release_date)s","%(compound)s","%(keywords)s",'
     squery += '"%(journal)s","%(structure_reference)s")'
@@ -206,20 +206,22 @@ class PDBMapIO(PDBIO):
     queries.append(squery)
     for c in s[0]:
       cquery  = "INSERT IGNORE INTO Chain VALUES "
-      cquery += '("%(id)s",'%sfields # pdb id
+      cquery += '("%(label)s","%(id)s",'%sfields # pdb id
       cquery += '"%(id)s","%(unp)s",%(offset)d,"%(sequence)s")'
       cfields = dict((key,c.__getattribute__(key)) for key in dir(c) 
                       if isinstance(key,collections.Hashable))
+      cfields["label"] = self.label
       cquery = cquery%cfields
       queries.append(cquery)
       rquery  = "INSERT IGNORE INTO Residue VALUES "
       for r in c:
-        rquery += '("%(id)s",'%sfields # pdb id
+        rquery += '("%(label)s","%(id)s",'%sfields # pdb id
         rquery += '"%(id)s",'%cfields # chain id
         rquery += '"%(resname)s","%(rescode)s",%(seqid)d,'
         rquery += '"%(icode)s",%(x)f,%(y)f,%(z)f),'
         rfields = dict((key,r.__getattribute__(key)) for key in dir(r) 
                         if isinstance(key,collections.Hashable))
+        rfields["label"] = self.label
         rquery = rquery%rfields
       queries.append(rquery[:-1])
 
@@ -230,7 +232,7 @@ class PDBMapIO(PDBIO):
         raise Exception("No transcripts for structure %s"%s.id)
       for t in s.get_transcripts():
         for seqid,(rescode,chr,start,end,strand) in t.sequence.iteritems():
-          tquery += '("%s","%s",'%(t.transcript,t.gene)
+          tquery += '("%s","%s","%s",'%(self.label,t.transcript,t.gene)
           tquery += '%d,"%s",'%(seqid,rescode)
           tquery += '"%s",%d,%d,%d),'%(chr,start,end,strand)
       queries.append(tquery[:-1])
@@ -243,16 +245,16 @@ class PDBMapIO(PDBIO):
     aquery = "INSERT IGNORE INTO Alignment VALUES "
     for a in s.get_alignments():
       for c_seqid,t_seqid in a.alignment.iteritems():
-        aquery += '("%s","%s",%d,'%(s.id,a.chain.id,c_seqid)
+        aquery += '("%s","%s","%s",%d,'%(self.label,s.id,a.chain.id,c_seqid)
         aquery += '"%s",%d),'%(a.transcript.transcript,t_seqid)
     queries.append(aquery[:-1])
 
     # Upload the alignment scores
-    asquery = "INSERT IGNORE INTO AlignmentScores VALUES "
+    asquery = "INSERT IGNORE INTO AlignmentScore VALUES "
     for a in s.get_alignments():
-      asquery += '("%s","%s","%s",%f,%f,%f),'% \
-                  (s.id,a.chain.id,a.transcript.transcript,
-                   a.score,a.perc_aligned,a.perc_identity)
+      asquery += '("%s","%s","%s","%s",%f,%f,%f,"%s"),'% \
+                  (self.label,s.id,a.chain.id,a.transcript.transcript,
+                   a.score,a.perc_aligned,a.perc_identity,a.aln_string)
     queries.append(asquery[:-1])
 
     # Execute all queries at once to ensure everything completed.
@@ -263,7 +265,7 @@ class PDBMapIO(PDBIO):
       msg  = "ERROR (PDBMapIO) Query failed for %s: "%s.id
       msg += "%s\n"%self._c._last_executed
       sys.stderr.write(msg)
-      return(1)
+      raise
     
     self._close()
     return(0)
@@ -286,18 +288,19 @@ class PDBMapIO(PDBIO):
         msg = self._c._last_executed.replace('\n',';')
         sys.stderr.write("WARNING (PDBMapIO) MySQL query failed: %s"%msg)
       # Upload each consequence to GenomicConsequence
+      query  = "INSERT IGNORE INTO GenomicConsequence "
+      query += "(label,chr,start,end,name,transcript,protein,canonical,allele,"
+      query += "consequence,cdna_pos,cds_pos,protein_pos,ref_amino_acid,"
+      query += "alt_amino_acid,ref_codon,alt_codon,polyphen,sift,biotype,"
+      query += "domains) VALUES ("
+      query += "%(LABEL)s,%(CHROM)s,%(START)s,%(END)s,%(ID)s,"
+      query += "%(Feature)s,%(ENSP)s,%(CANONICAL)s,%(Allele)s,"
+      query += "%(Consequence)s,%(cDNA_position)s,%(CDS_position)s,"
+      query += "%(Protein_position)s,%(Ref_AminoAcid)s,%(Alt_AminoAcid)s,"
+      query += "%(Ref_Codon)s,%(Alt_Codon)s,%(PolyPhen)s,%(SIFT)s,"
+      query += "%(BIOTYPE)s,%(DOMAINS)s)"
       for csq in record.CSQ:
-        query  = "INSERT IGNORE INTO GenomicConsequence "
-        query += "(chr,start,end,name,transcript,protein,canonical,allele,"
-        query += "consequence,cdna_pos,cds_pos,protein_pos,ref_amino_acid,"
-        query += "alt_amino_acid,ref_codon,alt_codon,polyphen,sift,biotype,"
-        query += "domains) VALUES ("
-        query += "%(CHROM)s,%(START)s,%(END)s,%(ID)s,"
-        query += "%(Feature)s,%(ENSP)s,%(CANONICAL)s,%(Allele)s,"
-        query += "%(Consequence)s,%(cDNA_position)s,%(CDS_position)s,"
-        query += "%(Protein_position)s,%(Ref_AminoAcid)s,%(Alt_AminoAcid)s,"
-        query += "%(Ref_Codon)s,%(Alt_Codon)s,%(PolyPhen)s,%(SIFT)s,"
-        query += "%(BIOTYPE)s,%(DOMAINS)s)"
+        csq["LABEL"] = self.label
         try: self._c.execute(query,csq)
         except:
           msg = self._c._last_executed.replace('\n',';')
@@ -310,9 +313,10 @@ class PDBMapIO(PDBIO):
     """ Uploads an intersection via a process parser generator """
     self._connect()
     query  = "INSERT IGNORE INTO GenomicIntersection "
-    query += "(pdbid,chain,seqid,gc_id) VALUES "
-    query += "(%s,%s,%s,%s)" # Direct reference
+    query += "(label,pdbid,chain,seqid,gc_id) VALUES "
+    query += "(%s,%s,%s,%s,%s)" # Direct reference
     for i,row in enumerate(dstream):
+      row.insert(0,self.label)
       try:
         self._c.execute(query,row)
       except:

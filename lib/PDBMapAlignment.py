@@ -24,7 +24,7 @@ class PDBMapAlignment():
     """ Alignment of PDBMapStructure chain to PDBMapAlignment """
     self.chain      = chain
     self.transcript = transcript
-    self.alignment,self.score,self.perc_aligned,self.perc_identity \
+    self.alignment,self.aln_string,self.score,self.perc_aligned,self.perc_identity \
                     = self.align(chain,transcript)
 
   def align(self,chain,transcript):
@@ -75,22 +75,24 @@ class PDBMapAlignment():
     #         print aln_trans_str[i*60:]
     #     print ''
 
+    # Create a single alignment string
+    aln_string = "%s\n%s"%(aln_chain,aln_trans)
     # Determine final alignment from chain -> transcript/protein
     alignment = dict((c_ind[i],t_ind[i]) for i in 
-                  range(len(c_ind)) if c_ind[i] > 0)
+                  range(len(c_ind)) if c_ind[i] > 0 and t_ind[i])
     ## Evaluate the alignment
     # How many chain residues were aligned? (not a gap)
-    aligned = sum([1 for i in range(c_start,c_end) if i in c_ind])
+    aligned = sum([1 for i in range(c_start,c_end+1) if i in c_ind])
     # How many chain residues were matched? (matching amino acids)
     matched = sum([1 for ci,ti in alignment.iteritems() \
         if ci and ti and c_seq[ci-c_start] == t_seq[ti-t_start]])
-    clen = c_end-c_start # Original chain length
+    clen = c_end-c_start+1 # Original chain length
     # Percent of the original aligned to transcript
     perc_aligned  = float(aligned)  / clen
     # Percent of the original identical to transcript
     perc_identity = float(matched) / clen
 
-    return alignment,score,perc_aligned,perc_identity
+    return alignment,aln_string,score,perc_aligned,perc_identity
 
   def _gap_shift(self,seq,seq_start,gaps=[]):
     """ Support generator function for align """

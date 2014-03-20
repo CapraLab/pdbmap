@@ -1,4 +1,5 @@
 CREATE TABLE IF NOT EXISTS Alignment (
+label VARCHAR(100), # Dataset label
 pdbid VARCHAR(50),
 chain VARCHAR(10),
 chain_seqid INT,

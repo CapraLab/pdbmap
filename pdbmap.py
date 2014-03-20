@@ -76,7 +76,7 @@ class PDBMap():
     except:
       msg = "ERROR: (PDBMap) %s could not be uploaded.\n"%pdbid
       sys.stderr.write(msg)
-      return 1
+      raise
     return 0
 
   def load_unp(self,unp,label=""):

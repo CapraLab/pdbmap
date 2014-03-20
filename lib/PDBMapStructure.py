@@ -22,10 +22,9 @@ from lib.PDBMapAlignment import PDBMapAlignment
 
 class PDBMapStructure(Structure):
 
-  def __init__(self,s,tier=-1,quality=-1):
-    # Assign the Structure, tier, and quality
+  def __init__(self,s,quality=-1):
+    # Assign the Structure, and quality
     self.structure   = s
-    self.tier        = tier
     self.quality     = quality
     self.transcripts = []
 

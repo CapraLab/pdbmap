@@ -1,4 +1,5 @@
 CREATE TABLE IF NOT EXISTS GenomicIntersection (
+label VARCHAR(100), # Dataset label
 pdbid VARCHAR(50), # Structure ID
 chain VARCHAR(10), # Structure chain
 seqid INT, # Position in chain sequence

@@ -1,4 +1,5 @@
 CREATE TABLE IF NOT EXISTS Transcript (
+label VARCHAR(100), # Dataset label
 transcript VARCHAR(50),
 gene VARCHAR(50),
 seqid INT,

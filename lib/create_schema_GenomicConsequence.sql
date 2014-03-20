@@ -1,4 +1,5 @@
 CREATE TABLE IF NOT EXISTS GenomicConsequence (
+label VARCHAR(100), # Dataset label
 # Foreign Key to GenomicData
 chr VARCHAR(10),
 start INT, # Start site, always specified
