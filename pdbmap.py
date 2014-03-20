@@ -50,7 +50,7 @@ class PDBMap():
                             args.dbpass,args.dbname,label)
 
     # Check if PDB is already in the database
-    if io.structure_in_db(pdbid):
+    if io.structure_in_db(pdbid,label):
       msg =  "WARNING: (PDBMapIO) Structure %s "%pdbid
       msg += "already in database. Skipping.\n"
       sys.stderr.write(msg)
@@ -251,7 +251,7 @@ if __name__== "__main__":
       print "\n## Processing %s ##"%args.pdbid
       if not args.label:
         label = "manual"
-      pdbmap.load_pdb(args.pdbid,pdb_file,label=label)
+      pdbmap.load_pdb(args.pdbid,pdb_file,label=args.label)
     else:
       # Process many PDB IDs
       pdbs = [(os.path.basename(pdb_file).split('.')[0][-4:].upper(),pdb_file) for pdb_file in args.args]

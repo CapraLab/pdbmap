@@ -30,13 +30,22 @@ class PDBMapAlignment():
   def align(self,chain,transcript):
     """ Aligns one chain of a PDBMapStructure to a PDBMapAlignment """
     # Determine start indices
-    chain_start = min([r.seqid for r in chain.get_residues()])
-    trans_start = min(transcript.sequence.keys())
+    c_start = min([r.seqid for r in chain.get_residues()])
+    t_start = min(transcript.sequence.keys())
+    c_end   = max([r.seqid for r in chain.get_residues()])
+    t_end   = max(transcript.sequence.keys())
 
-    # Generate sequence
-    c_seq = ''.join([r.rescode for r in chain.get_residues()])
+    # Generate chain sequence (may contain gaps)
+    c_seq = ['-' for i in range(c_end+1)]
+    for r in chain.get_residues():
+        c_seq[r.seqid] = r.rescode
+    c_seq = c_seq[c_start:] # Remove leading gaps
+    # Record the gaps
+    gaps = [i+c_start for i,r in enumerate(c_seq) if r == '-']
+    c_seq = ''.join(c_seq) # Convert to string
+    c_seq = c_seq.replace('-','G') # Dummy code sequence gaps to GLY
+    # Generate transcript/protein sequence
     t_seq = ''.join([r[0] for r in transcript.sequence.itervalues()])
-
     # Define alignment parameters
     matrix     = matlist.blosum62
     gap_open   = -10
@@ -45,37 +54,57 @@ class PDBMapAlignment():
     # Perform pairwise alignment
     alignments = pairwise2.align.globalds(c_seq,t_seq,matrix,gap_open,gap_extend)
     alignment  = alignments[0] # best alignment
-    aln_chain_str, aln_trans_str, score, begin, end = alignment
-    aln_chain   = [aa for aa in aln_chain_str]
-    aln_trans   = [aa for aa in aln_trans_str]
-
+    aln_chain, aln_trans, score, begin, end = alignment
     # Create an alignment map from chain to transcript
-    chain_ind = [x for x in self._gap_shift(aln_chain,chain_start)]
-    trans_ind = [x for x in self._gap_shift(aln_trans,trans_start)]
-    # Determine the number of mismatched amino acids
-    mismatch = sum([int(aln_chain[i]!=aln_trans[i]) for i in 
-                  range(len(aln_chain)) if chain_ind[i] > 0 and trans_ind[i] > 0])
-    alignment = dict((chain_ind[i],trans_ind[i]) for i in 
-                  range(len(chain_ind)) if chain_ind[i] > 0)
+    c_ind = [x for x in self._gap_shift(aln_chain,c_start,gaps)]
+    t_ind = [x for x in self._gap_shift(aln_trans,t_start)]
 
-    # Calculate percent match and identity
-    chain_len     = len(alignment)
-    num_gaps      = len([val for val in alignment.values() if val==-1])
-    perc_aligned  = float(chain_len-num_gaps) / chain_len
-    perc_identity = float(chain_len-num_gaps-mismatch) / chain_len
+    # Verify alignment - Don't uncomment except for debug
+    # or if method of systematic replacement of chain sequence
+    # gaps back to the chain alignment as ? is found.
+    # for i in range(len(aln_chain_str) / 60):
+    #     print 'Chain: ',
+    #     if len(aln_chain_str) > (i+1)*60:
+    #         print aln_chain_str[i*60:(i+1)*60]
+    #     else:
+    #         print aln_chain_str[i*60:]
+    #     print 'Trans: ',
+    #     if len(aln_trans_str) > (i+1)*60:
+    #         print aln_trans_str[i*60:(i+1)*60]
+    #     else:
+    #         print aln_trans_str[i*60:]
+    #     print ''
+
+    # Determine final alignment from chain -> transcript/protein
+    alignment = dict((c_ind[i],t_ind[i]) for i in 
+                  range(len(c_ind)) if c_ind[i] > 0)
+    ## Evaluate the alignment
+    # How many chain residues were aligned? (not a gap)
+    aligned = sum([1 for i in range(c_start,c_end) if i in c_ind])
+    # How many chain residues were matched? (matching amino acids)
+    matched = sum([1 for ci,ti in alignment.iteritems() \
+        if ci and ti and c_seq[ci-c_start] == t_seq[ti-t_start]])
+    clen = c_end-c_start # Original chain length
+    # Percent of the original aligned to transcript
+    perc_aligned  = float(aligned)  / clen
+    # Percent of the original identical to transcript
+    perc_identity = float(matched) / clen
 
     return alignment,score,perc_aligned,perc_identity
 
-  def _gap_shift(self,seq,seq_start):
+  def _gap_shift(self,seq,seq_start,gaps=[]):
     """ Support generator function for align """
     # Returns a dictionary mapping
     index = seq_start
     for i in seq:
-      if i != '-':
-	      yield index
-	      index += 1
-      else:
-	      yield -1
+        # Alignment Match
+        if i != '-':
+            # Do not return matches to sequence gaps
+            yield index if index not in gaps else None
+            index += 1
+        # Alignment Gap
+        else:
+            yield None
     
     
 
