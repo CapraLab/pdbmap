@@ -83,12 +83,37 @@ class PDBMapParser(PDBParser):
       unp      = ref[33:41].strip()
       species  = ref[42:54].strip().split('_')[-1]
       pdbstart = int(ref[14:18])
+      pdbend   = int(ref[20:24])
       dbstart  = int(ref[55:60])
+      dbend    = int(ref[62:67])
       # Documented offset between PDB and canonical sequence
       offset   = dbstart - pdbstart
-      s[0][chain].unp     = unp
-      s[0][chain].offset  = offset
-      s[0][chain].species = species
+      # Handle human-nonhuman split chains
+      if s[0][chain].unp:
+        # If previous chain segment was human, and this one is not
+        if s[0][chain].species == 'HUMAN' and species != 'HUMAN':
+          # Drop this segment of the chain
+          drop = [r for r in s[0][chain] if pdbstart >= r.id[1] <= pdbend]
+          for r in drop:
+            s[0][chain].detach_child(r.id)
+          continue # Do not overwrite existing chain DBREF
+        # Else if this chain segment is human, and the previous was not   
+        elif s[0][chain].species != 'HUMAN' and species == 'HUMAN':
+          # Drop all but this segment of the chain
+          drop = [r for r in s[0][chain] if pdbend > r.id[1] or r.id[1] < pdbstart]
+          for r in drop:
+            s[0][chain].detach_child(r.id)
+        # NO ACTION NECESSARY FOR THE REMAINING CONDITIONS.
+        # If both chains are human, the first will be retained, the 
+        # information will be the same, and the start offset will default
+        # to the first specified DBREF, which should be earlier in the chain.
+        # If both chains are non-human, then this chain will either be replaced
+        # with a human chain-segment in a future DBREF, or it will be dropped
+        # as a non-human chain during preprocessing.
+      else: # Normal case
+        s[0][chain].unp     = unp
+        s[0][chain].offset  = offset
+        s[0][chain].species = species
 
     # Sanitize free text fields
     s.header["name"]     = str(s.header["name"]).translate(None,"'\"")
@@ -104,6 +129,7 @@ class PDBMapParser(PDBParser):
       for c in iter_m:
         if 'species' not in dir(c):
           c.species = 'UNKNOWN'
+        print "pdbid=%s; chain=%s; species=%s"%(s.id,c.id,c.species)
         if c.species != 'HUMAN':
           msg = "WARNING: (PDBMapIO) Ignoring non-human chain: %s (%s)\n"%(c.id,c.species)
           sys.stderr.write(msg)
