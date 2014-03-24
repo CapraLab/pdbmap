@@ -18,6 +18,10 @@ from PDBMapProtein import PDBMapProtein
 
 class PDBMapTranscript():
 	
+  # Transcript query cache, keyed on transcript IDs
+  trans_cache = {}
+  CACHE_ACCESS_MIN = 100
+
   def __init__(self,transcript,gene,sequence):
     # Define transcript, gene, and sequence
     self.transcript = transcript
@@ -25,6 +29,19 @@ class PDBMapTranscript():
     # Sequence | key:   seqid
     # Sequence | value: (rescode,chr,start,end,strand)
     self.sequence   = sequence
+
+  @classmethod
+  def cache_transcript(cls,transid,transcript):
+    """ Caches a transcript result from a transid query """
+    # Cache the transid->transcript query
+    PDBMapTranscript.trans_cache[transid] = (transcript,0)
+    # Update access counts
+    for tid,(tobj,count) in PDBMapTranscript.trans_cache.iteritems():
+      PDBMapTranscript.trans_cache[tid] = (tobj,count+1)
+    # Remove infrequently accessed entries
+    PDBMapTranscript.trans_cache = dict([(x,(y,z)) for x,(y,z) in \
+                PDBMapTranscript.trans_cache.iteritems() \
+                if z < PDBMapTranscript.CACHE_ACCESS_MIN])
 
   @classmethod
   def query_from_unp(cls,unpid):
@@ -44,18 +61,26 @@ class PDBMapTranscript():
     # Query all transcript candidates and return
     res = []
     for transid in transids:
-      res.append(PDBMapTranscript.query_from_trans(transid))
+      trans = PDBMapTranscript.query_from_trans(transid)
+      if trans:
+        res.append(trans)
     return res
 
   @classmethod
   def query_from_trans(cls,transid):
     """ Use Ensembl Transcript ID to load transcript information """
+    # Check for cached transcript query result
+    if transid in PDBMapTranscript.trans_cache:
+      trans = PDBMapTranscript.trans_cache[transid]
+      return PDBMapTranscript.trans_cache[transid]
+    # Query the Ensembl API for the transcript
     cmd = "perl lib/transcript_to_genomic.pl %s"%transid
     status, output = commands.getstatusoutput(cmd)
     if status > 0:
-      sys.stderr.write(output+"\n")
-      msg = "ERROR: (transcript_to_genomic.pl) Non-zero exit status for %s"%transid
-      raise Exception(msg)
+      msg = "WARNING: (transcript_to_genomic.pl) Non-zero exit status for %s: %s\n"%(transid,output)
+      sys.stderr.write(msg)
+      PDBMapTranscript.cache_transcript(transid,None)
+      return None
     sequence = {} # store sequence keyed on seqid
     for line in output.split('\n'):
       if line.startswith('#'): continue
@@ -70,7 +95,9 @@ class PDBMapTranscript():
       strand     = int(fields[7])
       sequence[seqid] = (rescode,chr,start,end,strand)
     # Return a new PDBMapTranscript object
-    return PDBMapTranscript(transcript,gene,sequence)
+    trans = PDBMapTranscript(transcript,gene,sequence)
+    PDBMapTranscript.cache_transcript(transid,trans)
+    return trans
 
 # Main check
 if __name__== "__main__":

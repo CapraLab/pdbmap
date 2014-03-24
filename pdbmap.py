@@ -76,7 +76,6 @@ class PDBMap():
     except:
       msg = "ERROR: (PDBMap) %s could not be uploaded.\n"%pdbid
       sys.stderr.write(msg)
-      raise
     return 0
 
   def load_unp(self,unp,label=""):
@@ -85,6 +84,7 @@ class PDBMap():
     for pdbid in pdbids:
       print " # Processing %s # "%pdbid
       self.load_pdb(pdbid,label=label)
+      sys.stdout.flush() # Force stdout flush after each PDB
 
   def load_data(self,dname,dfile,j):
     """ Loads a data file into the PDBMap database """

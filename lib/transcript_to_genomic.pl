@@ -15,6 +15,12 @@ Bio::EnsEMBL::Registry->load_registry_from_db(-host=>'gwar-dev.mc.vanderbilt.edu
 $transcript_adaptor = Bio::EnsEMBL::Registry->get_adaptor('Human','Core','Transcript');
 $transcript = $transcript_adaptor->fetch_by_stable_id($transcript_id);
 
+# Check that the transcript query was successful
+if (!defined $transcript) {
+  print STDERR "No transcript found for ID: $transcript_id\n";
+  exit 1;
+}
+
 # Extract general transcript data
 my $q_strand = $transcript->strand();
 my $t_stable_id = $transcript->stable_id();

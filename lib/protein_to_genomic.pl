@@ -25,7 +25,7 @@ my $q_strand = 0;
 foreach my $transcript (@transcripts) {
 	my $t_stable_id = $transcript->stable_id();
 	my $gene = $transcript->get_Gene();
-my $g_stable_id = $gene->stable_id();
+	my $g_stable_id = $gene->stable_id();
 	my $t_start = $transcript->start();
 	my $t_end = $transcript->end();
 	my @exons = @{ $transcript->get_all_Exons() };

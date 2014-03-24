@@ -13,7 +13,7 @@
 #=============================================================================#
 
 # See main check for cmd line parsing
-import sys,os,csv,collections,gzip
+import sys,os,csv,collections,gzip,time
 from Bio.PDB.PDBParser import PDBParser
 from Bio.PDB.PDBIO import PDBIO
 from PDBMapStructure import PDBMapStructure
@@ -417,7 +417,7 @@ class PDBMapIO(PDBIO):
   def show(self):
     return(self.__dict__['structure'])
 
-  def _connect(self,usedb=True,cursorclass=MySQLdb.cursors.DictCursor):
+  def _connect(self,usedb=True,cursorclass=MySQLdb.cursors.DictCursor,retry=True):
     try:
       if usedb:
         self._con = MySQLdb.connect(host=self.dbhost,user=self.dbuser,
@@ -429,8 +429,17 @@ class PDBMapIO(PDBIO):
                             cursorclass = cursorclass)
       self._c = self._con.cursor()
     except MySQLdb.Error as e:
-      print "There was an error connecting to the database.\n%s"%e
-      sys.exit(1)
+      msg = "There was an error connecting to the database: %s\n"%e
+      sys.stderr.write(msg)
+      if retry:
+        msg = "Waiting 30s and retrying...\n"
+        sys.stderr.write(msg)
+        time.sleep(30) # Wait 30 seconds and retry
+        self._connect(usedb,cursorclass,retry=False)
+      else:
+        msg = "Database reconnection unsuccessful: %s\n"%e
+        sys.stderr.write(msg)
+      	raise
 
   def _close(self):
     try:
@@ -442,8 +451,9 @@ class PDBMapIO(PDBIO):
       except: pass
       self._con.close()  # close the connection
     except MySQLdb.Error as e:
-      print "There was an error disconnecting from the database.\n%s"%e
-      sys.exit(1)
+      msg = "There was an error disconnecting from the database: %s\n"%e
+      sys.stderr.write(msg)
+      raise
 
 aa_code_map = {"ala" : "A",
         "arg" : "R",
