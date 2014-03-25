@@ -86,10 +86,12 @@ class PDBMapParser(PDBParser):
       pdbend   = int(ref[20:24])
       dbstart  = int(ref[55:60])
       dbend    = int(ref[62:67])
+      hybrid   = 0
       # Documented offset between PDB and canonical sequence
       offset   = dbstart - pdbstart
       # Handle split chains
       if 'unp' in dir(s[0][chain]):
+        hybrid = 1 # Flag this chain as a hybrid
         # If existing chain segment is human, and this one is not
         if s[0][chain].species == 'HUMAN' and species != 'HUMAN':
           # Drop this segment of the chain
@@ -114,6 +116,7 @@ class PDBMapParser(PDBParser):
       s[0][chain].unp     = unp
       s[0][chain].offset  = offset
       s[0][chain].species = species
+      s[0][chain].hybrid  = hybrid
 
     # Sanitize free text fields
     s.header["name"]     = str(s.header["name"]).translate(None,"'\"")
@@ -233,7 +236,7 @@ class PDBMapIO(PDBIO):
     for c in s[0]:
       cquery  = "INSERT IGNORE INTO Chain VALUES "
       cquery += '("%(label)s","%(id)s",'%sfields # pdb id
-      cquery += '"%(id)s","%(unp)s",%(offset)d,"%(sequence)s")'
+      cquery += '"%(id)s","%(unp)s",%(offset)d,%(hybrid)d,"%(sequence)s")'
       cfields = dict((key,c.__getattribute__(key)) for key in dir(c) 
                       if isinstance(key,collections.Hashable))
       cfields["label"] = self.label

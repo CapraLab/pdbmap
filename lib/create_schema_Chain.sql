@@ -4,6 +4,7 @@ pdbid VARCHAR(50),
 chain VARCHAR(10),
 unp VARCHAR(50),
 offset INT,
+hybrid TINYINT,
 sequence TEXT,
 PRIMARY KEY(pdbid,chain),
 KEY(unp)
