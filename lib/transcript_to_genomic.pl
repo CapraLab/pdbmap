@@ -30,7 +30,12 @@ my $slice = $transcript->slice();
 my $s_name = $slice->seq_region_name();
 my $s_start = $slice->start();
 my $s_end = $slice->end();
-my $peptide = $transcript->translate()->seq();
+my $translation = $transcript->translate();
+if (!defined $translation) {
+	print STDERR "No translation for $transcript_id at $s_name:$s_start-$s_end\n";
+	exit 1;
+}
+my $peptide = $translation->seq();
 my $peplength = length($peptide);
 
 # For each amino acid in the peptide sequence, map to its genomic location

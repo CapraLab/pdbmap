@@ -120,6 +120,7 @@ class PDBMapParser(PDBParser):
     s.header["author"]   = str(s.header["author"]).translate(None,"'\"")
     s.header["keywords"] = str(s.header["keywords"]).translate(None,"'\"")
     s.header["compound"] = str(s.header["compound"]).translate(None,"'\"")
+    s.header["journal"]  = str(s.header["journal"]).translate(None,"'\"")
     s.header["structure_method"]    = str(s.header["structure_method"]).translate(None,"'\"")
     s.header["structure_reference"] = str(s.header["structure_reference"]).translate(None,"'\"")
 
@@ -261,8 +262,8 @@ class PDBMapIO(PDBIO):
           tquery += '%d,"%s",'%(seqid,rescode)
           tquery += '"%s",%d,%d,%d),'%(chr,start,end,strand)
       queries.append(tquery[:-1])
-    except:
-      msg = "ERROR: (PDBMapIO) Failed to get transcripts for %s.\n"%s.id
+    except Exception as e:
+      msg = "ERROR: (PDBMapIO) Failed to get transcripts for %s: %s.\n"%(s.id,str(e))
       sys.stderr.write(msg)
       raise
 

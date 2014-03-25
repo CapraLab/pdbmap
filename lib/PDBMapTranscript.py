@@ -20,7 +20,7 @@ class PDBMapTranscript():
 	
   # Transcript query cache, keyed on transcript IDs
   trans_cache = {}
-  CACHE_ACCESS_MIN = 100
+  CACHE_ACCESS_MIN = 25
 
   def __init__(self,transcript,gene,sequence):
     # Define transcript, gene, and sequence
@@ -71,8 +71,8 @@ class PDBMapTranscript():
     """ Use Ensembl Transcript ID to load transcript information """
     # Check for cached transcript query result
     if transid in PDBMapTranscript.trans_cache:
-      trans = PDBMapTranscript.trans_cache[transid]
-      return PDBMapTranscript.trans_cache[transid]
+      trans = PDBMapTranscript.trans_cache[transid][0] # exclude the count
+      return trans
     # Query the Ensembl API for the transcript
     cmd = "perl lib/transcript_to_genomic.pl %s"%transid
     status, output = commands.getstatusoutput(cmd)

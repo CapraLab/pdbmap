@@ -73,9 +73,10 @@ class PDBMap():
     io.set_structure(s)
     try:
       io.upload_structure()
-    except:
-      msg = "ERROR: (PDBMap) %s could not be uploaded.\n"%pdbid
+    except Exception as e:
+      msg = "ERROR: (PDBMap) %s could not be uploaded: %s\n"%(pdbid,str(e))
       sys.stderr.write(msg)
+      return 1
     return 0
 
   def load_unp(self,unp,label=""):
