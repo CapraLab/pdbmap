@@ -114,10 +114,12 @@ class PDBMapParser(PDBParser):
         # If both chains are non-human, then this chain will either be replaced
         # with a human chain-segment in a future DBREF, or it will be dropped
         # as a non-human chain during preprocessing.
-      s[0][chain].unp     = unp
-      s[0][chain].offset  = offset
-      s[0][chain].species = species
-      s[0][chain].hybrid  = hybrid
+      s[0][chain].unp      = unp
+      s[0][chain].pdbstart = pdbstart
+      s[0][chain].pdbend   = pdbend
+      s[0][chain].offset   = offset
+      s[0][chain].species  = species
+      s[0][chain].hybrid   = hybrid
 
     # Sanitize free text fields
     s.header["name"]     = str(s.header["name"]).translate(None,"'\"")
