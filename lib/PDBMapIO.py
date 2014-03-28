@@ -95,14 +95,15 @@ class PDBMapParser(PDBParser):
         # If existing chain segment is human, and this one is not
         if s[0][chain].species == 'HUMAN' and species != 'HUMAN':
           # Drop this segment of the chain
-          drop = [r for r in s[0][chain] if pdbstart >= r.id[1] <= pdbend]
+          drop = [r for r in s[0][chain] if pdbstart <= r.id[1] <= pdbend]
           for r in drop:
             s[0][chain].detach_child(r.id)
           continue # Do not overwrite existing chain DBREF
         # Else if this chain segment is human, and the exiting is not   
         elif s[0][chain].species != 'HUMAN' and species == 'HUMAN':
-          # Drop all but this segment of the chain
-          drop = [r for r in s[0][chain] if r.id[1] < pdbstart or r.id[1] > pdbend]
+          # Drop the existing segment of the chain
+          nhstart,nhend = s[0][chain].pdbstart,s[0][chain].pdbend
+          drop = [r for r in s[0][chain] if nhstart <= r.id[1] <= nhend]
           for r in drop:
             s[0][chain].detach_child(r.id)
         # NO ACTION NECESSARY FOR THE REMAINING CONDITIONS.

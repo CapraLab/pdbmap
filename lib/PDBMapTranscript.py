@@ -52,9 +52,6 @@ class PDBMapTranscript():
       msg += "Using primary AC: %s\n"%unpid
       sys.stderr.write(msg)
     transids = PDBMapProtein.unp2ensembltrans(unpid)
-    if len(transids) > 1:
-      msg  = "WARNING: (UniProt) Multiple transcripts associated with %s\n"%unpid
-      sys.stderr.write(msg)
     if len(transids) < 1:
       msg = "WARNING: (UniProt) No transcript match for %s\n"%unpid
       sys.stderr.write(msg)

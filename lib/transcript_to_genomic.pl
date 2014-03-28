@@ -1,9 +1,7 @@
 #!/usr/bin/perl
 
-use lib "/usr/analysis/software/ensembl-api/ensembl/modules";
-use lib "/usr/analysis/software/ensembl-api/ensembl-compara/modules";
-use lib "/usr/analysis/software/ensembl-api/ensembl-variation/modules";
-use lib "/usr/analysis/software/ensembl-api/ensembl-functgenomics/modules";
+# use lib "/usr/analysis/software/ensembl-api/ensembl/modules";
+use lib "/projects/Bush_eQTL/sivleyrm/bin/ensembl-api/75/ensembl/modules";
 
 use Bio::EnsEMBL::Registry;
 
@@ -11,6 +9,7 @@ use Bio::EnsEMBL::Registry;
 my $transcript_id = $ARGV[0];
 # Open connection with local Ensembl database (read-only)
 Bio::EnsEMBL::Registry->load_registry_from_db(-host=>'gwar-dev.mc.vanderbilt.edu',-user=>'script_access',-pass=>'bushlabrocks');
+# Bio::EnsEMBL::Registry->load_registry_from_db(-host => 'useastdb.ensembl.org',-user => 'anonymous');
 # Create a transcript adaptor from the transcript ID
 $transcript_adaptor = Bio::EnsEMBL::Registry->get_adaptor('Human','Core','Transcript');
 $transcript = $transcript_adaptor->fetch_by_stable_id($transcript_id);
