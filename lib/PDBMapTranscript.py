@@ -15,6 +15,7 @@
 # See main check for cmd line parsing
 import sys,os,csv,commands
 from PDBMapProtein import PDBMapProtein
+from PDBMapIO import aa_code_map
 
 class PDBMapTranscript():
 	
@@ -86,6 +87,8 @@ class PDBMapTranscript():
       gene       = fields[1]
       seqid      = int(fields[2])
       rescode    = fields[3]
+      if rescode not in aa_code_map:
+        rescode  = 'S' # replace non-standard amino acids with Serine
       start      = int(fields[4])
       end        = int(fields[5])
       chr        = fields[6]
