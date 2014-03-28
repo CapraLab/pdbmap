@@ -115,9 +115,13 @@ class PDBMapParser(PDBParser):
         # with a human chain-segment in a future DBREF, or it will be dropped
         # as a non-human chain during preprocessing.
       s[0][chain].unp      = unp
-      s[0][chain].pdbstart = pdbstart
-      s[0][chain].pdbend   = pdbend
-      s[0][chain].offset   = offset
+      # Do not overwrite an earlier pdbstart (disordered hybrid chains)
+      if pdbstart not in dir(s[0][chain]) or pdbstart < s[0][chain].pdbstart:
+        s[0][chain].pdbstart = pdbstart
+        s[0][chain].offset   = offset
+      # Do not overwrite a later pdbend (disordered hybrid chains)
+      if pdbend not in dir(s[0][chain]) or pdbend > s[0][chain].pdbend:
+        s[0][chain].pdbend   = pdbend
       s[0][chain].species  = species
       s[0][chain].hybrid   = hybrid
 
@@ -145,6 +149,8 @@ class PDBMapParser(PDBParser):
         for r in iter_c:
           if r.id[0].strip(): # If residue is a heteroatom
             c.detach_child(r.id) # Remove residue
+          elif r.id[1] < c.pdbstart OR r.id[1] > c.pdbend: # If residue outside chain boundary
+            c.detach_child(r.id)
           else:
             # Assign a 1-letter amino acid code
             if r.resname.lower() not in aa_code_map:

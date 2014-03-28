@@ -15,7 +15,6 @@
 # See main check for cmd line parsing
 import sys,os,csv,commands
 from PDBMapProtein import PDBMapProtein
-from PDBMapIO import aa_code_map
 
 class PDBMapTranscript():
 	
@@ -98,6 +97,29 @@ class PDBMapTranscript():
     trans = PDBMapTranscript(transcript,gene,sequence)
     PDBMapTranscript.cache_transcript(transid,trans)
     return trans
+
+aa_code_map = {"ala" : "A",
+        "arg" : "R",
+        "asn" : "N",
+        "asp" : "D",
+        "asx" : "B",
+        "cys" : "C",
+        "glu" : "E",
+        "gln" : "Q",
+        "glx" : "Z",
+        "gly" : "G",
+        "his" : "H",
+        "ile" : "I",
+        "leu" : "L",
+        "lys" : "K",
+        "met" : "M",
+        "phe" : "F",
+        "pro" : "P",
+        "ser" : "S",
+        "thr" : "T",
+        "trp" : "W",
+        "tyr" : "Y",
+        "val" : "V"}
 
 # Main check
 if __name__== "__main__":
