@@ -86,7 +86,9 @@ class PDBMapTranscript():
       gene       = fields[1]
       seqid      = int(fields[2])
       rescode    = fields[3]
-      if rescode not in aa_code_map:
+      if rescode not in aa_code_map.values():
+        msg = "Replacing non-standard amino acid: %s[%d]->%s with %s\n"%(transid,seqid,rescode,'S')
+        sys.stderr.write(msg)
         rescode  = 'S' # replace non-standard amino acids with Serine
       start      = int(fields[4])
       end        = int(fields[5])

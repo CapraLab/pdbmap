@@ -26,6 +26,24 @@ class PDBMapParser(PDBParser):
     super(PDBMapParser,self).__init__(PERMISSIVE,get_header,
                                       structure_builder,QUIET)
 
+  def get_model(self,model_summary,fname):
+    modelid  = model_summary[1]   # Extract the ModBase model ID
+    try:
+      ext = os.path.basename(fname).split('.')[-1]
+      if ext == 'gz':
+        fin = gzip.open(fname,'rb')
+      else:
+        fin = open(fname,'rb')
+      s = PDBParser.get_structure(self,modelid,fin)
+      m = PDBMapModel(s,model_summary)
+    except Exception as e:
+      msg = "ERROR: (PDBMapIO) Error while parsing %s: %s"%(modelid,str(e).replace('\n',' '))
+      sys.stderr.write(msg)
+      return None
+    m = PDBMapIO.process_structure(m)
+    return m
+
+
   def get_structure(self,pdbid,fname,quality=-1):
     try:
       if os.path.basename(fname).split('.')[-1] == 'gz':
@@ -38,7 +56,7 @@ class PDBMapParser(PDBParser):
     except Exception as e:
       msg = "ERROR: (PDBMapIO) Error while parsing %s: %s"%(pdbid,str(e).replace('\n',' '))
       sys.stderr.write(msg)
-      return(None)
+      return None
 
     # Clean up some common header differences
     if 'structure_method' in s.header and 'structure_methods' not in s.header:
@@ -67,7 +85,8 @@ class PDBMapParser(PDBParser):
       s.header['resolution'] = -1.0
 
     # Parse DBREF
-    if os.path.basename(fname).split('.')[-1] == 'gz':
+    ext = os.path.basename(fname).split('.')[-1]
+    if ext == 'gz':
       fin = gzip.open(fname,'rb')
     else:
       fin = open(fname,'rb')
@@ -134,46 +153,57 @@ class PDBMapParser(PDBParser):
     s.header["structure_method"]    = str(s.header["structure_method"]).translate(None,"'\"")
     s.header["structure_reference"] = str(s.header["structure_reference"]).translate(None,"'\"")
 
-    # Preprocess structure
-    for m in s:
-      iter_m = [c for c in m] # avoid modification during iteration, shallow
-      for c in iter_m:
-        if 'species' not in dir(c):
-          c.species = 'UNKNOWN'
-        if c.species != 'HUMAN':
-          msg = "WARNING: (PDBMapIO) Ignoring non-human chain: %s (%s)\n"%(c.id,c.species)
-          sys.stderr.write(msg)
-          m.detach_child(c.id)
-          continue
-        iter_c = [r for r in c] # avoid modification during iteration, shallow
-        for r in iter_c:
-          if r.id[0].strip(): # If residue is a heteroatom
-            c.detach_child(r.id) # Remove residue
-          elif r.id[1] < c.pdbstart OR r.id[1] > c.pdbend: # If residue outside chain boundary
-            c.detach_child(r.id)
-          else:
-            # Assign a 1-letter amino acid code
-            if r.resname.lower() not in aa_code_map:
-              r.resname='SER' # if unknown, dummy code serine for alignment
-            r.rescode = aa_code_map[r.resname.lower()]
-            # Compute the center of mass for all residues
-            r.coord  = sum([a.coord for a in r]) / 3
-            # Save the structural coordinate independently
-            r.x,r.y,r.z = r.coord
-            # Save the sequence coordinates independently
-            dummy,r.seqid,r.icode = r.id
-        if not len(c): # If chain contained only heteroatoms
-            m.detach_child(c.id) # Remove chain
-        else:
-          # Parse the chain sequence and store as string within the chain
-          c.sequence = "".join([r.rescode for r in c])
-      if not len(m): # If the model only contained non-human species
-        s.detach_child(m.id)
-    if not len(s):
-      msg = "ERROR: (PDBMapIO) %s contains no human protein chains.\n"%pdbid
-      sys.stderr.write(msg)
-      s = None # Return a None object to indicate invalid structure
+    # Preprocess structural elements
+    s = PDBMapIO.process_structure(s)
     return s
+  
+    @classmethod
+    def process_structure(cls,s):
+      # Process structural elements
+      iter_s = [m for m in s]
+      for m in iter_s[1:]:
+        s.detach_child(m.id) # Retain only the first model
+      for m in s:
+        iter_m = [c for c in m] # avoid modification during iteration, shallow
+        for c in iter_m:
+          if 'species' not in dir(c):
+            c.species = 'UNKNOWN'
+          if c.species != 'HUMAN':
+            msg = "WARNING: (PDBMapIO) Ignoring non-human chain: %s.%s (%s)\n"%(s.id,c.id,c.species)
+            sys.stderr.write(msg)
+            m.detach_child(c.id)
+            continue
+          iter_c = [r for r in c] # avoid modification during iteration, shallow
+          for r in iter_c:
+            if r.id[0].strip(): # If residue is a heteroatom
+              c.detach_child(r.id) # Remove residue
+            elif r.id[1] < c.pdbstart or r.id[1] > c.pdbend: # If residue outside chain boundary
+              c.detach_child(r.id)
+            elif r.id[1] < 1: # Residue index must be non-negative
+              c.detach_child(r.id)
+            else:
+              # Assign a 1-letter amino acid code
+              if r.resname.lower() not in aa_code_map:
+                r.resname='SER' # if unknown, dummy code serine for alignment
+              r.rescode = aa_code_map[r.resname.lower()]
+              # Compute the center of mass for all residues
+              r.coord  = sum([a.coord for a in r]) / 3
+              # Save the structural coordinate independently
+              r.x,r.y,r.z = r.coord
+              # Save the sequence coordinates independently
+              dummy,r.seqid,r.icode = r.id
+          if not len(c): # If chain contained only heteroatoms
+              m.detach_child(c.id) # Remove chain
+          else:
+            # Parse the chain sequence and store as string within the chain
+            c.sequence = ''.join([r.rescode for r in c])
+        if not len(m): # If the model only contained non-human species
+          s.detach_child(m.id)
+      if not len(s):
+        msg = "ERROR: (PDBMapIO) %s contains no human protein chains.\n"%pdbid
+        sys.stderr.write(msg)
+        s = None # Return a None object to indicate invalid structure
+      return s
 
 class PDBMapIO(PDBIO):
   def __init__(self,dbhost=None,dbuser=None,dbpass=None,dbname=None,label=""):
@@ -200,6 +230,25 @@ class PDBMapIO(PDBIO):
     self._close()
     return res
 
+  def model_in_db(self,modelid,label=None):
+    self._connect()
+    query = "SELECT * FROM Model WHERE modelid=%s "
+    if label:
+      query += "AND label=%s "
+    query += "LIMIT 1"
+    if label:
+      self._c.execute(query,(modelid,label))
+    else:
+      self._c.execute(query,modelid)
+    res = True if self._c.fetchone() else False
+    self._close()
+    return res
+
+  # def set_model(self,model):
+  #   """ Alias for set_structure to improve naming consistency """
+  #   self.model = model
+  #   self.set_structure(model.structure)
+
   def genomic_datum_in_db(self,name,label=None):
     self._connect()
     query  = "SELECT * FROM Structure WHERE name=%s "
@@ -214,7 +263,7 @@ class PDBMapIO(PDBIO):
     self._close()
     return res
 
-  def upload_structure(self):
+  def upload_structure(self,model=False,sfields=None):
     """ Uploads the current structure in PDBMapIO """
     # Verify that structure is not already in database
     if self.structure_in_db(self.structure.id):
@@ -226,22 +275,27 @@ class PDBMapIO(PDBIO):
     self._connect()
     queries = []
     s = self.structure
-    h = s.header
-    squery  = 'INSERT IGNORE INTO Structure VALUES ('
-    squery += '"%(label)s","%(id)s","%(structure_method)s",%(quality)f,'
-    squery += '%(resolution)f,"%(name)s","%(author)s","%(deposition_date)s",'
-    squery += '"%(release_date)s","%(compound)s","%(keywords)s",'
-    squery += '"%(journal)s","%(structure_reference)s")'
-    sfields = dict((key,s.__getattribute__(key)) for key in dir(s) 
-                  if isinstance(key,collections.Hashable))
-    # Add the header fields
-    sfields.update(s.header)
-    # Add the internal structure fields
-    sfields.update(dict((key,s.structure.__getattribute__(key)) for key in 
-                    dir(s.structure) if isinstance(key,collections.Hashable)))
-    sfields["label"] = self.label
-    squery = squery%sfields
-    queries.append(squery)
+
+    # Upload the structure if skip not specified
+    if not model:
+      h = s.header
+      squery  = 'INSERT IGNORE INTO Structure VALUES ('
+      squery += '"%(label)s","%(id)s","%(structure_method)s",%(quality)f,'
+      squery += '%(resolution)f,"%(name)s","%(author)s","%(deposition_date)s",'
+      squery += '"%(release_date)s","%(compound)s","%(keywords)s",'
+      squery += '"%(journal)s","%(structure_reference)s")'
+      sfields = dict((key,s.__getattribute__(key)) for key in dir(s) 
+                    if isinstance(key,collections.Hashable))
+      # Add the header fields
+      sfields.update(s.header)
+      # Add the internal structure fields
+      sfields.update(dict((key,s.structure.__getattribute__(key)) for key in 
+                      dir(s.structure) if isinstance(key,collections.Hashable)))
+      sfields["label"] = self.label
+      squery = squery%sfields
+      queries.append(squery)
+
+    # Upload the chains and residues
     for c in s[0]:
       cquery  = "INSERT IGNORE INTO Chain VALUES "
       cquery += '("%(label)s","%(id)s",'%sfields # pdb id
@@ -308,6 +362,32 @@ class PDBMapIO(PDBIO):
     self._close()
     return(0)
 
+  def upload_model(self):
+    """ Uploades the current model in PDBMapIO """
+    m = self.structure
+    if self.model_in_db(m.id,self.label):
+      msg =  "WARNING: (PDBMapIO) Structure %s "%m.id
+      msg += "already in database. Skipping.\n"
+      sys.stderr.write(msg)
+      return(1)
+    self._connect()
+
+    # Upload the Model summary information
+    mquery  = 'INSERT IGNORE INTO Model VALUES ('
+    mquery += '"%(label)s","%(id)s","%(unp)s","%(tvsmod_method)s",'
+    mquery += '%(tvsmod_no35)f,%(tvs_modrmsd)f,%(mpqs)f,%(evalue)f,%(ga341)f,'
+    mquery += '%(zdope)f,"%(pdbid)s","%(chain)s")'
+    mfields = dict((key,m.__getattribute__(key)) for key in dir(m) 
+                  if isinstance(key,collections.Hashable))
+    mfields["label"] = self.label
+    mquery = mquery%mfields
+    # Execute upload query
+    self._execute(mquery)
+    self._close()
+    # Pass the underlying PDBMapStructure to upload_structure
+    self.upload_structure(model=True,sfields=mfields)
+
+
   def upload_genomic_data(self,dstream,dname):
     """ Uploads genomic data via a PDBMapData generator """
     self._connect()
@@ -354,12 +434,12 @@ class PDBMapIO(PDBIO):
     query += "(label,pdbid,chain,seqid,gc_id) VALUES "
     query += "(%s,%s,%s,%s,%s)" # Direct reference
     for i,row in enumerate(dstream):
+      row = list(row) # convert from tuple
       row.insert(0,self.label)
+      row = tuple(row) # convert to tuple
       try:
         self._c.execute(query,row)
       except:
-        print query
-        print row
         raise
     self._close()
     return(i) # Return the number of uploaded rows
@@ -402,6 +482,7 @@ class PDBMapIO(PDBIO):
     self._connect(usedb=False)
     format_dict = {'dbuser':self.dbuser,'dbhost':self.dbhost}
     queries = [ 'lib/create_schema_Structure.sql',
+                'lib/create_schema_Model.sql',
                 'lib/create_schema_Chain.sql',
                 'lib/create_schema_Residue.sql',
                 'lib/create_schema_Transcript.sql',

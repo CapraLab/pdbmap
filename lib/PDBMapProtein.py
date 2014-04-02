@@ -35,7 +35,12 @@ class PDBMapProtein():
   @classmethod
   def unp2ensemblprot(cls,unp):
     # Return UniProt ID associated with Ensembl Protein ID
-    return PDBMapProtein._unp2ensemblprot.get(unp,[])
+    return PDBMapProtein._unp2ensp.get(unp,[])
+
+  @classmethod
+  def ensp2unp(cls,ensp):
+    # Return Ensembl Protein ID associated with Ensembl Protein ID
+    return PDBMapProtein._ensp2unp.get(ensp,[])
 
   @classmethod
   def unp2pdb(cls,unp):
@@ -48,7 +53,8 @@ class PDBMapProtein():
     PDBMapProtein._refseq2unp = {}
     PDBMapProtein._unp2pdb = {}
     PDBMapProtein._unp2ensembltrans = {}
-    PDBMapProtein._unp2ensemblprot = {}
+    PDBMapProtein._unp2ensp = {}
+    PDBMapProtein._ensp2unp = {}
 
     with open(idmapping_fname) as fin:
       reader = csv.reader(fin,delimiter='\t')
@@ -62,10 +68,10 @@ class PDBMapProtein():
           PDBMapProtein._unp2ensembltrans[unp] = translist.split('; ')
 
         ## Map UniProt IDs to Ensembl Protein IDs
-        if unp in PDBMapProtein._unp2ensemblprot:
-          PDBMapProtein._unp2ensemblprot[unp].extend(protlist.split('; '))
+        if unp in PDBMapProtein._unp2ensp:
+          PDBMapProtein._unp2ensp[unp].extend(protlist.split('; '))
         else:
-          PDBMapProtein._unp2ensemblprot[unp] = protlist.split('; ')
+          PDBMapProtein._unp2ensp[unp] = protlist.split('; ')
 
         ## Map UniProt IDs to Protein Data Bank IDs
         if pdblist == '':
@@ -74,6 +80,13 @@ class PDBMapProtein():
           PDBMapProtein._unp2pdb[unp].extend([pdb_chain.split(':')[0] for pdb_chain in pdblist.split('; ')])
         else:
           PDBMapProtein._unp2pdb[unp] = [pdb_chain.split(':')[0] for pdb_chain in pdblist.split('; ')]
+
+        ## Map Ensembl Protein IDs to UniProt IDs
+        for ensp in protlist:
+          if ensp in PDBMapProtein._ensp2unp:
+            PDBMapProtein._ensp2unp[ensp].append(unp)
+          else:
+            PDBMapProtein._ensp2unp[ensp] = [unp]
 
         ## Map RefSeq IDs to UniProt IDs (Reverse lookup)
         refseqlist = refseqlist.split('; ')
@@ -99,7 +112,7 @@ class PDBMapProtein():
     if not PDBMapProtein._refseq2unp or \
        not PDBMapProtein._unp2pdb or \
        not PDBMapProtein._unp2ensembltrans or \
-       not PDBMapProtein._unp2ensemblprot:
+       not PDBMapProtein._unp2ensp:
       msg = "ERROR: (UniProt) ID Mapping must be loaded before use."
       raise Exception(msg)
     # Checks if secondary to primary UniProt ID mapping has been loaded

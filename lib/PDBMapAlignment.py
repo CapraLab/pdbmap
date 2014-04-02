@@ -39,6 +39,7 @@ class PDBMapAlignment():
     c_seq = ['-' for i in range(c_end+1)]
     for r in chain.get_residues():
         c_seq[r.seqid] = r.rescode
+    #BUG negative start indices break this line
     c_seq = c_seq[c_start:] # Remove leading gaps
     # Record the gaps
     gaps = [i+c_start for i,r in enumerate(c_seq) if r == '-']
