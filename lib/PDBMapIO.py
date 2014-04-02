@@ -17,6 +17,7 @@ import sys,os,csv,collections,gzip,time
 from Bio.PDB.PDBParser import PDBParser
 from Bio.PDB.PDBIO import PDBIO
 from PDBMapStructure import PDBMapStructure
+from PDBMapModel import PDBMapModel
 import MySQLdb, MySQLdb.cursors
 from warnings import filterwarnings,resetwarnings
 
@@ -25,23 +26,6 @@ class PDBMapParser(PDBParser):
                 structure_builder=None,QUIET=True):
     super(PDBMapParser,self).__init__(PERMISSIVE,get_header,
                                       structure_builder,QUIET)
-
-  def get_model(self,model_summary,fname):
-    modelid  = model_summary[1]   # Extract the ModBase model ID
-    try:
-      ext = os.path.basename(fname).split('.')[-1]
-      if ext == 'gz':
-        fin = gzip.open(fname,'rb')
-      else:
-        fin = open(fname,'rb')
-      s = PDBParser.get_structure(self,modelid,fin)
-      m = PDBMapModel(s,model_summary)
-    except Exception as e:
-      msg = "ERROR: (PDBMapIO) Error while parsing %s: %s"%(modelid,str(e).replace('\n',' '))
-      sys.stderr.write(msg)
-      return None
-    m = PDBMapParser.process_structure(m)
-    return m
 
   @classmethod
   def process_structure(cls,s):
@@ -86,7 +70,7 @@ class PDBMapParser(PDBParser):
       if not len(m): # If the model only contained non-human species
         s.detach_child(m.id)
     if not len(s):
-      msg = "ERROR: (PDBMapIO) %s contains no human protein chains.\n"%pdbid
+      msg = "ERROR: (PDBMapIO) %s contains no human protein chains.\n"%s.id
       sys.stderr.write(msg)
       s = None # Return a None object to indicate invalid structure
     return s
@@ -97,7 +81,8 @@ class PDBMapParser(PDBParser):
         fin = gzip.open(fname,'rb')
       else:
         fin = open(fname,'rb')
-      s = PDBParser.get_structure(self,pdbid,fin)
+      p = PDBParser()
+      s = p.get_structure(pdbid,fin)
       s = PDBMapStructure(s,quality)
       fin.close()
     except Exception as e:
@@ -203,6 +188,29 @@ class PDBMapParser(PDBParser):
     # Preprocess structural elements
     s = PDBMapParser.process_structure(s)
     return s
+
+  def get_model(self,model_summary,fname):
+    modelid  = model_summary[1]   # Extract the ModBase model ID
+    try:
+      ext = os.path.basename(fname).split('.')[-1]
+      if ext == 'gz':
+        fin = gzip.open(fname,'rb')
+      elif ext in ['txt','pdb','ent']:
+        fin = open(fname,'rb')
+      else:
+        msg = "ERROR: (PDBMapParser) Unsupported file type: %s.\n"%ext
+        sys.stderr.write(msg)
+        return None
+      p = PDBParser()
+      s = p.get_structure(modelid,fin)
+      m = PDBMapModel(s,model_summary)
+    except Exception as e:
+      msg = "ERROR: (PDBMapIO) Error while parsing %s: %s"%(modelid,str(e).replace('\n',' '))
+      sys.stderr.write(msg)
+      raise #DEBUG
+      return None
+    m = PDBMapParser.process_structure(m)
+    return m
 
 class PDBMapIO(PDBIO):
   def __init__(self,dbhost=None,dbuser=None,dbpass=None,dbname=None,label=""):
@@ -374,15 +382,15 @@ class PDBMapIO(PDBIO):
     # Upload the Model summary information
     mquery  = 'INSERT IGNORE INTO Model VALUES ('
     mquery += '"%(label)s","%(id)s","%(unp)s","%(tvsmod_method)s",'
-    mquery += '%(tvsmod_no35)f,%(tvs_modrmsd)f,%(mpqs)f,%(evalue)f,%(ga341)f,'
+    mquery += '%(tvsmod_no35)f,%(tvsmod_rmsd)f,%(mpqs)f,%(evalue)f,%(ga341)f,'
     mquery += '%(zdope)f,"%(pdbid)s","%(chain)s")'
     mfields = dict((key,m.__getattribute__(key)) for key in dir(m) 
                   if isinstance(key,collections.Hashable))
     mfields["label"] = self.label
     mquery = mquery%mfields
     # Execute upload query
-    self._execute(mquery)
-    self._close()
+    self._c.execute(mquery)
+    self._c.close()
     # Pass the underlying PDBMapStructure to upload_structure
     self.upload_structure(model=True,sfields=mfields)
 

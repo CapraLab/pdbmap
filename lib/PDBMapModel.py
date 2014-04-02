@@ -33,25 +33,38 @@ class PDBMapModel(Structure):
   modbase_dir  = ''
   modbase_dict = {}
 
-  def __init__(self,s,model_summary):
-    # Store the structure
-    self.structure = structure
-    # Correct some fields
-    self.structure[0][' '].id      = 'A'
-    self.structure[0]['A'].species = "HUMAN"
-    # Store the model summary information
-    self.id = model_summary[1]
-    self.evalue  = model_summary[4]
-    self.ga341   = model_summary[5]
-    self.mpqs    = model_summary[6]
-    self.zdope   = model_summary[7]
-    self.pdbid   = model_summary[8]
-    self.chain   = model_summary[9]
-    self.tvsmod_method = model_summary[11]
-    self.tvsmod_no35   = model_summary[15]
-    self.tvsmod_rmsd   = model_summary[16]
-    self.unp     = model_summary[17]
+  def __init__(self,s,model_summary,quality=-1):
+    # Record the chain information
+    chain    = [c for c in s.get_chains()][0]
+    oid = chain.id
+    chain.id = 'A'
+    chain.species = "HUMAN"
+    chain.pdbstart = int(model_summary[2])
+    chain.pdbend   = int(model_summary[3])
+    chain.unp      = model_summary[17]
+    chain.offset   = 0 # Assumed. Corrected by alignment.
+    chain.hybrid   = 0
+    s[0].child_dict['A'] = chain
+    del s[0].child_dict[oid]
 
+    # Store the edited structure
+    self.structure   = s
+    self.quality     = quality
+    self.transcripts = []
+
+    # Store the model summary information
+    self.id      = model_summary[1]
+    self.tvsmod_method = model_summary[14]
+    self.tvsmod_no35   = float(model_summary[15])
+    self.tvsmod_rmsd   = float(model_summary[16])
+    self.evalue  = float(model_summary[4])
+    self.ga341   = float(model_summary[5])
+    self.mpqs    = float(model_summary[6])
+    self.zdope   = float(model_summary[7])
+    self.pdbid   = model_summary[9]
+    self.chain   = model_summary[10]
+    self.unp     = model_summary[17]
+    
   def __getattr__(self,attr):
     # Defer appropriate calls to the structure
     if attr in dir(self.structure):
@@ -104,12 +117,20 @@ class PDBMapModel(Structure):
   @classmethod
   def ensp2modbase(cls,ensp):
     """ Maps Ensembl protein IDs to ModBase models """
-    return PDBMapModel.modbase_dict.get(ensp,None)
+    models = PDBMapModel.modbase_dict.get(ensp,[])
+    return models
 
   @classmethod
   def unp2modbase(cls,unp):
     """ Maps UniProt protein IDs to ModBase models """
-    return PDBMapModel.ensp2modbase(PDBMapProtein.unp2ensp(unp))
+    # Get all matching Ensembl protein IDs
+    ensps = PDBMapProtein.unp2ensp(unp)
+    models = []
+    for ensp in ensps:
+      # Get all matching ModBase models
+      models.extend(PDBMapModel.ensp2modbase(ensp))
+    models = [model for model in models if model]
+    return models
 
   @classmethod
   def load_modbase(cls,modbase_dir,summary_fname):
@@ -123,18 +144,18 @@ class PDBMapModel(Structure):
     fin.readline() # burn the header
     reader = csv.reader(fin,delimiter='\t')
     for row in reader:
-      row = line.strip().split('\t')
       ensp,i = row[1].split('_')
-      unp = PDBMapProtein.ensp2unp(ensp)
+      # THIS WILL RETURN A LIST OF UNPS, HOW TO REPRESENT?
+      unps = PDBMapProtein.ensp2unp(ensp)
+      unp  = None if not unps else unps[0] # TEMPORARY - SELECT ONLY THE FIRST MATCHING UNP
+      if not unp: continue # Skip models without associated UniProt IDs
       row.append(unp) # set UniProt ID as last field in model summary
       if ensp in PDBMapModel.modbase_dict:
-        PDBMapModel.modbase_dict[unp].append(row)
+        PDBMapModel.modbase_dict[ensp].append(row)
       else:
-        PDBMapModel.modbase_dict[unp] = [row]
-    #DEBUG
-    print "ModBase Summary Dictionary:"
-    for key,val in PDBMapModel.modbase_dict.iteritems():
-      print key,val
+        PDBMapModel.modbase_dict[ensp] = [row]
+    diff = [unp for unp in PDBMapProtein._unp2ensembltrans.keys()
+              if PDBMapProtein.unp2ensp(unp)[0] not in PDBMapModel.modbase_dict]
   
 
 # I am just saving these here for the time being, decide where each

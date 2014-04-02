@@ -50,7 +50,7 @@ class PDBMap():
       self.plink = plink
 
   def load_unp(self,unp,label=""):
-    """ Loads all known PDB structures associated with UniProt ID """
+    """ Loads all known structures associated with UniProt ID """
     if self.pdb:
       pdbids = list(set(PDBMapProtein.PDBMapProtein.unp2pdb(unp)))
       for pdbid in pdbids:
@@ -58,13 +58,12 @@ class PDBMap():
         self.load_pdb(pdbid,label=label)
         sys.stdout.flush() # Force stdout flush after each PDB
     if self.modbase:
-      print "Checking ModBase"
-      models = list(set(PDBMapModel.PDBMapModel.unp2modbase(unp)))
-      print "Models found! (%s)"%','.join([model[1] for model in models])
+      models = PDBMapModel.PDBMapModel.unp2modbase(unp)
       for model in models:
         print " # Processing Model %s #"%model[1]
         self.load_model(model,label=label)
         sys.stdout.flush() # Force stdout flush after each model
+      sys.exit(1) #DEBUG
 
   def load_pdb(self,pdbid,pdb_fname=None,label=""):
     """ Loads a given PDB into the PDBMap database """
@@ -124,6 +123,8 @@ class PDBMap():
       modbase_dir = PDBMapModel.PDBMapModel.modbase_dir
       model_fname = "%s/models/model/%s.pdb"%(modbase_dir,modelid)
       print "Fetching %s from %s"%(modelid,model_fname)
+      if not os.path.exists(model_fname):
+        model_fname += '.xz' # check for compressed copy
       if not os.path.exists(model_fname):
         msg = "ERROR: (PDBMap) Cannot fetch %s. Not in ModBase mirror.\n"%modelid
         sys.stderr.write(msg)

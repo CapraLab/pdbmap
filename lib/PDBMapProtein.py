@@ -34,13 +34,13 @@ class PDBMapProtein():
 
   @classmethod
   def unp2ensp(cls,unp):
-    # Return UniProt ID associated with Ensembl Protein ID
-    return PDBMapProtein._unp2ensp.get(unp,[None])
+    # Return Ensembl Protein ID associated with UniProt ID
+    return PDBMapProtein._unp2ensp.get(unp,[])
 
   @classmethod
   def ensp2unp(cls,ensp):
     # Return Ensembl Protein ID associated with Ensembl Protein ID
-    return PDBMapProtein._ensp2unp.get(ensp,None)
+    return PDBMapProtein._ensp2unp.get(ensp,[])
 
   @classmethod
   def unp2pdb(cls,unp):
@@ -59,37 +59,40 @@ class PDBMapProtein():
     with open(idmapping_fname) as fin:
       reader = csv.reader(fin,delimiter='\t')
       for (unp,refseqlist,pdblist,translist,protlist) in reader:
+        pdblist    = [] if not pdblist else pdblist.strip().split('; ')
+        protlist   = [] if not protlist else protlist.strip().split('; ')
+        translist  = [] if not translist else translist.strip().split('; ')
+        refseqlist = [] if not refseqlist else refseqlist.strip().split('; ')
+        # if "ENSP00000383973" in protlist:
+        #   print unp,refseqlist,pdblist,translist,protlist
         ## Map UniProt IDs to Ensembl Transcript IDs
-        if translist == '':
+        if not translist:
           continue # Don't consider UniProt IDs without transcript-mapping
         if unp in PDBMapProtein._unp2ensembltrans:
-          PDBMapProtein._unp2ensembltrans[unp].extend(translist.split('; '))
+          PDBMapProtein._unp2ensembltrans[unp].extend(translist)
         else:
-          PDBMapProtein._unp2ensembltrans[unp] = translist.split('; ')
-
+          PDBMapProtein._unp2ensembltrans[unp] = translist
         ## Map UniProt IDs to Ensembl Protein IDs
         if unp in PDBMapProtein._unp2ensp:
-          PDBMapProtein._unp2ensp[unp].extend(protlist.split('; '))
+          PDBMapProtein._unp2ensp[unp].extend(protlist)
         else:
-          PDBMapProtein._unp2ensp[unp] = protlist.split('; ')
-
+          PDBMapProtein._unp2ensp[unp] = protlist
         ## Map UniProt IDs to Protein Data Bank IDs
-        if pdblist == '':
-          continue
-        elif unp in PDBMapProtein._unp2pdb:
-          PDBMapProtein._unp2pdb[unp].extend([pdb_chain.split(':')[0] for pdb_chain in pdblist.split('; ')])
+        if unp in PDBMapProtein._unp2pdb:
+          PDBMapProtein._unp2pdb[unp].extend([pdb_chain.split(':')[0] for pdb_chain in pdblist])
         else:
-          PDBMapProtein._unp2pdb[unp] = [pdb_chain.split(':')[0] for pdb_chain in pdblist.split('; ')]
-
+          PDBMapProtein._unp2pdb[unp] = [pdb_chain.split(':')[0] for pdb_chain in pdblist]
         ## Map Ensembl Protein IDs to UniProt IDs
         for ensp in protlist:
           if ensp in PDBMapProtein._ensp2unp:
+            # if "ENSP00000383973" in protlist: print "subsequent: %s: %s"%(ensp,unp)
             PDBMapProtein._ensp2unp[ensp].append(unp)
           else:
+            # if "ENSP00000383973" in protlist: print "first: %s: %s"%(ensp,unp)
             PDBMapProtein._ensp2unp[ensp] = [unp]
-
+        # if "ENSP00000383973" in protlist:
+        #   print PDBMapProtein._ensp2unp[ensp]
         ## Map RefSeq IDs to UniProt IDs (Reverse lookup)
-        refseqlist = refseqlist.split('; ')
         for refseq in refseqlist:
           if refseq in PDBMapProtein._refseq2unp:
             PDBMapProtein._refseq2unp[refseq].append(unp)
