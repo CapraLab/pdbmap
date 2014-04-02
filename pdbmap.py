@@ -26,7 +26,10 @@ from lib import PDBMapIntersect,PDBMapModel
 
 class PDBMap():
   def __init__(self,idmapping=None,sec2prim=None,pdb_dir=None,
-                modbase_dir=None,vep=None,plink=None,refresh=False):
+                modbase_dir=None,modbase_summary=None,vep=None,
+                plink=None,refresh=False):
+    self.pdb     = False
+    self.modbase = False
     # If refresh is specified, update all mirrored data
     if refresh:
       self.refresh_mirrors(idmapping,sec2prim,pdb_dir)
@@ -36,9 +39,11 @@ class PDBMap():
     if sec2prim:
       PDBMapProtein.PDBMapProtein.load_sec2prim(sec2prim)
     if pdb_dir:
+      self.pdb = True
       self.pdb_dir = pdb_dir
-    if modbase_dir:
-      PDBMapModel.PDBMapModel.load_modbase(modbase_dir)
+    if modbase_dir and modbase_summary:
+      self.modbase = True
+      PDBMapModel.PDBMapModel.load_modbase(modbase_dir,modbase_summary)
     if vep:
       self.vep = vep
     if plink:
@@ -46,16 +51,20 @@ class PDBMap():
 
   def load_unp(self,unp,label=""):
     """ Loads all known PDB structures associated with UniProt ID """
-    pdbids = list(set(PDBMapProtein.PDBMapProtein.unp2pdb(unp)))
-    for pdbid in pdbids:
-      print " # Processing PDB %s # "%pdbid
-      self.load_pdb(pdbid,label=label)
-      sys.stdout.flush() # Force stdout flush after each PDB
-    models = list(set(PDBMapModel.PDBMapModel.unp2modbase(unp)))
-    for model in models:
-      print " # Processing Model %s #"%model[1]
-      self.load_model(model,label=label)
-      sys.stdout.flush() # Force stdout flush after each model
+    if self.pdb:
+      pdbids = list(set(PDBMapProtein.PDBMapProtein.unp2pdb(unp)))
+      for pdbid in pdbids:
+        print " # Processing PDB %s # "%pdbid
+        self.load_pdb(pdbid,label=label)
+        sys.stdout.flush() # Force stdout flush after each PDB
+    if self.modbase:
+      print "Checking ModBase"
+      models = list(set(PDBMapModel.PDBMapModel.unp2modbase(unp)))
+      print "Models found! (%s)"%','.join([model[1] for model in models])
+      for model in models:
+        print " # Processing Model %s #"%model[1]
+        self.load_model(model,label=label)
+        sys.stdout.flush() # Force stdout flush after each model
 
   def load_pdb(self,pdbid,pdb_fname=None,label=""):
     """ Loads a given PDB into the PDBMap database """
@@ -131,7 +140,7 @@ class PDBMap():
     except Exception as e:
       msg = "ERROR: (PDBMap) %s could not be uploaded: %s\n"%(modelid,str(e))
       sys.stderr.write(msg)
-      # raise #DEBUG
+      raise #DEBUG
       return 1
     return 0
 
@@ -205,7 +214,8 @@ if __name__== "__main__":
     "dbpass" : None,
     "pdb_dir" : "data/pdb",
     "map_dir" : "data/maps",
-    "modbase_dir" : "data/modbase",
+    "modbase_dir" : None,
+    "modbase_summary" : None,
     "create_new_db" : False,
     "force" : False,
     "pdbid" : "",
@@ -246,6 +256,8 @@ if __name__== "__main__":
               help="Directory to save pdbmap flat file")
   parser.add_argument("--modbase_dir",
               help="Directory containing ModBase models")
+  parser.add_argument("--modbase_summary",
+              help="ModBase summary file")
   parser.add_argument("--create_new_db", action='store_true', 
               help="Create a new database prior to uploading PDB data")
   parser.add_argument("-f", "--force", action='store_true', 
@@ -317,7 +329,8 @@ if __name__== "__main__":
   ## load_unp ##
   elif args.cmd == "load_unp":
     pdbmap = PDBMap(idmapping=args.idmapping,sec2prim=args.sec2prim,
-                    pdb_dir=args.pdb_dir,modbase_dir=args.modbase_dir)
+                    pdb_dir=args.pdb_dir,modbase_dir=args.modbase_dir,
+                    modbase_summary=args.modbase_summary)
     if len(args.args) < 1:
       # All PDB-mapped UniProt IDs (later expand to all UniProt IDs)
       msg = "WARNING: (PDBMap) Uploading all PDB-associated UniProt IDs.\n"

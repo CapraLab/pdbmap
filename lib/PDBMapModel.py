@@ -21,7 +21,10 @@
 # See main check for cmd line parsing
 import argparse
 import sys,os,csv
-from PDBMapProtein import PDBMapProtein
+from Bio.PDB.Structure import Structure
+from lib.PDBMapProtein import PDBMapProtein
+from lib.PDBMapTranscript import PDBMapTranscript
+from lib.PDBMapAlignment import PDBMapAlignment
 
 class PDBMapModel(Structure):
   
@@ -99,31 +102,39 @@ class PDBMapModel(Structure):
       return self.alignments
 
   @classmethod
-  def unp2modbase(cls,unp):
-    """ Maps UniProt protein IDs to ModBase models """
-    return ensp2modbase(PDBMapProtein.unp2ensp(unp))
-
-  @classmethod
   def ensp2modbase(cls,ensp):
     """ Maps Ensembl protein IDs to ModBase models """
     return PDBMapModel.modbase_dict.get(ensp,None)
 
   @classmethod
+  def unp2modbase(cls,unp):
+    """ Maps UniProt protein IDs to ModBase models """
+    return PDBMapModel.ensp2modbase(PDBMapProtein.unp2ensp(unp))
+
+  @classmethod
   def load_modbase(cls,modbase_dir,summary_fname):
     """ Loads a ModBase summary file into a lookup dictionary """
-    PDBMapModel.modbase_dir = modebase_dir
-    fin = open("%s/%s"%(modbase_dir,summary_fname),'rb')
+    PDBMapModel.modbase_dir = modbase_dir
+    summary_path = "%s/%s"%(modbase_dir,summary_fname)
+    if not os.path.exists(summary_path):
+      msg = "ERROR: (PDBMapModel) Cannot load ModBase. %s does not exist."%summary_path
+      raise(msg)
+    fin = open(summary_path,'rb')
     fin.readline() # burn the header
     reader = csv.reader(fin,delimiter='\t')
     for row in reader:
       row = line.strip().split('\t')
       ensp,i = row[1].split('_')
       unp = PDBMapProtein.ensp2unp(ensp)
-      row.extend(unp) # set UniProt ID as last field in model summary
+      row.append(unp) # set UniProt ID as last field in model summary
       if ensp in PDBMapModel.modbase_dict:
-        PDBMapModel.modbase_dict.append(row)
+        PDBMapModel.modbase_dict[unp].append(row)
       else:
-        PDBMapModel.modbase_dict = [row]
+        PDBMapModel.modbase_dict[unp] = [row]
+    #DEBUG
+    print "ModBase Summary Dictionary:"
+    for key,val in PDBMapModel.modbase_dict.iteritems():
+      print key,val
   
 
 # I am just saving these here for the time being, decide where each
@@ -146,7 +157,7 @@ for line in fin:
 
 # Query an Ensembl protein and get the associated ModBase models
 test_pid   = "ENSP00000434723"
-models_summaries = homo_dict[test_pid]
+model_summaries = homo_dict[test_pid]
 model_dir  = "%s/%s"%(homo_dir,'models/model')
 for summary in model_summaries:
   id = summary[1]

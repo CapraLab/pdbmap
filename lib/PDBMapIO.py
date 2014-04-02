@@ -40,9 +40,56 @@ class PDBMapParser(PDBParser):
       msg = "ERROR: (PDBMapIO) Error while parsing %s: %s"%(modelid,str(e).replace('\n',' '))
       sys.stderr.write(msg)
       return None
-    m = PDBMapIO.process_structure(m)
+    m = PDBMapParser.process_structure(m)
     return m
 
+  @classmethod
+  def process_structure(cls,s):
+    # Process structural elements
+    iter_s = [m for m in s]
+    for m in iter_s[1:]:
+      s.detach_child(m.id) # Retain only the first model
+    for m in s:
+      iter_m = [c for c in m] # avoid modification during iteration, shallow
+      for c in iter_m:
+        if 'species' not in dir(c):
+          c.species = 'UNKNOWN'
+        if c.species != 'HUMAN':
+          msg = "WARNING: (PDBMapIO) Ignoring non-human chain: %s.%s (%s)\n"%(s.id,c.id,c.species)
+          sys.stderr.write(msg)
+          m.detach_child(c.id)
+          continue
+        iter_c = [r for r in c] # avoid modification during iteration, shallow
+        for r in iter_c:
+          if r.id[0].strip(): # If residue is a heteroatom
+            c.detach_child(r.id) # Remove residue
+          elif r.id[1] < c.pdbstart or r.id[1] > c.pdbend: # If residue outside chain boundary
+            c.detach_child(r.id)
+          elif r.id[1] < 1: # Residue index must be non-negative
+            c.detach_child(r.id)
+          else:
+            # Assign a 1-letter amino acid code
+            if r.resname.lower() not in aa_code_map:
+              r.resname='SER' # if unknown, dummy code serine for alignment
+            r.rescode = aa_code_map[r.resname.lower()]
+            # Compute the center of mass for all residues
+            r.coord  = sum([a.coord for a in r]) / 3
+            # Save the structural coordinate independently
+            r.x,r.y,r.z = r.coord
+            # Save the sequence coordinates independently
+            dummy,r.seqid,r.icode = r.id
+        if not len(c): # If chain contained only heteroatoms
+            m.detach_child(c.id) # Remove chain
+        else:
+          # Parse the chain sequence and store as string within the chain
+          c.sequence = ''.join([r.rescode for r in c])
+      if not len(m): # If the model only contained non-human species
+        s.detach_child(m.id)
+    if not len(s):
+      msg = "ERROR: (PDBMapIO) %s contains no human protein chains.\n"%pdbid
+      sys.stderr.write(msg)
+      s = None # Return a None object to indicate invalid structure
+    return s
 
   def get_structure(self,pdbid,fname,quality=-1):
     try:
@@ -154,56 +201,8 @@ class PDBMapParser(PDBParser):
     s.header["structure_reference"] = str(s.header["structure_reference"]).translate(None,"'\"")
 
     # Preprocess structural elements
-    s = PDBMapIO.process_structure(s)
+    s = PDBMapParser.process_structure(s)
     return s
-  
-    @classmethod
-    def process_structure(cls,s):
-      # Process structural elements
-      iter_s = [m for m in s]
-      for m in iter_s[1:]:
-        s.detach_child(m.id) # Retain only the first model
-      for m in s:
-        iter_m = [c for c in m] # avoid modification during iteration, shallow
-        for c in iter_m:
-          if 'species' not in dir(c):
-            c.species = 'UNKNOWN'
-          if c.species != 'HUMAN':
-            msg = "WARNING: (PDBMapIO) Ignoring non-human chain: %s.%s (%s)\n"%(s.id,c.id,c.species)
-            sys.stderr.write(msg)
-            m.detach_child(c.id)
-            continue
-          iter_c = [r for r in c] # avoid modification during iteration, shallow
-          for r in iter_c:
-            if r.id[0].strip(): # If residue is a heteroatom
-              c.detach_child(r.id) # Remove residue
-            elif r.id[1] < c.pdbstart or r.id[1] > c.pdbend: # If residue outside chain boundary
-              c.detach_child(r.id)
-            elif r.id[1] < 1: # Residue index must be non-negative
-              c.detach_child(r.id)
-            else:
-              # Assign a 1-letter amino acid code
-              if r.resname.lower() not in aa_code_map:
-                r.resname='SER' # if unknown, dummy code serine for alignment
-              r.rescode = aa_code_map[r.resname.lower()]
-              # Compute the center of mass for all residues
-              r.coord  = sum([a.coord for a in r]) / 3
-              # Save the structural coordinate independently
-              r.x,r.y,r.z = r.coord
-              # Save the sequence coordinates independently
-              dummy,r.seqid,r.icode = r.id
-          if not len(c): # If chain contained only heteroatoms
-              m.detach_child(c.id) # Remove chain
-          else:
-            # Parse the chain sequence and store as string within the chain
-            c.sequence = ''.join([r.rescode for r in c])
-        if not len(m): # If the model only contained non-human species
-          s.detach_child(m.id)
-      if not len(s):
-        msg = "ERROR: (PDBMapIO) %s contains no human protein chains.\n"%pdbid
-        sys.stderr.write(msg)
-        s = None # Return a None object to indicate invalid structure
-      return s
 
 class PDBMapIO(PDBIO):
   def __init__(self,dbhost=None,dbuser=None,dbpass=None,dbname=None,label=""):

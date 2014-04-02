@@ -33,14 +33,14 @@ class PDBMapProtein():
     return PDBMapProtein._unp2ensembltrans.get(unp,[])
 
   @classmethod
-  def unp2ensemblprot(cls,unp):
+  def unp2ensp(cls,unp):
     # Return UniProt ID associated with Ensembl Protein ID
-    return PDBMapProtein._unp2ensp.get(unp,[])
+    return PDBMapProtein._unp2ensp.get(unp,[None])
 
   @classmethod
   def ensp2unp(cls,ensp):
     # Return Ensembl Protein ID associated with Ensembl Protein ID
-    return PDBMapProtein._ensp2unp.get(ensp,[])
+    return PDBMapProtein._ensp2unp.get(ensp,None)
 
   @classmethod
   def unp2pdb(cls,unp):
