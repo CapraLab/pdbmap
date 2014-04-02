@@ -23,3 +23,5 @@ qsub/
 .Trashes
 ehthumbs.db
 Thumbs.db
+.swp
+*.swp

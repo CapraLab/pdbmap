@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS Structure (
+label VARCHAR(100),
+pdbid VARCHAR(50),
+method VARCHAR(100),
+quality DOUBLE,
+resolution DOUBLE,
+`name` TEXT,
+author TEXT,
+deposition DATE,
+`release` DATE,
+compound TEXT,
+keywords TEXT,
+reference TEXT,
+structure_reference TEXT,
+PRIMARY KEY(label,pdbid),
+KEY(pdbid),
+KEY(quality),
+KEY(method),
+KEY(quality),
+KEY(resolution),
+KEY(`release`)
+)
