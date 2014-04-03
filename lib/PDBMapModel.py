@@ -157,53 +157,6 @@ class PDBMapModel(Structure):
     diff = [unp for unp in PDBMapProtein._unp2ensembltrans.keys()
               if PDBMapProtein.unp2ensp(unp)[0] not in PDBMapModel.modbase_dict]
   
-
-# I am just saving these here for the time being, decide where each
-# piece belongs once things are worked out.
-
-# Load the ModBase homology index
-modbase_dir = '/projects/Bush_eQTL/sivleyrm/data/modbase/H_sapiens_2013/'
-homo_dir   = "%s/%s"%(modbase_dir,'ModBase_H_sapiens_2013_GRCh37.70.pep.all')
-homo_index = "%s/%s"%(homo_dir,'H_sapiens_2013_GRCh37.70.pep.all.summary.txt')
-fin = open(homo_index,'rb')
-fin.readline()
-homo_dict = {}
-for line in fin:
-  row    = line.strip().split('\t')
-  ensp,i = row[1].split('_')
-  if ensp in homo_dict:
-    homo_dict[ensp].append(row)
-  else:
-    homo_dict[ensp] = [row]
-
-# Query an Ensembl protein and get the associated ModBase models
-test_pid   = "ENSP00000434723"
-model_summaries = homo_dict[test_pid]
-model_dir  = "%s/%s"%(homo_dir,'models/model')
-for summary in model_summaries:
-  id = summary[1]
-  model_fname = "%s/%s.pdb"%(model_dir,id)
-  if not os.path.exists(model_fname):
-    model_fname += ".xz"
-  if not os.path.exists(model_fname):
-    raise Exception("Model not found.")
-# Load the structure in model_fname
-# Use get_structure as a template
-# Remove the section checking for DBREF
-# Add a few lines to read the MODPIPE MODEL ID from REMARK 220,
-#   the MODELLER objective function from REMARK 6, and the
-#   MODPIPE version number from REMARK 6
-# Import the UNP from original query (not ENSP)
-# Import the chain ID as 'A'
-# Infer start/end from residue values
-# Save all of this in a get_model function in PDBParser
-# Use it to create an object of type PDBMapModel
-# Include metadata/summary info about the ModBase model
-# Create new database schema for PDBMapModel
-# Upload the models
-# Intersect with GenomicConsequence
-  
-
 # Main check
 if __name__== "__main__":
   sys.stderr.write("Class definition. Should not be called from command line.")
