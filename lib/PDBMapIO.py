@@ -305,7 +305,7 @@ class PDBMapIO(PDBIO):
     # Upload the chains and residues
     for c in s[0]:
       cquery  = "INSERT IGNORE INTO Chain VALUES "
-      cquery += '("%(label)s","%(id)s",'%sfields # pdb id
+      cquery += '("%(label)s","%(id)s",'%sfields # structure id
       cquery += '"%(id)s","%(unp)s",%(offset)d,%(hybrid)d,"%(sequence)s")'
       cfields = dict((key,c.__getattribute__(key)) for key in dir(c) 
                       if isinstance(key,collections.Hashable))
@@ -314,7 +314,7 @@ class PDBMapIO(PDBIO):
       queries.append(cquery)
       rquery  = "INSERT IGNORE INTO Residue VALUES "
       for r in c:
-        rquery += '("%(label)s","%(id)s",'%sfields # pdb id
+        rquery += '("%(label)s","%(id)s",'%sfields # structure id
         rquery += '"%(id)s",'%cfields # chain id
         rquery += '"%(resname)s","%(rescode)s",%(seqid)d,'
         rquery += '"%(icode)s",%(x)f,%(y)f,%(z)f),'

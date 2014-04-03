@@ -63,7 +63,6 @@ class PDBMap():
         print " # Processing Model %s #"%model[1]
         self.load_model(model,label=label)
         sys.stdout.flush() # Force stdout flush after each model
-      sys.exit(1) #DEBUG
 
   def load_pdb(self,pdbid,pdb_fname=None,label=""):
     """ Loads a given PDB into the PDBMap database """
@@ -141,7 +140,7 @@ class PDBMap():
     except Exception as e:
       msg = "ERROR: (PDBMap) %s could not be uploaded: %s\n"%(modelid,str(e))
       sys.stderr.write(msg)
-      raise #DEBUG
+      # raise #DEBUG
       return 1
     return 0
 
