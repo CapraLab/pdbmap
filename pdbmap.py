@@ -73,7 +73,7 @@ class PDBMap():
 
     # Check if PDB is already in the database
     if io.structure_in_db(pdbid,label):
-      msg =  "WARNING: (PDBMapIO) Structure %s "%pdbid
+      msg =  "WARNING (PDBMapIO) Structure %s "%pdbid
       msg += "already in database. Skipping.\n"
       sys.stderr.write(msg)
       return 1
@@ -83,20 +83,20 @@ class PDBMap():
       pdb_fname = "%s/pdb%s.ent.gz"%(self.pdb_dir,pdbid.lower())
       print " Fetching %s"%pdbid
       if not os.path.exists(pdb_fname):
-        msg = "ERROR: (PDBMap) Cannot fetch %s. Not in PDB mirror.\n"%pdbid
+        msg = "ERROR (PDBMap) Cannot fetch %s. Not in PDB mirror.\n"%pdbid
         sys.stderr.write(msg)
         return 1
     p  = PDBMapIO.PDBMapParser()
     s  = p.get_structure(pdbid,pdb_fname)
     if not s:
-      msg = "ERROR: (PDBMap) Invalid structure: %s.\n"%pdbid
+      msg = "ERROR (PDBMap) Invalid structure: %s.\n"%pdbid
       sys.stderr.write(msg)
       return 1
     io.set_structure(s)
     try:
       io.upload_structure()
     except Exception as e:
-      msg = "ERROR: (PDBMap) %s could not be uploaded: %s\n"%(pdbid,str(e))
+      msg = "ERROR (PDBMap) %s could not be uploaded: %s\n"%(pdbid,str(e))
       sys.stderr.write(msg)
       # raise #DEBUG
       return 1
@@ -125,20 +125,20 @@ class PDBMap():
       if not os.path.exists(model_fname):
         model_fname += '.gz' # check for compressed copy
       if not os.path.exists(model_fname):
-        msg = "ERROR: (PDBMap) Cannot fetch %s. Not in ModBase mirror.\n"%modelid
+        msg = "ERROR (PDBMap) Cannot fetch %s. Not in ModBase mirror.\n"%modelid
         sys.stderr.write(msg)
         return 1
     p = PDBMapIO.PDBMapParser()
     m = p.get_model(model_summary,model_fname)
     if not m:
-      msg = "ERROR: (PDBMap) Invalid structure %s.\n"%modelid
+      msg = "ERROR (PDBMap) Invalid structure %s.\n"%modelid
       sys.stderr.write(msg)
       return 1
     io.set_structure(m) # polymorphic
     try:
       io.upload_model()
     except Exception as e:
-      msg = "ERROR: (PDBMap) %s could not be uploaded: %s\n"%(modelid,str(e))
+      msg = "ERROR (PDBMap) %s could not be uploaded: %s\n"%(modelid,str(e))
       sys.stderr.write(msg)
       # raise #DEBUG
       return 1
@@ -150,7 +150,7 @@ class PDBMap():
     if not os.path.exists(dfile):
       dfile = "%s.ped"%dfile # Test if PEDMAP basename
       if not os.path.exists(dfile):
-        msg = "ERROR: (PDBMap) File does not exist: %s"%dfile
+        msg = "ERROR (PDBMap) File does not exist: %s"%dfile
         raise Exception(msg)
     # Determine file type
     ext = dfile.split('.')[-1].lower()
@@ -301,7 +301,7 @@ if __name__== "__main__":
                     pdb_dir=args.pdb_dir)
     if len(args.args) < 1:
       # All structures in the PDB mirror
-      msg = "WARNING: (PDBMap) Uploading all mirrored RCSB PDB structures.\n"
+      msg = "WARNING (PDBMap) Uploading all mirrored RCSB PDB structures.\n"
       sys.stderr.write(msg)
       all_pdb_files = glob.glob("%s/*.ent.gz"%args.pdb_dir)
       for pdb_files in all_pdb_files:
@@ -333,7 +333,7 @@ if __name__== "__main__":
                     modbase_summary=args.modbase_summary)
     if len(args.args) < 1:
       # All PDB-mapped UniProt IDs (later expand to all UniProt IDs)
-      msg = "WARNING: (PDBMap) Uploading all PDB-associated UniProt IDs.\n"
+      msg = "WARNING (PDBMap) Uploading all PDB-associated UniProt IDs.\n"
       sys.stderr.write(msg)
       all_pdb_unp = PDBMapProtein.PDBMapProtein._unp2ensp.keys()
       for unp in all_pdb_unp:
@@ -354,7 +354,7 @@ if __name__== "__main__":
   elif args.cmd == "load_data":
     pdbmap = PDBMap(vep=args.vep,plink=args.plink)
     if len(args.args) < 1:
-      msg = "ERROR: (PDBMap) No data files specified."
+      msg = "ERROR (PDBMap) No data files specified."
       raise Exception(msg)
     # Process many data file(s) (set(s))
     if not args.label: # Assign individual labels
@@ -374,7 +374,7 @@ if __name__== "__main__":
   ## intersect ##
   elif args.cmd == "intersect":
     pdbmap = PDBMap()
-    msg  = "WARNING: (PDBMap) If loading data, intersections are automatically determined.\n"
+    msg  = "WARNING (PDBMap) If loading data, intersections are automatically determined.\n"
     msg += "       : (PDBMap) This is a debug command for manual intersections.\n"
     sys.stderr.write(msg)
     dname = args.args[0] # Get the dataset name
