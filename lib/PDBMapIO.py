@@ -20,6 +20,7 @@ from PDBMapStructure import PDBMapStructure
 from PDBMapModel import PDBMapModel
 import MySQLdb, MySQLdb.cursors
 from warnings import filterwarnings,resetwarnings
+from Bio import BiopythonParserWarning
 
 class PDBMapParser(PDBParser):
   def __init__(self,PERMISSIVE=True,get_header=True,
@@ -186,7 +187,9 @@ class PDBMapParser(PDBParser):
     s.header["structure_reference"] = str(s.header["structure_reference"]).translate(None,"'\"")
 
     # Preprocess structural elements
+    filterwarnings('ignore', category = BiopythonParserWarning)
     s = PDBMapParser.process_structure(s)
+    resetwarnings()
     return s
 
   def get_model(self,model_summary,fname):
@@ -209,7 +212,9 @@ class PDBMapParser(PDBParser):
       sys.stderr.write(msg)
       raise #DEBUG
       return None
+    filterwarnings('ignore', category = BiopythonParserWarning)
     m = PDBMapParser.process_structure(m)
+    resetwarnings()
     return m
 
 class PDBMapIO(PDBIO):
