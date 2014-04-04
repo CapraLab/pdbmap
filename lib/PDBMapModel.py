@@ -65,8 +65,12 @@ class PDBMapModel(Structure):
     # Store the model summary information
     self.id      = model_summary[1]
     self.tvsmod_method = model_summary[14]
-    self.tvsmod_no35   = self._sfloat(model_summary[15])
-    self.tvsmod_rmsd   = self._sfloat(model_summary[16])
+    if self.tvsmod_method != 'NA':
+      self.tvsmod_no35   = self._sfloat(model_summary[15])
+      self.tvsmod_rmsd   = self._sfloat(model_summary[16])
+    else:
+      self.tvsmod_no35 = 'NULL'
+      self.tvsmod_rmsd = 'NULL'
     self.evalue  = self._sfloat(model_summary[4])
     self.ga341   = self._sfloat(model_summary[5])
     self.mpqs    = self._sfloat(model_summary[6])
@@ -155,9 +159,10 @@ class PDBMapModel(Structure):
     reader = csv.reader(fin,delimiter='\t')
     for row in reader:
       ensp,i = row[1].split('_')
-      # THIS WILL RETURN A LIST OF UNPS, HOW TO REPRESENT?
+      #FIXME: How to represent the list of UniProt IDs this returns?
       unps = PDBMapProtein.ensp2unp(ensp)
-      unp  = None if not unps else unps[0] # TEMPORARY - SELECT ONLY THE FIRST MATCHING UNP
+      #FIXME: Current fix: Take only first associated UniProt ID
+      unp  = None if not unps else unps[0]
       if not unp: continue # Skip models without associated UniProt IDs
       row.append(unp) # set UniProt ID as last field in model summary
       if ensp in PDBMapModel.modbase_dict:
