@@ -123,7 +123,7 @@ class PDBMap():
       model_fname = "%s/models/model/%s.pdb"%(modbase_dir,modelid)
       print "Fetching %s from %s"%(modelid,model_fname)
       if not os.path.exists(model_fname):
-        model_fname += '.xz' # check for compressed copy
+        model_fname += '.gz' # check for compressed copy
       if not os.path.exists(model_fname):
         msg = "ERROR: (PDBMap) Cannot fetch %s. Not in ModBase mirror.\n"%modelid
         sys.stderr.write(msg)
