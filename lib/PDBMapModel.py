@@ -33,16 +33,24 @@ class PDBMapModel(Structure):
   modbase_dir  = ''
   modbase_dict = {}
 
+  def sfloat(obj):
+    """ Safe float conversion """
+    try: return float(obj)
+    except: return None
+
+  def sint(obj):
+    """ Safe int conversion """
+    try: return int(obj)
+    except: return None
+
   def __init__(self,s,model_summary,quality=-1):
     # Record the chain information
     chain    = [c for c in s.get_chains()][0]
     oid = chain.id
     chain.id = 'A'
     chain.species = "HUMAN"
-    chain.pdbstart = None if model_summary[2] == "NA" else \
-                      int(model_summary[2])
-    chain.pdbend   = None if model_summary[3] == "NA" else \
-                      int(model_summary[3])
+    chain.pdbstart = sint(model_summary[2])
+    chain.pdbend   = sint(model_summary[3])
     chain.unp      = model_summary[17]
     chain.offset   = 0 # Assumed. Corrected by alignment.
     chain.hybrid   = 0
@@ -57,18 +65,12 @@ class PDBMapModel(Structure):
     # Store the model summary information
     self.id      = model_summary[1]
     self.tvsmod_method = model_summary[14]
-    self.tvsmod_no35   = None if model_summary[15] == "NA" else \
-                          float(model_summary[15])
-    self.tvsmod_rmsd   = None if model_summary[16] == "NA" else \
-                          float(model_summary[16])
-    self.evalue  = None if model_summary[4] == "NA" else \
-                    float(model_summary[4])
-    self.ga341   = None if model_summary[5] == "NA" else \
-                    float(model_summary[5])
-    self.mpqs    = None if model_summary[6] == "NA" else \
-                    float(model_summary[6])
-    self.zdope   = None if model_summary[7] == "NA" else \
-                    float(model_summary[7])
+    self.tvsmod_no35   = sfloat(model_summary[15])
+    self.tvsmod_rmsd   = sfloat(model_summary[16])
+    self.evalue  = sfloat(model_summary[4])
+    self.ga341   = sfloat(model_summary[5])
+    self.mpqs    = sfloat(model_summary[6])
+    self.zdope   = sfloat(model_summary[7])
     self.pdbid   = model_summary[9]
     self.chain   = model_summary[10]
     self.unp     = model_summary[17]
