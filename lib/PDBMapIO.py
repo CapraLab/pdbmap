@@ -20,7 +20,7 @@ from PDBMapStructure import PDBMapStructure
 from PDBMapModel import PDBMapModel
 import MySQLdb, MySQLdb.cursors
 from warnings import filterwarnings,resetwarnings
-from Bio import BiopythonParserWarning
+from Bio.PDB.PDBExceptions import PDBConstructionWarning
 
 class PDBMapParser(PDBParser):
   def __init__(self,PERMISSIVE=True,get_header=True,
@@ -40,7 +40,7 @@ class PDBMapParser(PDBParser):
         if 'species' not in dir(c):
           c.species = 'UNKNOWN'
         if c.species != 'HUMAN':
-          msg = "WARNING: (PDBMapIO) Ignoring non-human chain: %s.%s (%s)\n"%(s.id,c.id,c.species)
+          msg = "WARNING (PDBMapIO) Ignoring non-human chain: %s.%s (%s)\n"%(s.id,c.id,c.species)
           sys.stderr.write(msg)
           m.detach_child(c.id)
           continue
@@ -71,7 +71,7 @@ class PDBMapParser(PDBParser):
       if not len(m): # If the model only contained non-human species
         s.detach_child(m.id)
     if not len(s):
-      msg = "ERROR: (PDBMapIO) %s contains no human protein chains.\n"%s.id
+      msg = "ERROR (PDBMapIO) %s contains no human protein chains.\n"%s.id
       sys.stderr.write(msg)
       s = None # Return a None object to indicate invalid structure
     return s
@@ -83,11 +83,13 @@ class PDBMapParser(PDBParser):
       else:
         fin = open(fname,'rb')
       p = PDBParser()
+      filterwarnings('ignore',category=PDBConstructionWarning)
       s = p.get_structure(pdbid,fin)
+      resetwarnings()
       s = PDBMapStructure(s,quality)
       fin.close()
     except Exception as e:
-      msg = "ERROR: (PDBMapIO) Error while parsing %s: %s"%(pdbid,str(e).replace('\n',' '))
+      msg = "ERROR (PDBMapIO) Error while parsing %s: %s"%(pdbid,str(e).replace('\n',' '))
       sys.stderr.write(msg)
       return None
 
@@ -187,9 +189,7 @@ class PDBMapParser(PDBParser):
     s.header["structure_reference"] = str(s.header["structure_reference"]).translate(None,"'\"")
 
     # Preprocess structural elements
-    filterwarnings('ignore', category = BiopythonParserWarning)
     s = PDBMapParser.process_structure(s)
-    resetwarnings()
     return s
 
   def get_model(self,model_summary,fname):
@@ -201,20 +201,21 @@ class PDBMapParser(PDBParser):
       elif ext in ['txt','pdb','ent']:
         fin = open(fname,'rb')
       else:
-        msg = "ERROR: (PDBMapParser) Unsupported file type: %s.\n"%ext
+        msg = "ERROR (PDBMapParser) Unsupported file type: %s.\n"%ext
         sys.stderr.write(msg)
         return None
       p = PDBParser()
+      filterwarnings('ignore',category=PDBConstructionWarning)
       s = p.get_structure(modelid,fin)
+      resetwarnings()
       m = PDBMapModel(s,model_summary)
     except Exception as e:
-      msg = "ERROR: (PDBMapIO) Error while parsing %s: %s"%(modelid,str(e).replace('\n',' '))
+      msg = "ERROR (PDBMapIO) Error while parsing %s: %s"%(modelid,str(e).replace('\n',' '))
       sys.stderr.write(msg)
       raise #DEBUG
       return None
-    filterwarnings('ignore', category = BiopythonParserWarning)
+    
     m = PDBMapParser.process_structure(m)
-    resetwarnings()
     return m
 
 class PDBMapIO(PDBIO):
@@ -279,7 +280,7 @@ class PDBMapIO(PDBIO):
     """ Uploads the current structure in PDBMapIO """
     # Verify that structure is not already in database
     if self.structure_in_db(self.structure.id):
-      msg =  "WARNING: (PDBMapIO) Structure %s "%self.structure.id
+      msg =  "WARNING (PDBMapIO) Structure %s "%self.structure.id
       msg += "already in database. Skipping.\n"
       sys.stderr.write(msg)
       return(1)
@@ -341,7 +342,7 @@ class PDBMapIO(PDBIO):
           tquery += '"%s",%d,%d,%d),'%(chr,start,end,strand)
       queries.append(tquery[:-1])
     except Exception as e:
-      msg = "ERROR: (PDBMapIO) Failed to get transcripts for %s: %s.\n"%(s.id,str(e))
+      msg = "ERROR (PDBMapIO) Failed to get transcripts for %s: %s.\n"%(s.id,str(e))
       sys.stderr.write(msg)
       raise
 
@@ -378,7 +379,7 @@ class PDBMapIO(PDBIO):
     """ Uploades the current model in PDBMapIO """
     m = self.structure
     if self.model_in_db(m.id,self.label):
-      msg =  "WARNING: (PDBMapIO) Structure %s "%m.id
+      msg =  "WARNING (PDBMapIO) Structure %s "%m.id
       msg += "already in database. Skipping.\n"
       sys.stderr.write(msg)
       return(1)

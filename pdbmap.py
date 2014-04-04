@@ -81,7 +81,7 @@ class PDBMap():
     # Load the PDB structure
     if not pdb_fname:
       pdb_fname = "%s/pdb%s.ent.gz"%(self.pdb_dir,pdbid.lower())
-      print "Fetching %s from %s"%(pdbid,pdb_fname)
+      print " Fetching %s"%pdbid
       if not os.path.exists(pdb_fname):
         msg = "ERROR: (PDBMap) Cannot fetch %s. Not in PDB mirror.\n"%pdbid
         sys.stderr.write(msg)
@@ -121,7 +121,7 @@ class PDBMap():
     if not model_fname:
       modbase_dir = PDBMapModel.PDBMapModel.modbase_dir
       model_fname = "%s/models/model/%s.pdb"%(modbase_dir,modelid)
-      print "Fetching %s from %s"%(modelid,model_fname)
+      print " Fetching %s"%modelid
       if not os.path.exists(model_fname):
         model_fname += '.gz' # check for compressed copy
       if not os.path.exists(model_fname):
