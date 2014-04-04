@@ -36,12 +36,12 @@ class PDBMapModel(Structure):
   def _sfloat(self,obj):
     """ Safe float conversion """
     try: return float(obj)
-    except: return None
+    except: return "'NULL'" # for MySQL upload
 
   def _sint(self,obj):
     """ Safe int conversion """
     try: return int(obj)
-    except: return None
+    except: return "'NULL'" # for MySQL upload
 
   def __init__(self,s,model_summary,quality=-1):
     # Record the chain information
