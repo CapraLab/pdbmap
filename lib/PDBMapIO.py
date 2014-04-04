@@ -53,7 +53,7 @@ class PDBMapParser(PDBParser):
             c.detach_child(r.id)
           else:
             # Assign a 1-letter amino acid code
-            if r.resname.lower() not in aa_code_map:
+            if 'resname' not in dir(r) or r.resname.lower() not in aa_code_map:
               r.resname='SER' # if unknown, dummy code serine for alignment
             r.rescode = aa_code_map[r.resname.lower()]
             # Compute the center of mass for all residues
