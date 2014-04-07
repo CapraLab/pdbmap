@@ -116,7 +116,7 @@ class PDBMapProtein():
        not PDBMapProtein._unp2pdb or \
        not PDBMapProtein._unp2ensembltrans or \
        not PDBMapProtein._unp2ensp:
-      msg = "ERROR: (UniProt) ID Mapping must be loaded before use."
+      msg = "ERROR (UniProt) ID Mapping must be loaded before use."
       raise Exception(msg)
     # Checks if secondary to primary UniProt ID mapping has been loaded
     if not PDBMapProtein.sec2prim:

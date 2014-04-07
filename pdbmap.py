@@ -81,19 +81,23 @@ class PDBMap():
     # Load the PDB structure
     if not pdb_fname:
       pdb_fname = "%s/pdb%s.ent.gz"%(self.pdb_dir,pdbid.lower())
-      print " Fetching %s"%pdbid
+      print "  # Fetching %s"%pdbid
       if not os.path.exists(pdb_fname):
         msg = "ERROR (PDBMap) Cannot fetch %s. Not in PDB mirror.\n"%pdbid
         sys.stderr.write(msg)
         return 1
-    p  = PDBMapIO.PDBMapParser()
-    s  = p.get_structure(pdbid,pdb_fname)
-    if not s:
-      msg = "ERROR (PDBMap) Invalid structure: %s.\n"%pdbid
+    try: # Load the structure
+      p  = PDBMapIO.PDBMapParser()
+      s  = p.get_structure(pdbid,pdb_fname)
+      if not s:
+        msg = "Invalid structure"
+        raise Exception(msg)
+    except Exception as e:
+      msg = "ERROR (PDBMap) %s could not be loaded: %s\n"%(pdbid,str(e))
       sys.stderr.write(msg)
       return 1
-    io.set_structure(s)
-    try:
+    try: # Upload the structure
+      io.set_structure(s)
       io.upload_structure()
     except Exception as e:
       msg = "ERROR (PDBMap) %s could not be uploaded: %s\n"%(pdbid,str(e))
@@ -121,21 +125,22 @@ class PDBMap():
     if not model_fname:
       modbase_dir = PDBMapModel.PDBMapModel.modbase_dir
       model_fname = "%s/models/model/%s.pdb"%(modbase_dir,modelid)
-      print " Fetching %s"%modelid
+      print "  # Fetching %s"%modelid
       if not os.path.exists(model_fname):
         model_fname += '.gz' # check for compressed copy
       if not os.path.exists(model_fname):
         msg = "ERROR (PDBMap) Cannot fetch %s. Not in ModBase mirror.\n"%modelid
         sys.stderr.write(msg)
         return 1
-    p = PDBMapIO.PDBMapParser()
-    m = p.get_model(model_summary,model_fname)
-    if not m:
-      msg = "ERROR (PDBMap) Invalid structure %s.\n"%modelid
+    try:
+      p = PDBMapIO.PDBMapParser()
+      m = p.get_model(model_summary,model_fname)
+    except Exception as e:
+      msg = "ERROR (PDBMap) %s could not be loaded: %s\n"%(modelid,str(e))
       sys.stderr.write(msg)
       return 1
-    io.set_structure(m) # polymorphic
     try:
+      io.set_structure(m)
       io.upload_model()
     except Exception as e:
       msg = "ERROR (PDBMap) %s could not be uploaded: %s\n"%(modelid,str(e))

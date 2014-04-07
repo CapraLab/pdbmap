@@ -90,8 +90,7 @@ class PDBMapParser(PDBParser):
       fin.close()
     except Exception as e:
       msg = "ERROR (PDBMapIO) Error while parsing %s: %s"%(pdbid,str(e).replace('\n',' '))
-      sys.stderr.write(msg)
-      return None
+      raise Exception(msg)
 
     # Clean up some common header differences
     if 'structure_method' in s.header and 'structure_methods' not in s.header:
@@ -130,8 +129,7 @@ class PDBMapParser(PDBParser):
     fin.close()
     if len(dbref) < 1:
       msg = "ERROR (PDBMapIO) No DBREF fields in %s. Skipping.\n"%s.id
-      sys.stderr.write(msg)
-      return(None)
+      raise Exception(msg)
     for ref in dbref:
       chain    = ref[12:14].strip()
       unp      = ref[33:41].strip()
@@ -202,8 +200,7 @@ class PDBMapParser(PDBParser):
         fin = open(fname,'rb')
       else:
         msg = "ERROR (PDBMapParser) Unsupported file type: %s.\n"%ext
-        sys.stderr.write(msg)
-        return None
+        raise Exception(msg)
       p = PDBParser()
       filterwarnings('ignore',category=PDBConstructionWarning)
       s = p.get_structure(modelid,fin)
@@ -211,9 +208,7 @@ class PDBMapParser(PDBParser):
       m = PDBMapModel(s,model_summary)
     except Exception as e:
       msg = "ERROR (PDBMapIO) Error while parsing %s: %s"%(modelid,str(e).replace('\n',' '))
-      sys.stderr.write(msg)
-      raise #DEBUG
-      return None
+      raise Exception(msg)
     
     m = PDBMapParser.process_structure(m)
     return m

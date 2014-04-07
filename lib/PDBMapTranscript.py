@@ -47,13 +47,13 @@ class PDBMapTranscript():
   def query_from_unp(cls,unpid):
     """ Use UniProt to map UniProt ID to Ensembl Transcript ID """
     if PDBMapProtein.check_loaded() and unpid in PDBMapProtein.sec2prim:
-      msg  = "WARNING: (UniProt) %s is a secondary UniProt AC. "%unpid
+      msg  = "WARNING (UniProt) %s is a secondary UniProt AC. "%unpid
       unpid = PDBMapProtein.sec2prim[unpid]
       msg += "Using primary AC: %s\n"%unpid
       sys.stderr.write(msg)
     transids = PDBMapProtein.unp2ensembltrans(unpid)
     if len(transids) < 1:
-      msg = "WARNING: (UniProt) No transcript match for %s\n"%unpid
+      msg = "WARNING (UniProt) No transcript match for %s\n"%unpid
       sys.stderr.write(msg)
     # Query all transcript candidates and return
     res = []
@@ -74,7 +74,7 @@ class PDBMapTranscript():
     cmd = "perl lib/transcript_to_genomic.pl %s"%transid
     status, output = commands.getstatusoutput(cmd)
     if status > 0:
-      msg = "WARNING: (transcript_to_genomic.pl) Non-zero exit status for %s: %s\n"%(transid,output)
+      msg = "WARNING (transcript_to_genomic.pl) Non-zero exit status for %s: %s\n"%(transid,output)
       sys.stderr.write(msg)
       PDBMapTranscript.cache_transcript(transid,None)
       return None

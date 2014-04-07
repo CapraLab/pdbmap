@@ -26,12 +26,12 @@ class PDBMapData():
   def __init__(self,vep="variant_effect_predictor.pl",plink="plink",j=1):
     self.vep = vep
     if not os.path.exists(vep):
-      msg = "ERROR: (PDBMapData) VEP location invalid: %s"%vep
+      msg = "ERROR (PDBMapData) VEP location invalid: %s"%vep
       raise Exception(msg)
     # Check for a dbconn file
     registry = "%s/dbconn.conf"%os.path.dirname(vep)
     if not os.path.exists(registry):
-      msg = "WARNING: (PDBMapData) Not registry specified. Using Ensembl.\n"
+      msg = "WARNING (PDBMapData) Not registry specified. Using Ensembl.\n"
       sys.stderr.write(msg)
       registry = None
     # Construct the VEP command
