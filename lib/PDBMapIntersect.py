@@ -39,7 +39,7 @@ class PDBMapIntersect():
         query  = "SELECT a.chr,a.start-1,a.end-1,a.gc_id,a.transcript FROM "
         query += "GenomicConsequence as a INNER JOIN GenomicData as b "
         query += "ON a.chr=b.chr AND a.start=b.start AND a.end=b.end "
-        query += "WHERE b.label=%s ORDER BY a.chr,a.start,a.end"
+        query += "WHERE b.label=%s"
       elif dtype == 'Protein':
         msg = "ERROR (PDBMapIntersect) Protein intersection not implemented."
         raise Exception(msg)
@@ -63,7 +63,6 @@ class PDBMapIntersect():
       query += "ON a.transcript=b.transcript AND a.seqid=b.trans_seqid "
       if slabel:
         query += "WHERE b.pdbid=%s "
-      query += "ORDER BY chr,start,end"
       with open(temp2,'wb') as fout:
         writer = csv.writer(fout,delimiter='\t')
         if slabel:
@@ -82,7 +81,7 @@ class PDBMapIntersect():
 
       # Intersect with intersectBed and upload output to PDBMap.IntersectGenome
       print " # Performing intersection #"
-      cmd = ["intersectBed","-sorted","-wb","-a",temp1,"-b",temp2]
+      cmd = ["intersectBed","-wb","-a",temp1,"-b",temp2]
       p = sp.Popen(cmd,stdout=sp.PIPE)
       parser = process_parser(p)
       nrows = self.io.upload_intersection(parse_intersection(parser))
