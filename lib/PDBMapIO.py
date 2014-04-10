@@ -128,7 +128,7 @@ class PDBMapParser(PDBParser):
               line[26:32].strip() == "UNP"]
     fin.close()
     if len(dbref) < 1:
-      msg = "ERROR (PDBMapIO) No DBREF fields in %s. Skipping.\n"%s.id
+      msg = "ERROR (PDBMapIO) No DBREF fields in %s.\n"%s.id
       raise Exception(msg)
     for ref in dbref:
       chain    = ref[12:14].strip()
@@ -276,7 +276,7 @@ class PDBMapIO(PDBIO):
     # Verify that structure is not already in database
     if self.structure_in_db(self.structure.id):
       msg =  "WARNING (PDBMapIO) Structure %s "%self.structure.id
-      msg += "already in database. Skipping.\n"
+      msg += "already in database.\n"
       sys.stderr.write(msg)
       return(1)
     # Upload entire structure (structure, chains, residues)
@@ -375,7 +375,7 @@ class PDBMapIO(PDBIO):
     m = self.structure
     if self.model_in_db(m.id,self.label):
       msg =  "WARNING (PDBMapIO) Structure %s "%m.id
-      msg += "already in database. Skipping.\n"
+      msg += "already in database.\n"
       sys.stderr.write(msg)
       return(1)
     self._connect()

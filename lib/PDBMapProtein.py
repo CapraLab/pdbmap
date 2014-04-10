@@ -110,6 +110,21 @@ class PDBMapProtein():
     PDBMapProtein.sec2prim = sec2prim
 
   @classmethod
+  def load_sprot(cls,sprot_fname):
+    # Method to load all SwissProt IDs
+    with open(sprot_fname) as fin:
+      sprot = []
+      for line in fin:
+        # Extract the field ID, always [0:2]
+        # Trim to AC list (AC field assumed)
+        row = [line[0:2],line.rstrip()[2:-1].lstrip()]
+        if row[0] == 'AC':
+          ac_list = row[1].split('; ')
+          sprot.append(ac_list[0]) # Most up to date AC
+    sprot.sort()
+    PDBMapProtein.sprot = sprot
+
+  @classmethod
   def check_loaded(cls):
     # Checks if external database ID mapping has been loaded
     if not PDBMapProtein._refseq2unp or \

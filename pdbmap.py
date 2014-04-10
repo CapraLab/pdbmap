@@ -25,9 +25,9 @@ from lib import PDBMapAlignment,PDBMapData,PDBMapTranscript
 from lib import PDBMapIntersect,PDBMapModel
 
 class PDBMap():
-  def __init__(self,idmapping=None,sec2prim=None,pdb_dir=None,
-                modbase_dir=None,modbase_summary=None,vep=None,
-                plink=None,refresh=False):
+  def __init__(self,idmapping=None,sec2prim=None,sprot=None,
+                pdb_dir=None,modbase_dir=None,modbase_summary=None,
+                vep=None,plink=None,refresh=False):
     self.pdb     = False
     self.modbase = False
     # If refresh is specified, update all mirrored data
@@ -38,6 +38,8 @@ class PDBMap():
       PDBMapProtein.PDBMapProtein.load_idmapping(idmapping)
     if sec2prim:
       PDBMapProtein.PDBMapProtein.load_sec2prim(sec2prim)
+    if sprot:
+      PDBMapProtein.PDBMapProtein.load_sprot(sprot)
     if pdb_dir:
       self.pdb = True
       self.pdb_dir = pdb_dir
@@ -227,6 +229,7 @@ if __name__== "__main__":
     "unp" : "",
     "idmapping" : "",
     "sec2prim" : "",
+    "sprot" : "",
     "vep" : "variant_effect_predictor.pl",
     "plink" : "plink",
     "label" : "",
@@ -275,6 +278,8 @@ if __name__== "__main__":
               help="UniProt ID -> EnsEMBL transcript map file location")
   parser.add_argument("--sec2prim", 
               help="UniProt secondary -> primary AC map file location")
+  parser.add_argument("--sprot",
+              help="Swiss-Prot file location")
   parser.add_argument("--vep", 
               help="Variant Effect Predictor location")
   parser.add_argument("--plink", 
@@ -306,9 +311,9 @@ if __name__== "__main__":
                     pdb_dir=args.pdb_dir)
     if len(args.args) < 1:
       # All structures in the PDB mirror
-      msg = "WARNING (PDBMap) Uploading all mirrored RCSB PDB structures.\n"
-      sys.stderr.write(msg)
       all_pdb_files = glob.glob("%s/*.ent.gz"%args.pdb_dir)
+      msg = "WARNING (PDBMap) Uploading all %d mirrored RCSB PDB structures.\n"%len(all_pdb_files)
+      sys.stderr.write(msg)
       for pdb_files in all_pdb_files:
         pdbid = os.path.basename(pdb_file).split('.')[0][-4:].upper()
         print "\n## Processing %s ##"%pdbid
@@ -334,13 +339,14 @@ if __name__== "__main__":
   ## load_unp ##
   elif args.cmd == "load_unp":
     pdbmap = PDBMap(idmapping=args.idmapping,sec2prim=args.sec2prim,
-                    pdb_dir=args.pdb_dir,modbase_dir=args.modbase_dir,
+                    sprot=args.sprot,pdb_dir=args.pdb_dir,
+                    modbase_dir=args.modbase_dir,
                     modbase_summary=args.modbase_summary)
     if len(args.args) < 1:
       # All PDB-mapped UniProt IDs (later expand to all UniProt IDs)
-      msg = "WARNING (PDBMap) Uploading all PDB-associated UniProt IDs.\n"
+      all_pdb_unp = PDBMapProtein.PDBMapProtein.sprot
+      msg = "WARNING (PDBMap) Uploading all %d Swiss-Prot UniProt IDs.\n"%len(all_pdb_unp)
       sys.stderr.write(msg)
-      all_pdb_unp = PDBMapProtein.PDBMapProtein._unp2ensp.keys()
       for unp in all_pdb_unp:
         print "\n## Processing %s ##"%unp
         pdbmap.load_unp(unp,label="uniprot-pdb")
