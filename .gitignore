@@ -3,6 +3,7 @@ data/
 config/
 results/
 qsub/
+temp/
 
 ## File types ##
 *.pdb
