@@ -220,7 +220,6 @@ if __name__== "__main__":
     "dbuser" : None,
     "dbpass" : None,
     "pdb_dir" : "data/pdb",
-    "map_dir" : "data/maps",
     "modbase_dir" : None,
     "modbase_summary" : None,
     "create_new_db" : False,
@@ -260,8 +259,6 @@ if __name__== "__main__":
               help="Database name")
   parser.add_argument("--pdb_dir", 
               help="Directory containing PDB structures")
-  parser.add_argument("--map_dir", 
-              help="Directory to save pdbmap flat file")
   parser.add_argument("--modbase_dir",
               help="Directory containing ModBase models")
   parser.add_argument("--modbase_summary",
