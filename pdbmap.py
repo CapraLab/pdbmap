@@ -22,11 +22,14 @@ import argparse,ConfigParser
 import sys,os,csv,time,pdb,glob
 from lib import PDBMapIO,PDBMapStructure,PDBMapProtein
 from lib import PDBMapAlignment,PDBMapData,PDBMapTranscript
-from lib import PDBMapIntersect
+from lib import PDBMapIntersect,PDBMapModel
 
 class PDBMap():
-  def __init__(self,idmapping=None,sec2prim=None,pdb_dir=None,vep=None,
-                plink=None,refresh=False):
+  def __init__(self,idmapping=None,sec2prim=None,sprot=None,
+                pdb_dir=None,modbase_dir=None,modbase_summary=None,
+                vep=None,plink=None,refresh=False):
+    self.pdb     = False
+    self.modbase = False
     # If refresh is specified, update all mirrored data
     if refresh:
       self.refresh_mirrors(idmapping,sec2prim,pdb_dir)
@@ -35,12 +38,33 @@ class PDBMap():
       PDBMapProtein.PDBMapProtein.load_idmapping(idmapping)
     if sec2prim:
       PDBMapProtein.PDBMapProtein.load_sec2prim(sec2prim)
+    if sprot:
+      PDBMapProtein.PDBMapProtein.load_sprot(sprot)
     if pdb_dir:
+      self.pdb = True
       self.pdb_dir = pdb_dir
+    if modbase_dir and modbase_summary:
+      self.modbase = True
+      PDBMapModel.PDBMapModel.load_modbase(modbase_dir,modbase_summary)
     if vep:
       self.vep = vep
     if plink:
       self.plink = plink
+
+  def load_unp(self,unp,label=""):
+    """ Loads all known structures associated with UniProt ID """
+    if self.pdb:
+      pdbids = list(set(PDBMapProtein.PDBMapProtein.unp2pdb(unp)))
+      for pdbid in pdbids:
+        print " # Processing PDB %s # "%pdbid
+        self.load_pdb(pdbid,label=label)
+        sys.stdout.flush() # Force stdout flush after each PDB
+    if self.modbase:
+      models = PDBMapModel.PDBMapModel.unp2modbase(unp)
+      for model in models:
+        print " # Processing Model %s #"%model[1]
+        self.load_model(model,label=label)
+        sys.stdout.flush() # Force stdout flush after each model
 
   def load_pdb(self,pdbid,pdb_fname=None,label=""):
     """ Loads a given PDB into the PDBMap database """
@@ -51,7 +75,7 @@ class PDBMap():
 
     # Check if PDB is already in the database
     if io.structure_in_db(pdbid,label):
-      msg =  "WARNING: (PDBMapIO) Structure %s "%pdbid
+      msg =  "WARNING (PDBMapIO) Structure %s "%pdbid
       msg += "already in database. Skipping.\n"
       sys.stderr.write(msg)
       return 1
@@ -59,33 +83,73 @@ class PDBMap():
     # Load the PDB structure
     if not pdb_fname:
       pdb_fname = "%s/pdb%s.ent.gz"%(self.pdb_dir,pdbid.lower())
-      print "Fetching %s from %s"%(pdbid,pdb_fname)
+      print "  # Fetching %s"%pdbid
       if not os.path.exists(pdb_fname):
-        msg = "ERROR: (PDBMap) Cannot fetch %s. Not in PDB mirror.\n"%pdbid
+        msg = "ERROR (PDBMap) Cannot fetch %s. Not in PDB mirror.\n"%pdbid
         sys.stderr.write(msg)
         return 1
-    p  = PDBMapIO.PDBMapParser()
-    s  = p.get_structure(pdbid,pdb_fname)
-    if not s:
-      msg = "ERROR: (PDBMap) Invalid structure: %s.\n"%pdbid
+    try: # Load the structure
+      p  = PDBMapIO.PDBMapParser()
+      s  = p.get_structure(pdbid,pdb_fname)
+      if not s:
+        msg = "Invalid structure"
+        raise Exception(msg)
+    except Exception as e:
+      msg = "ERROR (PDBMap) %s could not be loaded: %s\n"%(pdbid,str(e))
       sys.stderr.write(msg)
       return 1
-    io.set_structure(s)
-    try:
+    try: # Upload the structure
+      io.set_structure(s)
       io.upload_structure()
     except Exception as e:
-      msg = "ERROR: (PDBMap) %s could not be uploaded: %s\n"%(pdbid,str(e))
+      msg = "ERROR (PDBMap) %s could not be uploaded: %s\n"%(pdbid,str(e))
       sys.stderr.write(msg)
+      # raise #DEBUG
       return 1
     return 0
 
-  def load_unp(self,unp,label=""):
-    """ Loads all known PDB structures associated with UniProt ID """
-    pdbids = list(set(PDBMapProtein.PDBMapProtein.unp2pdb(unp)))
-    for pdbid in pdbids:
-      print " # Processing %s # "%pdbid
-      self.load_pdb(pdbid,label=label)
-      sys.stdout.flush() # Force stdout flush after each PDB
+  def load_model(self,model_summary,model_fname=None,label=""):
+    """ Loads a given ModBase model into the PDBMap database """
+    ##FIXME: Implement PDBMapIO.upload_model(model)
+    # Create a PDBMapIO object
+    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,
+                            args.dbpass,args.dbname,label)
+
+    # Check if model is already in the database
+    modelid = model_summary[1] # extract ModBase model ID
+    if io.model_in_db(modelid,label):
+      msg  = "WARNING (PDBMapIO) Model %s "%modelid
+      msg += "already in database. Skipping.\n"
+      sys.stderr.write(msg)
+      return 1
+
+    # Load the ModBase model
+    if not model_fname:
+      modbase_dir = PDBMapModel.PDBMapModel.modbase_dir
+      model_fname = "%s/models/model/%s.pdb"%(modbase_dir,modelid)
+      print "  # Fetching %s"%modelid
+      if not os.path.exists(model_fname):
+        model_fname += '.gz' # check for compressed copy
+      if not os.path.exists(model_fname):
+        msg = "ERROR (PDBMap) Cannot fetch %s. Not in ModBase mirror.\n"%modelid
+        sys.stderr.write(msg)
+        return 1
+    try:
+      p = PDBMapIO.PDBMapParser()
+      m = p.get_model(model_summary,model_fname)
+    except Exception as e:
+      msg = "ERROR (PDBMap) %s could not be loaded: %s\n"%(modelid,str(e))
+      sys.stderr.write(msg)
+      return 1
+    try:
+      io.set_structure(m)
+      io.upload_model()
+    except Exception as e:
+      msg = "ERROR (PDBMap) %s could not be uploaded: %s\n"%(modelid,str(e))
+      sys.stderr.write(msg)
+      # raise #DEBUG
+      return 1
+    return 0
 
   def load_data(self,dname,dfile,j):
     """ Loads a data file into the PDBMap database """
@@ -93,7 +157,7 @@ class PDBMap():
     if not os.path.exists(dfile):
       dfile = "%s.ped"%dfile # Test if PEDMAP basename
       if not os.path.exists(dfile):
-        msg = "ERROR: (PDBMap) File does not exist: %s"%dfile
+        msg = "ERROR (PDBMap) File does not exist: %s"%dfile
         raise Exception(msg)
     # Determine file type
     ext = dfile.split('.')[-1].lower()
@@ -157,12 +221,15 @@ if __name__== "__main__":
     "dbpass" : None,
     "pdb_dir" : "data/pdb",
     "map_dir" : "data/maps",
+    "modbase_dir" : None,
+    "modbase_summary" : None,
     "create_new_db" : False,
     "force" : False,
     "pdbid" : "",
     "unp" : "",
     "idmapping" : "",
     "sec2prim" : "",
+    "sprot" : "",
     "vep" : "variant_effect_predictor.pl",
     "plink" : "plink",
     "label" : "",
@@ -192,9 +259,13 @@ if __name__== "__main__":
   parser.add_argument("--dbname", 
               help="Database name")
   parser.add_argument("--pdb_dir", 
-              help="Directory containing PDB files")
+              help="Directory containing PDB structures")
   parser.add_argument("--map_dir", 
               help="Directory to save pdbmap flat file")
+  parser.add_argument("--modbase_dir",
+              help="Directory containing ModBase models")
+  parser.add_argument("--modbase_summary",
+              help="ModBase summary file")
   parser.add_argument("--create_new_db", action='store_true', 
               help="Create a new database prior to uploading PDB data")
   parser.add_argument("-f", "--force", action='store_true', 
@@ -207,6 +278,8 @@ if __name__== "__main__":
               help="UniProt ID -> EnsEMBL transcript map file location")
   parser.add_argument("--sec2prim", 
               help="UniProt secondary -> primary AC map file location")
+  parser.add_argument("--sprot",
+              help="Swiss-Prot file location")
   parser.add_argument("--vep", 
               help="Variant Effect Predictor location")
   parser.add_argument("--plink", 
@@ -234,12 +307,13 @@ if __name__== "__main__":
 
   ## load_pdb ##
   elif args.cmd == "load_pdb":
-    pdbmap = PDBMap(idmapping=args.idmapping,sec2prim=args.sec2prim,pdb_dir=args.pdb_dir)
+    pdbmap = PDBMap(idmapping=args.idmapping,sec2prim=args.sec2prim,
+                    pdb_dir=args.pdb_dir)
     if len(args.args) < 1:
-      # All structures in the mirrored PDB
-      msg = "WARNING: (PDBMap) Uploading all mirrored RCSB PDB IDs.\n"
-      sys.stderr.write(msg)
+      # All structures in the PDB mirror
       all_pdb_files = glob.glob("%s/*.ent.gz"%args.pdb_dir)
+      msg = "WARNING (PDBMap) Uploading all %d mirrored RCSB PDB structures.\n"%len(all_pdb_files)
+      sys.stderr.write(msg)
       for pdb_files in all_pdb_files:
         pdbid = os.path.basename(pdb_file).split('.')[0][-4:].upper()
         print "\n## Processing %s ##"%pdbid
@@ -251,7 +325,7 @@ if __name__== "__main__":
         args.pdbid = os.path.basename(pdb_file).split('.')[0][-4:].upper()
       print "\n## Processing %s ##"%args.pdbid
       if not args.label:
-        label = "manual"
+        args.label = "manual"
       pdbmap.load_pdb(args.pdbid,pdb_file,label=args.label)
     else:
       # Process many PDB IDs
@@ -259,17 +333,20 @@ if __name__== "__main__":
       for pdbid,pdb_file in pdbs:
         print "\n## Processing %s ##"%pdbid
         if not args.label:
-          label = "manual"
+          args.label = "manual"
         pdbmap.load_pdb(pdbid,pdb_file,label=args.label)
 
   ## load_unp ##
   elif args.cmd == "load_unp":
-    pdbmap = PDBMap(idmapping=args.idmapping,sec2prim=args.sec2prim,pdb_dir=args.pdb_dir)
+    pdbmap = PDBMap(idmapping=args.idmapping,sec2prim=args.sec2prim,
+                    sprot=args.sprot,pdb_dir=args.pdb_dir,
+                    modbase_dir=args.modbase_dir,
+                    modbase_summary=args.modbase_summary)
     if len(args.args) < 1:
       # All PDB-mapped UniProt IDs (later expand to all UniProt IDs)
-      msg = "WARNING: (PDBMap) Uploading all PDB-associated UniProt IDs.\n"
+      all_pdb_unp = PDBMapProtein.PDBMapProtein.sprot
+      msg = "WARNING (PDBMap) Uploading all %d Swiss-Prot UniProt IDs.\n"%len(all_pdb_unp)
       sys.stderr.write(msg)
-      all_pdb_unp = PDBMapProtein.PDBMapProtein._unp2pdb.keys()
       for unp in all_pdb_unp:
         print "\n## Processing %s ##"%unp
         pdbmap.load_unp(unp,label="uniprot-pdb")
@@ -288,7 +365,7 @@ if __name__== "__main__":
   elif args.cmd == "load_data":
     pdbmap = PDBMap(vep=args.vep,plink=args.plink)
     if len(args.args) < 1:
-      msg = "ERROR: (PDBMap) No data files specified."
+      msg = "ERROR (PDBMap) No data files specified."
       raise Exception(msg)
     # Process many data file(s) (set(s))
     if not args.label: # Assign individual labels
@@ -308,7 +385,7 @@ if __name__== "__main__":
   ## intersect ##
   elif args.cmd == "intersect":
     pdbmap = PDBMap()
-    msg  = "WARNING: (PDBMap) If loading data, intersections are automatically determined.\n"
+    msg  = "WARNING (PDBMap) If loading data, intersections are automatically determined.\n"
     msg += "       : (PDBMap) This is a debug command for manual intersections.\n"
     sys.stderr.write(msg)
     dname = args.args[0] # Get the dataset name

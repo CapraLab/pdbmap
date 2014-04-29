@@ -41,13 +41,13 @@ class PDBMapIntersect():
         query += "ON a.chr=b.chr AND a.start=b.start AND a.end=b.end "
         query += "WHERE b.label=%s"
       elif dtype == 'Protein':
-        msg = "ERROR: (PDBMapIntersect) Protein intersection not implemented."
+        msg = "ERROR (PDBMapIntersect) Protein intersection not implemented."
         raise Exception(msg)
       elif dtype == 'Structural':
-        msg = "ERROR: (PDBMapIntersect) Structural intersection not implemented."
+        msg = "ERROR (PDBMapIntersect) Structural intersection not implemented."
         raise Exception(msg)
       else:
-        msg = "ERROR: (PDBMapIntersect) %s intersection is not a valid option."
+        msg = "ERROR (PDBMapIntersect) %s intersection is not a valid option."
         raise Exception(msg%dtype)
       with open(temp1,'wb') as fout:
         writer = csv.writer(fout,delimiter='\t')
@@ -62,7 +62,7 @@ class PDBMapIntersect():
       query += "INNER JOIN Alignment as b "
       query += "ON a.transcript=b.transcript AND a.seqid=b.trans_seqid "
       if slabel:
-        query += "WHERE b.pdbid=%s"
+        query += "WHERE b.pdbid=%s "
       with open(temp2,'wb') as fout:
         writer = csv.writer(fout,delimiter='\t')
         if slabel:
