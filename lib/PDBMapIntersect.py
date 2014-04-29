@@ -1,6 +1,6 @@
 #!/usr/bin/env python27
 #
-# Project        : PDBmap
+# Project        : PDBMap
 # Filename       : PDBMapIntersect.py
 # Author         : R. Michael Sivley
 # Organization   : Center for Human Genetics Research,

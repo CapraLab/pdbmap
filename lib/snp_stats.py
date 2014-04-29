@@ -11,7 +11,7 @@ def main():
   ## Check cmd line arguments
   if len(sys.argv) < 2:
     print "usage: \n\tcalc_fst.py pop-id-map pedmap krange snp-pdbid-loc"
-    print "\tpop-id-map is a tab delimited file with [population, sampleid] columns"
+    print "\tpop-id-map is a tab delimited file with [sampleid pop cont] columns"
     print "\tsnp-pdbid-loc is a tab delimited file with [gene, snp_name, pdbid, chain, x, y , z] columns"
     sys.exit(1)
 
@@ -31,7 +31,7 @@ def main():
     preprocess_pedmap(pedmap)
 
   ## Read the populations
-  pop_id_dict = read_pop(pop_id_map)
+  pop_id_dict,cont_id_dict = read_pop(pop_id_map)
 
   ## Read all SNPs, and their chr,bp
   snp_map = read_map(pedmap)
@@ -150,9 +150,12 @@ def read_pop(pop_id_map):
     reader = csv.reader(fin,delimiter='\t')
     for row in reader:
       pop_id_dict.setdefault(row[1],[]).append(row[0])
+      cont_id_dict.setdefault(row[2],[]).append(row[0])
   populations = pop_id_dict.keys()
+  continents  = cont_id_dict.keys()
   print "\n# Populations: %s"%" ".join([str((i,pop)) for i,pop in enumerate(populations)])
-  return pop_id_dict
+  print "\n# Continents:  %s"%" ".join([str(i,cont)) for i,cont in enumerate(continents)])
+  return pop_id_dict,cont_id_dict
 
 def read_map(pedmap):
   snp_map = {}
