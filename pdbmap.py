@@ -23,6 +23,7 @@ import sys,os,csv,time,pdb,glob
 from lib import PDBMapIO,PDBMapStructure,PDBMapProtein
 from lib import PDBMapAlignment,PDBMapData,PDBMapTranscript
 from lib import PDBMapIntersect,PDBMapModel
+from lib.PDBMapVisualize import PDBMapVisualize
 
 class PDBMap():
   def __init__(self,idmapping=None,sec2prim=None,sprot=None,
@@ -184,6 +185,13 @@ class PDBMap():
     # Note: Only all-structures <-> genomic data intersections supported
     nrows = i.intersect(dname,sname,dtype)
     return(nrows) # Return the number of intersections
+
+  def visualize(self,entity,data_label='1kg',annotation='maf',spectrum_range=None):
+    """ Visualizes a PDBMap structure, model, or protein """
+    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname)
+    v  = PDBMapVisualize(io)
+    # ASSUMES ALL ENTITIES ARE STRUCTURES: INITIAL TESTING
+    v.visualize_structure(entity,data_label,annotation,spectrum_range)
 
   def summarize_pdbmap(self):
     """ Returns summary statistics for the PDBMap database """
@@ -378,6 +386,23 @@ if __name__== "__main__":
     print " # (This may take a while.) #"
     nrows = pdbmap.intersect_data(dname)
     print " # %d intersection rows uploaded."%nrows
+
+  ## visualize ##
+  if args.cmd == "visualize":
+    pdbmap = PDBMap()
+    if len(args.args) < 1:
+      msg = "ERROR (PDBMap) Must provide an entity to visualize"
+      raise Exception(msg)
+    entity = args.args[0]
+    data_label,annotation,spectrum_range = '1kg','maf',None
+    if len(args.args) > 1:
+      data_label = args.args[1]
+    if len(args.args) > 2:
+      annotation = args.args[2]
+    if len(args.args) > 3:
+      spectrum_range = tuple([float(i) for i in args.args[3].split(',')])
+    print "## Visualizing %s+%s.%s"%(entity,data_label,annotation)
+    pdbmap.visualize(entity,data_label,annotation,spectrum_range)
 
   ## intersect ##
   elif args.cmd == "intersect":

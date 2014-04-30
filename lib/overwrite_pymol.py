@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python27
 
 # Improvements:
 #
@@ -8,10 +8,8 @@
 # 4. Automatically center on high/low scored regions and generate png
 
 import sys,csv,math
-if __name__ != "__main__":
+if __name__ != '__main__':
 	from pymol import cmd
-else:
-	cmd = None
 max_dist = -999	# Used by show_density and dist
 
 def overwrite_bfactor(pdbid,chain,resi,value):
@@ -28,7 +26,10 @@ def reset_bfactor(pdbid,val=0.0):
 	exp = "b=%d"%val
 	cmd.alter(pdbid,exp)
 
-def overwrite_bfactors(pdbid,scores,resis=None,discrete=False,binary=False,displaytype='cartoon',surface=False,var_spheres=False):
+def overwrite_bfactors(pdbid,scores,col=4,resis=None,discrete=False,binary=False,displaytype='cartoon',surface=False,var_spheres=False,spec_range=None):
+	col -= 1
+	if __name__ == '__main__':
+		cmd.fetch(pdbid)
 	if isinstance(scores,str): # if filename, read file
 		fin = open(scores,'rU')
 		fin.readline() # burn the header
@@ -38,12 +39,23 @@ def overwrite_bfactors(pdbid,scores,resis=None,discrete=False,binary=False,displ
 		else:
 			scores = [row for row in reader if row[0].lower()==pdbid]
 		fin.close()
-	min_score = min([float(score[3]) for score in scores if float(score[3]) > -8]) - 0.0001
-	max_score = max([float(score[3]) for score in scores])
+	for score in scores:
+		if not score[col] or score[col] == 'NULL':
+			score[col] = -1
+	uniq_scores = [float(score[col]) for score in scores if float(score[col]) > 0]
+	if spec_range and uniq_scores:
+		min_score = spec_range[0]
+		max_score = spec_range[1]
+	elif uniq_scores:
+		min_score = min(uniq_scores) - 0.0001
+		max_score = max(uniq_scores)
+	else:
+		msg = "ERROR: %s contains no 1000 Genomes variants."%pdbid
+		raise Exception(msg)
 
 	if __name__ != "__main__":
 		reset_bfactor(pdbid,min_score-10)
-	commands = [overwrite_bfactor(row[0],row[1],int(row[2]),float(row[3])) for row in scores]
+	commands = [overwrite_bfactor(row[0],row[1],int(row[2]),float(row[col])) for row in scores]
 	include = "br. b > %f"%min_score
 	exclude = "br. b < %f"%min_score
 	print("Minimum score: %s"%min_score)
@@ -57,7 +69,7 @@ def overwrite_bfactors(pdbid,scores,resis=None,discrete=False,binary=False,displ
 	cmd.show(representation=displaytype)
 	cmd.set(name="cartoon_discrete_colors",value="on")
 	if var_spheres:
-			cmd.show(selection="name CA and br. b > 0",representation="spheres")
+			cmd.show(selection="name CA and br. b > -1.1",representation="spheres")
 			cmd.set(name="sphere_scale",value=1)
 	if surface:
 		cmd.show(selection="surface_obj",representation="surface")
@@ -76,6 +88,8 @@ def overwrite_bfactors(pdbid,scores,resis=None,discrete=False,binary=False,displ
 		cmd.spectrum("b","blue_red",selection=include,minimum=min_score,maximum=max_score)
 	cmd.color("grey",exclude)
 	cmd.orient("all")
+	if __name__ == '__main__':
+		cmd.save("%s.annotated.pdb"%pdbid)
 	return commands
 
 def show_density(pdbid,pdbmap_file,variants_file,radius):
@@ -124,7 +138,6 @@ def dist(ipos,jpos):
 	xyz_dist = math.sqrt(dist_x+dist_y+dist_z)
 	max_dist = max(max_dist,xyz_dist)
 	return xyz_dist
-
 
 if __name__=="__main__":
 	sys.argv = [x.lower() for x in sys.argv]
