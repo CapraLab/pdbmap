@@ -252,10 +252,19 @@ class PDBMapIO(PDBIO):
     self._close()
     return res
 
-  # def set_model(self,model):
-  #   """ Alias for set_structure to improve naming consistency """
-  #   self.model = model
-  #   self.set_structure(model.structure)
+  def unp_in_db(self,unpid,label=None):
+    self._connect()
+    query = "SELECT * FROM Chain WHERE unp=%s "
+    if label:
+      query += "AND label=%s"
+    query += "LIMIT 1"
+    if label:
+      self._c.execute(query,(unpid,label))
+    else:
+      self._c.execute(query,unpid)
+    res = True if self._c.fetchone() else False
+    self._close()
+    return res
 
   def genomic_datum_in_db(self,name,label=None):
     self._connect()
@@ -516,6 +525,57 @@ class PDBMapIO(PDBIO):
     resetwarnings()
     self._close()
 
+  def load_structure(self,pdbid):
+    """ Loads the structure from the PDBMap database """
+    query = PDBMapIO.structure_query
+    q = self.secure_query(query,qvars=(self.label,pdbid),cursorclass='DictCursor')
+    res = {}
+    for row in q:
+      if not res:
+        res = dict([(key,[val]) for key,val in row.iteritems()])
+      else:
+        for key,val in row.iteritems():
+          res[key].append(val)
+    return res
+
+  def load_model(self,modelid):
+    """ Loads the structure from the PDBMap database """
+    query = PDBMapIO.model_query
+    q = self.secure_query(query,qvars=(self.label,modelid),cursorclass='DictCursor')
+    res = {}
+    for row in q:
+      if not res:
+        res = dict([(key,[val]) for key,val in row.iteritems()])
+      else:
+        for key,val in row.iteritems():
+          res[key].append(val)
+    return res
+
+  def load_unp(self,unpid):
+    """ Identifies all associated structures, then pulls those structures. """
+    query = PDBMapIO.unp_query
+    q = self.secure_query(query,qvars=(self.label,unpid),cursorclass='Cursor')
+    entities = [r[0] for r in q]
+    res = []
+    for entity in entities:
+      entity_type = io.detect_entity_type(entity)
+      if entity_type == 'structure':
+        res.append((entity_type,entity))
+      elif entity_type == 'model':
+        res.append((entity_type,entity))
+    return res
+
+  def detect_entity_type(self,entity):
+    """ Given an entity ID, attempts to detect the entity type """
+    if self.model_in_db(entity):
+      return 'model'
+    elif self.structure_in_db(entity):
+      return 'structure'
+    elif self.unp_in_db(entity):
+      return 'unp'
+    else:
+      return None
+
   def show(self):
     return(self.__dict__['structure'])
 
@@ -556,6 +616,43 @@ class PDBMapIO(PDBIO):
       msg = "There was an error disconnecting from the database: %s\n"%e
       sys.stderr.write(msg)
       raise
+
+  # Query definitions
+  structure_query = """SELECT
+    f.pdbid,g.chain,a.seqid,d.*,c.*
+    FROM Residue as a
+    INNER JOIN GenomicIntersection as b
+    ON a.pdbid=b.pdbid AND a.chain=b.chain AND a.seqid=b.seqid
+    INNER JOIN GenomicConsequence as c
+    ON b.gc_id=c.gc_id
+    INNER JOIN GenomicData as d
+    ON c.label=d.label AND c.chr=d.chr AND c.start=d.start AND c.end=d.end AND c.name=d.name
+    INNER JOIN Structure as f
+    ON a.pdbid=f.pdbid
+    INNER JOIN Chain as g
+    ON a.pdbid=g.pdbid AND a.chain=g.chain
+    WHERE f.label='uniprot-pdb' AND c.label=%s AND a.pdbid=%s;"""
+  model_query = """SELECT
+    f.modelid,g.chain,a.seqid,d.*,c.*
+    FROM Residue as a
+    INNER JOIN GenomicIntersection as b
+    ON a.pdbid=b.pdbid AND a.chain=b.chain AND a.seqid=b.seqid
+    INNER JOIN GenomicConsequence as c
+    ON b.gc_id=c.gc_id
+    INNER JOIN GenomicData as d
+    ON c.label=d.label AND c.chr=d.chr AND c.start=d.start AND c.end=d.end AND c.name=d.name
+    INNER JOIN Model as f
+    ON a.pdbid=f.modelid
+    INNER JOIN Chain as g
+    ON a.pdbid=g.pdbid AND a.chain=g.chain
+    WHERE f.label='uniprot-pdb' AND c.label=%s AND a.pdbid=%s;"""
+  unp_query = """SELECT b.pdbid FROM 
+    GenomicIntersection as a
+    INNER JOIN Residue as b
+    ON a.pdbid=b.pdbid AND a.chain=b.chain
+    INNER JOIN GenomicConsequence as c
+    ON a.gc_id=c.gc_id
+    WHERE c.label=%s AND b.unp=%s;"""
 
 aa_code_map = {"ala" : "A",
         "arg" : "R",

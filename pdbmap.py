@@ -188,10 +188,18 @@ class PDBMap():
 
   def visualize(self,entity,data_label='1kg',annotation='maf',spectrum_range=None):
     """ Visualizes a PDBMap structure, model, or protein """
-    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname)
-    v  = PDBMapVisualize(io)
-    # ASSUMES ALL ENTITIES ARE STRUCTURES: INITIAL TESTING
-    v.visualize_structure(entity,data_label,annotation,spectrum_range)
+    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,data_label)
+    v  = PDBMapVisualize(io,args.pdb_dir,args.modbase_dir)
+    entity_type = io.detect_entity_type(entity)
+    if entity_type == 'structure':
+      v.visualize_structure(entity,annotation,spectrum_range)
+    elif entity_type == 'model':
+      v.visualize_model(entity,annotation,spectrum_range)
+    elif entity_type == 'unp':
+      v.visualize_unp(entity,annotation,spectrum_range)
+    else:
+      msg = "ERROR (PDBMap) The specified entity is not in the PDBMap database."
+      raise Exception(msg)
 
   def summarize_pdbmap(self):
     """ Returns summary statistics for the PDBMap database """

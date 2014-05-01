@@ -14,12 +14,16 @@ max_dist = -999	# Used by show_density and dist
 
 def overwrite_bfactor(pdbid,chain,resi,value):
 	pdbid = pdbid.lower()
-	selection = "(%s and chain %s and resi %d)"%(pdbid,chain,resi)
+	if chain == 'A':
+		# Some modbase models do not have chains, and have been dummy coded to A
+		selection = "(%s and (chain %s or chain '') and resi %d)"%(pdbid,chain,resi)
+	else:
+		selection = "(%s and chain %s and resi %d)"%(pdbid,chain,resi)
 	exp = "b=%f"%value
-	command = "Altering %s"%selection
-	command += "; Expression: %s"%exp
+	command = "alter %s, %s"%(selection,exp)
 	if __name__ != "__main__":
 		cmd.alter(selection,exp)
+	print command
 	return command
 
 def reset_bfactor(pdbid,val=0.0):
@@ -27,12 +31,12 @@ def reset_bfactor(pdbid,val=0.0):
 	cmd.alter(pdbid,exp)
 
 def overwrite_bfactors(pdbid,scores,col=4,resis=None,discrete=False,binary=False,displaytype='cartoon',surface=False,var_spheres=False,spec_range=None):
-	col -= 1
+	col -= 1 # correct for 0-indexing
+	pdbid = pdbid.lower()
 	if __name__ == '__main__':
 		cmd.fetch(pdbid)
 	if isinstance(scores,str): # if filename, read file
 		fin = open(scores,'rU')
-		fin.readline() # burn the header
 		reader = csv.reader(fin,delimiter='\t')
 		if resis:
 			scores = [row for row in reader if row[0].lower()==pdbid and int(row[2]) in resis]
