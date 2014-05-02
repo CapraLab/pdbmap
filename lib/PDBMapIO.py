@@ -487,6 +487,8 @@ class PDBMapIO(PDBIO):
       self._connect(cursorclass=MySQLdb.cursors.SSDictCursor)
     elif cursorclass == 'SSCursor':
       self._connect(cursorclass=MySQLdb.cursors.SSCursor)
+    elif cursorclass == 'Cursor':
+      self._connect(cursorclass=MySQLdb.cursors.Cursor)
     else:
       self._connect()
     if qvars: self._c.execute(query,qvars)
@@ -556,9 +558,10 @@ class PDBMapIO(PDBIO):
     query = PDBMapIO.unp_query
     q = self.secure_query(query,qvars=(self.label,unpid),cursorclass='Cursor')
     entities = [r[0] for r in q]
+    print "%s found in %d structures."%(unpid,len(entities))
     res = []
     for entity in entities:
-      entity_type = io.detect_entity_type(entity)
+      entity_type = self.detect_entity_type(entity)
       if entity_type == 'structure':
         res.append((entity_type,entity))
       elif entity_type == 'model':
@@ -646,13 +649,15 @@ class PDBMapIO(PDBIO):
     INNER JOIN Chain as g
     ON a.pdbid=g.pdbid AND a.chain=g.chain
     WHERE f.label='uniprot-pdb' AND c.label=%s AND a.pdbid=%s;"""
-  unp_query = """SELECT b.pdbid FROM 
+  unp_query = """SELECT DISTINCT c.pdbid FROM 
     GenomicIntersection as a
-    INNER JOIN Residue as b
-    ON a.pdbid=b.pdbid AND a.chain=b.chain
-    INNER JOIN GenomicConsequence as c
-    ON a.gc_id=c.gc_id
-    WHERE c.label=%s AND b.unp=%s;"""
+    INNER JOIN GenomicConsequence as b
+    ON a.gc_id=b.gc_id
+    INNER JOIN Residue as c
+    ON a.pdbid=c.pdbid AND a.chain=c.chain AND a.seqid=c.seqid
+    INNER JOIN Chain as d
+    ON c.pdbid=d.pdbid AND c.chain=d.chain
+    WHERE b.label=%s AND d.unp=%s;"""
 
 aa_code_map = {"ala" : "A",
         "arg" : "R",

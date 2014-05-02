@@ -186,19 +186,24 @@ class PDBMap():
     nrows = i.intersect(dname,sname,dtype)
     return(nrows) # Return the number of intersections
 
-  def visualize(self,entity,data_label='1kg',annotation='maf',spectrum_range=None):
+  def visualize(self,entity,data_label='1kg',anno_list=['maf'],spectrum_range=None):
     """ Visualizes a PDBMap structure, model, or protein """
     io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,data_label)
     v  = PDBMapVisualize(io,args.pdb_dir,args.modbase_dir)
     entity_type = io.detect_entity_type(entity)
-    if entity_type == 'structure':
-      v.visualize_structure(entity,annotation,spectrum_range)
-    elif entity_type == 'model':
-      v.visualize_model(entity,annotation,spectrum_range)
-    elif entity_type == 'unp':
-      v.visualize_unp(entity,annotation,spectrum_range)
-    else:
-      msg = "ERROR (PDBMap) The specified entity is not in the PDBMap database."
+    try:
+      if entity_type == 'structure':
+        v.visualize_structure(entity,anno_list,spectrum_range)
+      elif entity_type == 'model':
+        v.visualize_model(entity,anno_list,spectrum_range)
+      elif entity_type == 'unp':
+        v.visualize_unp(entity,anno_list,spectrum_range)
+      else:
+        msg = "Sorry, but the specified entity is not in the PDBMap database.\n"
+        sys.stderr.write(msg)
+        return 1
+    except Exception as e:
+      msg = "ERROR (PDBMap) Visualization failed: %s"%str(e)
       raise Exception(msg)
 
   def summarize_pdbmap(self):
@@ -378,8 +383,9 @@ if __name__== "__main__":
   elif args.cmd == "load_data":
     pdbmap = PDBMap(vep=args.vep,plink=args.plink)
     if len(args.args) < 1:
-      msg = "ERROR (PDBMap) No data files specified."
-      raise Exception(msg)
+      msg  = "usage: pdbmap.py -c conf_file load_data data_file data_name [data_file data_name] ...\n"
+      msg += "alt:   pdbmap.py -c conf_file --label=data_name load_data data_file [data_file] ..."
+      print msg; sys.exit(1)
     # Process many data file(s) (set(s))
     if not args.label: # Assign individual labels
       dfiles = zip(args.args[0::2],args.args[1::2])
@@ -399,8 +405,8 @@ if __name__== "__main__":
   if args.cmd == "visualize":
     pdbmap = PDBMap()
     if len(args.args) < 1:
-      msg = "ERROR (PDBMap) Must provide an entity to visualize"
-      raise Exception(msg)
+      msg = "usage: pdbmap.py -c conf_file visualize entity data feature[,feature[,feature]] ..."
+      print msg; sys.exit(1)
     entity = args.args[0]
     data_label,annotation,spectrum_range = '1kg','maf',None
     if len(args.args) > 1:
@@ -410,7 +416,8 @@ if __name__== "__main__":
     if len(args.args) > 3:
       spectrum_range = tuple([float(i) for i in args.args[3].split(',')])
     print "## Visualizing %s+%s.%s"%(entity,data_label,annotation)
-    pdbmap.visualize(entity,data_label,annotation,spectrum_range)
+    anno_list = annotation.split(',')
+    pdbmap.visualize(entity,data_label,anno_list,spectrum_range)
 
   ## intersect ##
   elif args.cmd == "intersect":
