@@ -33,7 +33,7 @@ class PDBMap():
     self.modbase = False
     # If refresh is specified, update all mirrored data
     if refresh:
-      self.refresh_mirrors(idmapping,sec2prim,pdb_dir)
+      self.refresh_mirrors(idmapping,sec2prim,pdb_dir,modbase_dir)
     # Initialize
     if idmapping:
       PDBMapProtein.PDBMapProtein.load_idmapping(idmapping)
@@ -111,7 +111,7 @@ class PDBMap():
 
   def load_model(self,model_summary,model_fname=None,label=""):
     """ Loads a given ModBase model into the PDBMap database """
-    ##FIXME: Implement PDBMapIO.upload_model(model)
+    
     # Create a PDBMapIO object
     io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,
                             args.dbpass,args.dbname,label)
@@ -148,7 +148,6 @@ class PDBMap():
     except Exception as e:
       msg = "ERROR (PDBMap) %s could not be uploaded: %s\n"%(modelid,str(e))
       sys.stderr.write(msg)
-      # raise #DEBUG
       return 1
     return 0
 
@@ -206,16 +205,18 @@ class PDBMap():
       msg = "ERROR (PDBMap) Visualization failed: %s"%str(e)
       raise Exception(msg)
 
-  def summarize_pdbmap(self):
+  def summarize(self):
     """ Returns summary statistics for the PDBMap database """
-    print "summarize_pdbmap"
+    print "Basic summary statistics for PDBMap. Not implemented."
 
   def refresh_mirrors(self,idmapping,sec2prim,pdb_dir):
     """ Refreshes all mirrored data """
     get_pdb       = "%s/get_pdb.sh"%os.path.realpath(pdb_dir)
+    get_modbase   = "%s/get_modbase.sh"%os.path.realpath(modbase_dir)
     get_idmapping = "%s/get_idmapping.sh"%os.path.realpath(idmapping)
     get_sec2prim  = "%s/get_sec2prim.sh"%os.path.realpath(sec2prim)
     os.system(get_pdb)
+    os.system(get_modbase)
     os.system(get_idmapping)
     os.system(get_sec2prim)
 
