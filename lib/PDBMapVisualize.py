@@ -30,6 +30,21 @@ class PDBMapVisualize():
     """ Visualize the annotated dataset within a structure """
     pdbid = pdbid.lower()
     res  = self.io.load_structure(pdbid)
+    cols = ['pdbid','chain','seqid']
+    cols.extend(anno_list)
+    timestamp = str(time.strftime("%Y%m%d-%H"))
+    params = {'structid':pdbid}
+    res_dir = 'results/pdbmap_%s_%s'
+    if group:
+      res_dir = res_dir%(group,timestamp)
+    else:
+      res_dir = res_dir%(params['structid'],timestamp)
+    params['res_dir':res_dir]
+    with open("%(res_dir)s/%(structid)s_vars_annotations.pdb"%params) as fout:
+      writer = csv.writer(fout,delimiter='\t')
+      writer.writerow(cols)
+      for row in res:
+        writer.writerow(row)
     for anno in anno_list:
       if anno not in res:
         msg = "ERROR (PDBMapVisualize) Unknown feature %s\n"%anno

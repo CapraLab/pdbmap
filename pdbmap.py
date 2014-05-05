@@ -385,7 +385,7 @@ if __name__== "__main__":
     pdbmap = PDBMap(vep=args.vep,plink=args.plink)
     if len(args.args) < 1:
       msg  = "usage: pdbmap.py -c conf_file load_data data_file data_name [data_file data_name] ...\n"
-      msg += "alt:   pdbmap.py -c conf_file --label=data_name load_data data_file [data_file] ..."
+      msg += "alt:   pdbmap.py -c conf_file --label=data_name load_data data_file [data_file] ...\n"
       print msg; sys.exit(1)
     # Process many data file(s) (set(s))
     if not args.label: # Assign individual labels
@@ -403,10 +403,10 @@ if __name__== "__main__":
     print " # %d intersection rows uploaded."%nrows
 
   ## visualize ##
-  if args.cmd == "visualize":
+  elif args.cmd == "visualize":
     pdbmap = PDBMap()
     if len(args.args) < 1:
-      msg = "usage: pdbmap.py -c conf_file visualize entity data feature[,feature[,feature]] ..."
+      msg = "usage: pdbmap.py -c conf_file visualize entity data_name feature[,feature[,feature]] ...\n"
       print msg; sys.exit(1)
     entity = args.args[0]
     data_label,annotation,spectrum_range = '1kg','maf',None
@@ -420,12 +420,19 @@ if __name__== "__main__":
     anno_list = annotation.split(',')
     pdbmap.visualize(entity,data_label,anno_list,spectrum_range)
 
+  ## stats ##
+  elif args.cmd == "stats":
+    if len(args.args) < 1:
+      msg = "usage: pdbmap.py -c conf_file stats genotypes populations data_name\n"
+      print msg; sys.exit(1)
+    print "Functionality not yet implemented."
+
   ## intersect ##
   elif args.cmd == "intersect":
     pdbmap = PDBMap()
-    msg  = "WARNING (PDBMap) If loading data, intersections are automatically determined.\n"
+    msg  = "WARNING (PDBMap) If loading data, intersections are automatically applied.\n"
     msg += "       : (PDBMap) This is a debug command for manual intersections.\n"
     sys.stderr.write(msg)
     dname = args.args[0] # Get the dataset name
     pdbmap.intersect_data(dname)
-  print "Complete!"
+  print ''

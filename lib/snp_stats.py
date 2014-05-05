@@ -10,14 +10,15 @@ def main():
 
   ## Check cmd line arguments
   if len(sys.argv) < 2:
-    print "usage: \n\tcalc_fst.py pop-id-map pedmap krange snp-pdbid-loc"
-    print "\tpop-id-map is a tab delimited file with [sampleid pop cont] columns"
-    print "\tsnp-pdbid-loc is a tab delimited file with [gene, snp_name, pdbid, chain, x, y , z] columns"
+    print "usage: \n\tcalc_fst.py genotypes populations krange snp_groups"
+    print "\tgenotypes is a set of plink ped/map files containing sample genotypes"
+    print "\tpopulations is a tab delimited file with [sampleid pop cont ...] columns"
+    print "\tsnp_groups [gene, snp_name, pdbid, chain, x, y , z] columns from PDBMap"
     sys.exit(1)
 
   ## Read cmd line arguments
-  pop_id_map = sys.argv[1]
-  pedmap     = sys.argv[2]
+  pedmap     = sys.argv[1]
+  pop_id_map = sys.argv[2]
   kbounds = (0,0)
   if len(sys.argv) > 2:
     kbounds    = sys.argv[3].split(':')
@@ -145,7 +146,8 @@ def aggregate_stats(snp_1d_dist,snp_3d_dist,snp_ld,snp_fst):
 
 def read_pop(pop_id_map):
   with open(pop_id_map,'rb') as fin:
-    pop_id_dict = {}
+    pop_id_dict  = {}
+    cont_id_dict = {}
     # population : [sample_id,...]
     reader = csv.reader(fin,delimiter='\t')
     for row in reader:
@@ -154,7 +156,7 @@ def read_pop(pop_id_map):
   populations = pop_id_dict.keys()
   continents  = cont_id_dict.keys()
   print "\n# Populations: %s"%" ".join([str((i,pop)) for i,pop in enumerate(populations)])
-  print "\n# Continents:  %s"%" ".join([str(i,cont)) for i,cont in enumerate(continents)])
+  print "\n# Continents:  %s"%" ".join([str((i,cont)) for i,cont in enumerate(continents)])
   return pop_id_dict,cont_id_dict
 
 def read_map(pedmap):
@@ -384,6 +386,7 @@ def calc_3d_dist(snp_loc):
 def parse_all(parser):
   for line in parser:
     line = line.strip()
+    print line
     if not line:
       continue
     if line[0] == "$":
