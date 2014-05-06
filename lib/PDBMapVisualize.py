@@ -30,6 +30,8 @@ class PDBMapVisualize():
     """ Visualize the annotated dataset within a structure """
     pdbid = pdbid.lower()
     res  = self.io.load_structure(pdbid)
+
+    # Output all annotations to results file
     cols = ['pdbid','chain','seqid']
     cols.extend(anno_list)
     timestamp = str(time.strftime("%Y%m%d-%H"))
@@ -39,12 +41,18 @@ class PDBMapVisualize():
       res_dir = res_dir%(group,timestamp)
     else:
       res_dir = res_dir%(params['structid'],timestamp)
-    params['res_dir':res_dir]
-    with open("%(res_dir)s/%(structid)s_vars_annotations.pdb"%params) as fout:
+    params['res_dir'] = res_dir
+    if not os.path.exists(res_dir):
+      os.system('mkdir -p %(res_dir)s'%params)
+    with open("%(res_dir)s/%(structid)s_vars_annotations.txt"%params,'wb') as fout:
       writer = csv.writer(fout,delimiter='\t')
       writer.writerow(cols)
-      for row in res:
+      out = [res[col] for col in cols]    # Extract columns as rows
+      out  = [list(i) for i in zip(*out)] # Transpose back to columns
+      for row in out:
         writer.writerow(row)
+
+    # Visualize individual annotations
     for anno in anno_list:
       if anno not in res:
         msg = "ERROR (PDBMapVisualize) Unknown feature %s\n"%anno
@@ -67,6 +75,29 @@ class PDBMapVisualize():
   def visualize_model(self,modelid,anno_list=['maf'],spectrum_range=None,group=None):
     """ Visualize the annotated dataset within a model """
     res  = self.io.load_model(modelid)
+
+    # Output all annotations to results file
+    cols = ['modelid','chain','seqid']
+    cols.extend(anno_list)
+    timestamp = str(time.strftime("%Y%m%d-%H"))
+    params = {'structid':modelid}
+    res_dir = 'results/pdbmap_%s_%s'
+    if group:
+      res_dir = res_dir%(group,timestamp)
+    else:
+      res_dir = res_dir%(params['structid'],timestamp)
+    params['res_dir'] = res_dir
+    if not os.path.exists(res_dir):
+      os.system('mkdir -p %(res_dir)s'%params)
+    with open("%(res_dir)s/%(structid)s_vars_annotations.txt"%params,'wb') as fout:
+      writer = csv.writer(fout,delimiter='\t')
+      writer.writerow(cols)
+      out = [res[col] for col in cols]    # Extract columns as rows
+      out  = [list(i) for i in zip(*out)] # Transpose back to columns
+      for row in out:
+        writer.writerow(row)
+
+    # Visualize individual annotations
     for anno in anno_list:
       if anno not in res:
         msg = "ERROR (PDBMapVisualize) Unknown feature %s\n"%anno
