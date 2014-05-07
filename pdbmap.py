@@ -185,19 +185,41 @@ class PDBMap():
     nrows = i.intersect(dname,sname,dtype)
     return(nrows) # Return the number of intersections
 
-  def filter_data(self,dname,dfile):
+  def filter_data(self,dname,dfiles):
+    # Determine which variants were loaded into PDBMap
     io     = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,dname)
     query  = "SELECT DISTINCT name FROM GenomicIntersection as a "
     query += "INNER JOIN GenomicData as b "
     query += "ON a.gc_id=b.gc_id WHERE label=%s"
     res    = io.secure_query(query,[dname],cursorclass="Cursor")
     tempf = "temp/%d.TEMP"%multidigit_rand(10)
-    # Filter VCF file to variants in PDBMap
     with open(tempf,'wb') as fout:
       for r in res:
         fout.write("%s\n"%r[0])
-    os.system("vcftools --gzvcf %s --snps %s --out results/%s/vcf/pdbmap_%s"%(
-                dfile,tempf,dname,os.path.basename(dfile)))
+
+    # Filter original dataset to those variants in PDBMap and save locally
+    inputs = []
+    output = os.path.basename(dfiles[0]).split('.')[0]
+    for dfile in dfiles:
+      # Determine file type
+      gzflag = False
+      ext = dfile.split('.')[-1].lower()
+      fin = ['--',dfile]
+      if ext == 'gz':
+        fin[0] += 'gz'
+        ext = dfile.split('.')[-2].lower()
+      if ext == 'vcf':
+        fin[0] += 'gzvcf'
+      elif ext == 'bed':
+        fin[0] += 'bed'
+      # Use vcftools to filter VCF and BED datasets and output to VCF
+      if not os.path.exists('results/%s/vcf'%dname):
+        os.system("mkdir -p results/%s/vcf"%dname)
+        os.system("vcftools %s --snps %s --recode --out results/%s/vcf/pdbmap_%s"%(
+                    ' '.join(fin),tempf,dname,output))
+    # If split by chromosome, merge into a single file
+    os.system("vcf-concat results/%s/vcf/pdbmap_* | gzip -c > results/%s/vcf/pdbmap_%s.vcf.gz"%(
+                dname,dname,output))
     os.system("rm -f %s"%tempf) # Remove temp file
     return len(res) # Return the number of kept variants
 
@@ -420,10 +442,14 @@ if __name__== "__main__":
       nrows = pdbmap.load_data(dname,dfile,args.cores)
       print " # %d data rows uploaded."%nrows
     # Intersect with dataset with PDBMap (One-time operation)
-    print "## Intersecting %s with PDBMap ##"%(dname)
-    print " # (This may take a while.) #"
+    print "## Intersecting %s with PDBMap ##"%dname
+    print " # (This may take a while) #"
     nrows = pdbmap.intersect_data(dname)
     print " # %d intersection rows uploaded."%nrows
+  # Store a local, PDBMap-filtered copy of the dataset
+  print "## Creating a local copy of %s for PDBMap ##"%dname
+  print " # (This may also take a while) #"
+  nrows = pdbmap.filter_data(dname,[dfile for dfile,dname in dfiles])
 
   ## visualize ##
   elif args.cmd == "visualize":
@@ -454,8 +480,23 @@ if __name__== "__main__":
   elif args.cmd == "intersect":
     pdbmap = PDBMap()
     msg  = "WARNING (PDBMap) If loading data, intersections are automatically applied.\n"
-    msg += "       : (PDBMap) This is a debug command for manual intersections.\n"
+    msg += "       : (PDBMap) This is a debug command for intersection dev.\n"
     sys.stderr.write(msg)
     dname = args.args[0] # Get the dataset name
     pdbmap.intersect_data(dname)
+
+  ## filter ##
+  elif args.cmd == "filter":
+    pdbmap = PDBMap()
+    msg  = "WARNING (PDBMap) If loading data, filtering is automatically applied.\n"
+    msg += "       : (PDBMap) This is a debug command for filtering dev.\n"
+    sys.stderr.write(msg)
+    if not args.label: # Assign individual labels
+      dfiles = zip(args.args[0::2],args.args[1::2])
+    else: # Assign shared label
+      dfiles = zip(args.args,[args.label for i in range(len(args.args))])
+    dname  = [dname for dfile,dname in dfiles][0]
+    dfiles = [dfile for dfile,dname in dfiles]
+    pdbmap.filter_data(dname,dfiles)
+
   print ''
