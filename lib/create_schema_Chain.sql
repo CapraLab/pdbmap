@@ -6,6 +6,6 @@ unp VARCHAR(50),
 offset INT,
 hybrid TINYINT,
 sequence TEXT,
-PRIMARY KEY(structid,chain),
+PRIMARY KEY(label,structid,chain),
 KEY(unp)
 )

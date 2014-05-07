@@ -153,7 +153,7 @@ class PDBMap():
 
   def load_data(self,dname,dfile,j):
     """ Loads a data file into the PDBMap database """
-    d = PDBMapData.PDBMapData(self.vep,self.plink,j)
+    d = PDBMapData.PDBMapData(self.vep,self.plink,j) # j process forks
     if not os.path.exists(dfile):
       dfile = "%s.ped"%dfile # Test if PEDMAP basename
       if not os.path.exists(dfile):
@@ -184,6 +184,22 @@ class PDBMap():
     # Note: Only all-structures <-> genomic data intersections supported
     nrows = i.intersect(dname,sname,dtype)
     return(nrows) # Return the number of intersections
+
+  def filter_data(self,dname,dfile):
+    io     = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,dname)
+    query  = "SELECT DISTINCT name FROM GenomicIntersection as a "
+    query += "INNER JOIN GenomicData as b "
+    query += "ON a.gc_id=b.gc_id WHERE label=%s"
+    res    = io.secure_query(query,[dname],cursorclass="Cursor")
+    tempf = "temp/%d.TEMP"%multidigit_rand(10)
+    # Filter VCF file to variants in PDBMap
+    with open(tempf,'wb') as fout:
+      for r in res:
+        fout.write("%s\n"%r[0])
+    os.system("vcftools --gzvcf %s --snps %s --out results/%s/vcf/pdbmap_%s"%(
+                dfile,tempf,dname,os.path.basename(dfile)))
+    os.system("rm -f %s"%tempf) # Remove temp file
+    return len(res) # Return the number of kept variants
 
   def visualize(self,entity,data_label='1kg',anno_list=['maf'],spectrum_range=None):
     """ Visualizes a PDBMap structure, model, or protein """
@@ -219,6 +235,13 @@ class PDBMap():
     os.system(get_modbase)
     os.system(get_idmapping)
     os.system(get_sec2prim)
+
+## Copied from biolearn
+def multidigit_rand(digits):
+  import random
+  randlist = [random.randint(1,10) for i in xrange(digits)]
+  multidigit_rand = int(''.join([str(x) for x in randlist]))
+  return multidigit_rand
 
 # Command line usage
 if __name__== "__main__":

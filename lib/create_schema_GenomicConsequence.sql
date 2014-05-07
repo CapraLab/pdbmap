@@ -23,7 +23,7 @@ sift DOUBLE,     # Score only
 biotype VARCHAR(100), # of transcript
 domains TEXT, # formatted list as string
 gc_id MEDIUMINT NOT NULL AUTO_INCREMENT, # Unique, direct-reference key
-PRIMARY KEY(transcript,chr,start,end),
+PRIMARY KEY(label,transcript,chr,start,end),
 KEY(gc_id),
 KEY(chr,start,end),
 KEY(consequence),

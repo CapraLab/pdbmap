@@ -5,4 +5,6 @@ chain VARCHAR(10), # Structure chain
 seqid INT, # Position in chain sequence
 gc_id MEDIUMINT, # GenomicConsequence direct reference key
 PRIMARY KEY(pdbid,chain,seqid),
-KEY(gc_id))
+KEY(gc_id),
+KEY(label)
+)

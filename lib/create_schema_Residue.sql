@@ -9,6 +9,6 @@ icode VARCHAR(10),
 x DOUBLE,
 y DOUBLE,
 z DOUBLE,
-PRIMARY KEY(structid,chain,seqid,icode),
+PRIMARY KEY(label,structid,chain,seqid,icode),
 KEY(structid,x,y,z)
 )
