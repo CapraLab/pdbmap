@@ -582,10 +582,10 @@ class PDBMapIO(PDBIO):
     resetwarnings()
     self._close()
 
-  def load_structure(self,pdbid):
+  def load_structure(self,pdbid,biounit=0):
     """ Loads the structure from the PDBMap database """
     query = PDBMapIO.structure_query
-    q = self.secure_query(query,qvars=(self.label,pdbid),cursorclass='DictCursor')
+    q = self.secure_query(query,qvars=(self.label,pdbid,biounit),cursorclass='DictCursor')
     res = {}
     for row in q:
       if not res:
@@ -677,7 +677,7 @@ class PDBMapIO(PDBIO):
 
   # Query definitions
   structure_query = """SELECT
-    f.pdbid,g.chain,a.seqid,d.*,c.*
+    g.model,g.chain,a.seqid,d.*,c.*
     FROM Residue as a
     INNER JOIN GenomicIntersection as b
     ON a.pdbid=b.pdbid AND a.chain=b.chain AND a.seqid=b.seqid
@@ -685,13 +685,11 @@ class PDBMapIO(PDBIO):
     ON b.gc_id=c.gc_id
     INNER JOIN GenomicData as d
     ON c.label=d.label AND c.chr=d.chr AND c.start=d.start AND c.end=d.end AND c.name=d.name
-    INNER JOIN Structure as f
-    ON a.pdbid=f.pdbid
     INNER JOIN Chain as g
     ON a.pdbid=g.pdbid AND a.chain=g.chain
-    WHERE f.label='uniprot-pdb' AND c.label=%s AND a.pdbid=%s;"""
+    WHERE g.label='uniprot-pdb' AND c.label=%s AND a.pdbid=%s AND a.biounit=%s;"""
   model_query = """SELECT
-    f.modelid,g.chain,a.seqid,d.*,c.*
+    g.model,g.chain,a.seqid,d.*,c.*
     FROM Residue as a
     INNER JOIN GenomicIntersection as b
     ON a.pdbid=b.pdbid AND a.chain=b.chain AND a.seqid=b.seqid
@@ -699,11 +697,9 @@ class PDBMapIO(PDBIO):
     ON b.gc_id=c.gc_id
     INNER JOIN GenomicData as d
     ON c.label=d.label AND c.chr=d.chr AND c.start=d.start AND c.end=d.end AND c.name=d.name
-    INNER JOIN Model as f
-    ON a.pdbid=f.modelid
     INNER JOIN Chain as g
     ON a.pdbid=g.pdbid AND a.chain=g.chain
-    WHERE f.label='uniprot-pdb' AND c.label=%s AND a.pdbid=%s;"""
+    WHERE g.label='uniprot-pdb' AND c.label=%s AND a.pdbid=%s;"""
   unp_query = """SELECT DISTINCT c.pdbid FROM 
     GenomicIntersection as a
     INNER JOIN GenomicConsequence as b

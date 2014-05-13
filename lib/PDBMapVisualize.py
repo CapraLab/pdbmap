@@ -14,6 +14,8 @@
 # See main check for cmd line parsing
 import sys,os,csv,time,math
 from pymol import cmd
+from chimera import runCommand as rc
+from chimera import replyobj
 max_dist = -999 # Used by show_density and dist
 
 class PDBMapVisualize():
@@ -26,16 +28,16 @@ class PDBMapVisualize():
     self.pdb_dir = pdb_dir
     self.modbase_dir = modbase_dir
 
-  def visualize_structure(self,pdbid,anno_list=['maf'],spectrum_range=None,group=None):
+  def visualize_structure(self,pdbid,biounit=0,anno_list=['maf'],spectrum_range=None,group=None):
     """ Visualize the annotated dataset within a structure """
     pdbid = pdbid.lower()
-    res  = self.io.load_structure(pdbid)
+    res  = self.io.load_structure(pdbid,biounit)
 
     # Output all annotations to results file
-    cols = ['pdbid','chain','seqid']
+    cols = ['model','seqid','chain']
     cols.extend(anno_list)
     timestamp = str(time.strftime("%Y%m%d-%H"))
-    params = {'structid':pdbid}
+    params = {'structid':pdbid,'biounit':biounit}
     res_dir = 'results/pdbmap_%s_%s'
     if group:
       res_dir = res_dir%(group,timestamp)
@@ -44,7 +46,7 @@ class PDBMapVisualize():
     params['res_dir'] = res_dir
     if not os.path.exists(res_dir):
       os.system('mkdir -p %(res_dir)s'%params)
-    with open("%(res_dir)s/%(structid)s_vars_annotations.txt"%params,'wb') as fout:
+    with open("%(res_dir)s/%(structid)s_biounit%(biounit)d_vars_annotations.txt"%params,'wb') as fout:
       writer = csv.writer(fout,delimiter='\t')
       writer.writerow(cols)
       out = [res[col] for col in cols]    # Extract columns as rows
@@ -58,29 +60,37 @@ class PDBMapVisualize():
         msg = "ERROR (PDBMapVisualize) Unknown feature %s\n"%anno
         sys.stderr.write(msg)
         continue # Move to next annotation
-      cols = ['pdbid','chain','seqid',anno]
+      cols = ['model','seqid','chain',anno]
       out  = [res[col] for col in cols]   # Extract columns as rows
       out  = [list(i) for i in zip(*out)] # Transpose back to columns
+      minval,maxval = (999,-999) if not spectrum_range else spectrum_range
       tempf = "temp/%d.TEMP"%multidigit_rand(10)
       # Write the mappings to a temp file
       with open(tempf,'w') as fout:
-        writer = csv.writer(fout,delimiter='\t')
+        fout.write("#%s\n"%'\t'.join(cols))
+        fout.write("attribute: %s\n"%anno)
+        fout.write("match mode: 1-to-1\n")
+        fout.write("recipient: residues\n")
         for row in out:
-          writer.writerow(row)
-      params = {'structid':pdbid,'anno':anno,'tempf':tempf,
-                'spec_range':str(spectrum_range),
+          # #0.model:resi.chain value [value ...]
+          fout.write("\t:#0.%d:%d.%s\t%s\n"%(tuple(row)))
+          if float(row[-1]) < minval: minval=float(row[-1])
+          if float(row[-1]) > maxval: maxval=float(row[-1])
+      minval,maxval = spectrum_range if spectrum_range else (minval,maxval)
+      params = {'structid':pdbid,'biounit':biounit,'anno':anno,'tempf':tempf,
+                'minval':minval,'maxval':maxval,'resis':out,
                 'struct_loc':"%s/pdb%s.ent.gz"%(self.pdb_dir,pdbid)}
       self.visualize(params,group=group)
 
-  def visualize_model(self,modelid,anno_list=['maf'],spectrum_range=None,group=None):
+  def visualize_model(self,modelid,biounit=0,anno_list=['maf'],spectrum_range=None,group=None):
     """ Visualize the annotated dataset within a model """
     res  = self.io.load_model(modelid)
 
     # Output all annotations to results file
-    cols = ['modelid','chain','seqid']
+    cols = ['modelid','seqid','chain']
     cols.extend(anno_list)
     timestamp = str(time.strftime("%Y%m%d-%H"))
-    params = {'structid':modelid}
+    params = {'structid':modelid,'biounit':biounit}
     res_dir = 'results/pdbmap_%s_%s'
     if group:
       res_dir = res_dir%(group,timestamp)
@@ -89,7 +99,7 @@ class PDBMapVisualize():
     params['res_dir'] = res_dir
     if not os.path.exists(res_dir):
       os.system('mkdir -p %(res_dir)s'%params)
-    with open("%(res_dir)s/%(structid)s_vars_annotations.txt"%params,'wb') as fout:
+    with open("%(res_dir)s/%(structid)s_biounit%(biounit)d_vars_annotations.txt"%params,'wb') as fout:
       writer = csv.writer(fout,delimiter='\t')
       writer.writerow(cols)
       out = [res[col] for col in cols]    # Extract columns as rows
@@ -103,28 +113,42 @@ class PDBMapVisualize():
         msg = "ERROR (PDBMapVisualize) Unknown feature %s\n"%anno
         sys.stderr.write(msg)
         continue # Move to next annotation
-      cols = ['modelid','chain','seqid',anno]
+      cols = ['model','seqid','chain',anno]
       out  = [res[col] for col in cols]   # Extract columns as rows
       out  = [list(i) for i in zip(*out)] # Transpose back to columns
       tempf = "temp/%d.TEMP"%multidigit_rand(10)
       # Write the mappings to a temp file
       with open(tempf,'w') as fout:
-        writer = csv.writer(fout,delimiter='\t')
-        for row in out:
-          writer.writerow(row)
-      params = {'structid':modelid,'anno':anno,'tempf':tempf,
-                'spec_range':str(spectrum_range),
+        fout.write("#%s\n"%'\t'.join(cols))
+        fout.write("attribute: %s\n"%anno)
+        fout.write("match mode: 1-to-1\n")
+        fout.write("recipient: residues\n")
+        for row in out
+          # #0.model:resi.chain value [value ...]
+          fout.write("\t:#0.%d:%d.%s\t%s\n"%(tuple(row)))
+          if float(row[-1]) < minval: minval=float(row[-1])
+          if float(row[-1]) > maxval: maxval=float(row[-1])
+      minval,maxval = spectrum_range if spectrum_range else (minval,maxval)
+      params = {'structid':modelid,'biounit':biounit,'anno':anno,'tempf':tempf,
+                'minval':minval,'maxval':maxval,'resis':out,
                 'struct_loc':"%s/models/model/%s.pdb.gz"%(self.modbase_dir,modelid)}
       self.visualize(params,group=group)
 
   def visualize_unp(self,unpid,anno_list=['maf'],spectrum_range=None):
     """ Visualize the annotated dataset associated with a protein """
     res_list  = self.io.load_unp(unpid)
+    # Query all biological assemblies
+    query = "SELECT DISTINCT biounit FROM Chain WHERE pdbid=%s"
+    res   = self.io.secure_query(query,(entity),cursorclass=Cursor)
+    biounits = [r[0] for r in res]
+    # Visualize for each biological assembly
     for entity_type,entity in res_list:
       if entity_type == 'structure':
-        self.visualize_structure(entity,anno_list,spectrum_range,group=unpid)
+        for biounit in biounits:
+          self.visualize_structure(entity,biounit,anno_list,spectrum_range,group=unpid)
       elif entity_type == 'model':
-        self.visualize_model(entity,anno_list,spectrum_range,group=unpid)
+        for biounit in biounits:
+          self.visualize_model(entity,biounit,anno_list,spectrum_range,group=unpid)
       else:
         msg = "ERROR (PDBMapVisualize) Invalid entity_type for %s: %s"%(entity,entity_type)
         raise Exception(msg)
@@ -140,17 +164,39 @@ class PDBMapVisualize():
     params['res_dir'] = res_dir
     if not os.path.exists(res_dir):
       os.system('mkdir -p %s'%res_dir)
-    cmd  = "run lib/PDBMapVisualize.py; "
-    cmd += "load %(struct_loc)s,%(structid)s; "
-    cmd += "PDBMapVisualize.overwrite_bfactors('%(structid)s','%(tempf)s',var_spheres=True,spec_range=%(spec_range)s); "
-    cmd += "orient;mset 1 x360; movie.roll 1,180,1,axis=y; movie.roll 181,360,1,axis=x; "
-    cmd += "save %(res_dir)s/%(structid)s_vars_%(anno)s.pdb; "
-    cmd += "save %(res_dir)s/%(structid)s_vars_%(anno)s.pse; "
-    cmd += "png %(res_dir)s/%(structid)s_vars_%(anno)s.png, dpi=300, ray=2400,2400;"
-    cmd = cmd % params
-    print cmd
-    os.system('/usr/bin/pymol -c -d "%s"'%cmd)
-    os.system('rm -f %s'%params['tempf']) # clean up temp file
+
+    # Visualize with Chimera
+    replyobj.status("Chimera: Visualizing %(structid)s_biounit%(biounit)d_vars_%(anno)s"%params)
+    # Assign the annotation to relevant residues
+    rc("open %(struct_loc)s"%params)
+    rc("defattr %(tempf)s"%params)
+    # Color by chain
+    rc("rainbow chain")
+    # Identify all annotated residues as spheres
+    for resi in params['resis']:
+      rc("shape sphere center #0.%d:%d.%s@CA radius 1 color grey"%tuple(resi[:3]))
+      # If annotation is binary, color grey/red
+      if (params['minval'],params['maxval']) == (0,1):
+        rc("color red #0.%d:%d.%s@CA"%tuple(resi[:3]))
+    # If annotation is continuous, color spectrum
+    if not (params['minval'],params['maxval']) == (0,1):
+      rc("rangecolor %(anno)s %(minval)s blue %(maxval)s red"%params)
+    # Export the image
+    rc("export POV-Ray %(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(anno)s.png"%params)
+
+    # Visualize with PyMol
+    # cmd  = "run lib/PDBMapVisualize.py; "
+    # cmd += "load %(struct_loc)s,%(structid)s; "
+    # cmd += "PDBMapVisualize.overwrite_bfactors('%(structid)s','%(tempf)s',var_spheres=True,spec_range=%(spec_range)s); "
+    # cmd += "orient;mset 1 x360; movie.roll 1,180,1,axis=y; movie.roll 181,360,1,axis=x; "
+    # cmd += "save %(res_dir)s/%(structid)s_vars_%(anno)s.pdb; "
+    # cmd += "save %(res_dir)s/%(structid)s_vars_%(anno)s.pse; "
+    # cmd += "png %(res_dir)s/%(structid)s_vars_%(anno)s.png, dpi=300, ray=2400,2400;"
+    # cmd = cmd % params
+    # print cmd
+    # os.system('/usr/bin/pymol -c -d "%s"'%cmd)
+
+    # os.system('rm -f %s'%params['tempf']) # clean up temp file
 
   # Executed in PyMol
   @classmethod

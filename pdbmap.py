@@ -235,16 +235,23 @@ class PDBMap():
     #os.system("rm -f %s"%tempf) # Remove temp file
     return nrows # Return the number of kept variants
 
-  def visualize(self,entity,data_label='1kg',anno_list=['maf'],spectrum_range=None):
+  def visualize(self,entity,biounits=[],data_label='1kg',anno_list=['maf'],spectrum_range=None):
     """ Visualizes a PDBMap structure, model, or protein """
     io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,data_label)
     v  = PDBMapVisualize(io,args.pdb_dir,args.modbase_dir)
     entity_type = io.detect_entity_type(entity)
+    if entity_type in ['structure','model'] and not biounits:
+      # Query all biological assemblies
+      query = "SELECT DISTINCT biounit FROM Chain WHERE pdbid=%s"
+      res   = self.io.secure_query(query,(entity),cursorclass=Cursor)
+      biounits = [r[0] for r in res]
     try:
       if entity_type == 'structure':
-        v.visualize_structure(entity,anno_list,spectrum_range)
+        for biounit in biounits:
+          v.visualize_structure(entity,biounit,anno_list,spectrum_range)
       elif entity_type == 'model':
-        v.visualize_model(entity,anno_list,spectrum_range)
+        for biounit in biounits:
+          v.visualize_model(entity,biounit,anno_list,spectrum_range)
       elif entity_type == 'unp':
         v.visualize_unp(entity,anno_list,spectrum_range)
       else:
@@ -468,19 +475,23 @@ if __name__== "__main__":
   elif args.cmd == "visualize":
     pdbmap = PDBMap()
     if len(args.args) < 1:
-      msg = "usage: pdbmap.py -c conf_file visualize entity data_name feature[,feature[,feature]] ...\n"
+      msg = "usage: pdbmap.py -c conf_file visualize entity data_name feature[,...] biounit[,...] [minval:maxval,...]\n"
       print msg; sys.exit(1)
     entity = args.args[0]
     data_label,annotation,spectrum_range = '1kg','maf',None
     if len(args.args) > 1:
       data_label = args.args[1]
     if len(args.args) > 2:
-      annotation = args.args[2]
+      anno_list  = args.args[2].split(',')
     if len(args.args) > 3:
-      spectrum_range = tuple([float(i) for i in args.args[3].split(',')])
-    print "## Visualizing %s+%s.%s"%(entity,data_label,annotation)
-    anno_list = annotation.split(',')
-    pdbmap.visualize(entity,data_label,anno_list,spectrum_range)
+      if args.args[3].lower() in ['all','.',' ']:
+        biounits = []
+      else:
+        biounits   = args.args[3].split(',')
+    if len(args.args) > 4:
+      spectrum_range = [tuple(p.split(':')) for p in args.args[3].split(',')]
+    print "## Visualizing %s[%s]+%s.%s"%(entity,','.join(biounits),data_label,annotation)
+    pdbmap.visualize(entity,biounits,data_label,anno_list,spectrum_range)
 
   ## stats ##
   elif args.cmd == "stats":
