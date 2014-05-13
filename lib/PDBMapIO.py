@@ -29,14 +29,35 @@ class PDBMapParser(PDBParser):
                                       structure_builder,QUIET)
 
   @classmethod
-  def process_structure(cls,s):
+  def process_structure(cls,s,biounit=0,dbref={}):
+    """ The asymmetric unit *must* be processed before any
+        biological assemblies, or the additional models
+        containing the biological assembly coordinates will
+        be removed. """
     # Process structural elements
     iter_s = [m for m in s]
-    for m in iter_s[1:]:
-      s.detach_child(m.id) # Retain only the first model
+    if not biounit:
+      for m in iter_s[1:]:
+        s.detach_child(m.id) # Retain only the first model
+    # Record the biological assembly ID for each entity
+    for m in s:
+      m.biounit = biounit
+      for c in m:
+        c.biounit = biounit
+        for r in m:
+          r.biounit = biounit
+          for a in r:
+            a.biounit = biounit
     for m in s:
       iter_m = [c for c in m] # avoid modification during iteration, shallow
       for c in iter_m:
+        if dbref:
+          c.unp      = dbref[c.id]['unp']
+          c.pdbstart = dbref[c.id]['pdbstart']
+          c.pdbend   = dbref[c.id]['pdbend']
+          c.offset   = dbref[c.id]['offset']
+          c.species  = dbref[c.id]['species']
+          c.hybrid   = dbref[c.id]['hybrid']
         if 'species' not in dir(c):
           c.species = 'UNKNOWN'
         if c.species != 'HUMAN':
@@ -46,7 +67,9 @@ class PDBMapParser(PDBParser):
           continue
         iter_c = [r for r in c] # avoid modification during iteration, shallow
         for r in iter_c:
-          if r.id[0].strip(): # If residue is a heteroatom
+          if r in dbref[c.id]['drop_resis']: # If residue outside dbref range
+            c.detach_child(r.id) # Remove residue
+          if r.id[0].strip():    # If residue is a heteroatom
             c.detach_child(r.id) # Remove residue
           elif r.id[1] < c.pdbstart or r.id[1] > c.pdbend: # If residue outside chain boundary
             c.detach_child(r.id)
@@ -76,7 +99,7 @@ class PDBMapParser(PDBParser):
       s = None # Return a None object to indicate invalid structure
     return s
 
-  def get_structure(self,pdbid,fname,quality=-1):
+  def get_structure(self,pdbid,fname,biounit_fnames=[],quality=-1):
     try:
       if os.path.basename(fname).split('.')[-1] == 'gz':
         fin = gzip.open(fname,'rb')
@@ -130,6 +153,7 @@ class PDBMapParser(PDBParser):
     if len(dbref) < 1:
       msg = "ERROR (PDBMapIO) No DBREF fields in %s.\n"%s.id
       raise Exception(msg)
+    dbref = {}
     for ref in dbref:
       chain    = ref[12:14].strip()
       unp      = ref[33:41].strip()
@@ -142,6 +166,7 @@ class PDBMapParser(PDBParser):
       # Documented offset between PDB and canonical sequence
       offset   = dbstart - pdbstart
       # Handle split chains
+      drop_resis = []
       if 'unp' in dir(s[0][chain]):
         hybrid = 1 # Flag this chain as a hybrid
         # If existing chain segment is human, and this one is not
@@ -149,7 +174,8 @@ class PDBMapParser(PDBParser):
           # Drop this segment of the chain
           drop = [r for r in s[0][chain] if pdbstart <= r.id[1] <= pdbend]
           for r in drop:
-            s[0][chain].detach_child(r.id)
+            # s[0][chain].detach_child(r.id)
+            drop_resis.append(r.id)
           continue # Do not overwrite existing chain DBREF
         # Else if this chain segment is human, and the exiting is not   
         elif s[0][chain].species != 'HUMAN' and species == 'HUMAN':
@@ -157,7 +183,8 @@ class PDBMapParser(PDBParser):
           nhstart,nhend = s[0][chain].pdbstart,s[0][chain].pdbend
           drop = [r for r in s[0][chain] if nhstart <= r.id[1] <= nhend]
           for r in drop:
-            s[0][chain].detach_child(r.id)
+            # s[0][chain].detach_child(r.id)
+            drop_resis.append(r.id)
         # NO ACTION NECESSARY FOR THE REMAINING CONDITIONS.
         # If both chains are human, the first will be retained, the 
         # information will be the same, the start offset will default
@@ -176,6 +203,8 @@ class PDBMapParser(PDBParser):
         s[0][chain].pdbend   = pdbend
       s[0][chain].species  = species
       s[0][chain].hybrid   = hybrid
+      dbref[chain] = {'unp':unp,'pdbstart':pdbstart,'offset':offset,'pdbend':pdbend,
+                      'species':species,'hybrid':hybrid,'drop_resis':[r for r in drop_resis]}
 
     # Sanitize free text fields
     s.header["name"]     = str(s.header["name"]).translate(None,"'\"")
@@ -186,8 +215,29 @@ class PDBMapParser(PDBParser):
     s.header["structure_method"]    = str(s.header["structure_method"]).translate(None,"'\"")
     s.header["structure_reference"] = str(s.header["structure_reference"]).translate(None,"'\"")
 
-    # Preprocess structural elements
-    s = PDBMapParser.process_structure(s)
+    # Preprocess the asymmetric and biological units for this protein
+    s = PDBMapParser.process_structure(s) # *must* occur before biounits
+    for biounit_fname in biounit_fnames:
+      try:
+        if os.path.basename(biounit_fname).split('.')[-1] == 'gz':
+          fin   = gzip.open(fname,'rb')
+          bioid = int(os.path.basename(biounit_fname).split('.')[-2][-1])
+        else:
+          fin = open(biounit_fname,'rb')
+          bioid = int(os.path.basename(biounit_fname).split('.')[-1][-1])
+        p = PDBParser()
+        filterwarnings('ignore',category=PDBConstructionWarning)
+        biounit = p.get_structure(pdbid,fin)
+        resetwarnings()
+        biounit = PDBMapStructure(s)
+        fin.close()
+      except Exception as e:
+        msg = "ERROR (PDBMapIO) Error while parsing %s biounit %d: %s"%(pdbid,bioid,str(e).replace('\n',' '))
+        raise Exception(msg)
+      biounit = PDBMapParser.process_structure(biounit,biounit=bioid,dbref=dbref)
+      # Add the models for this biological assembly to the PDBMapStructure
+      for m in biounit:
+        s.add(m)
     return s
 
   def get_model(self,model_summary,fname):
@@ -312,27 +362,32 @@ class PDBMapIO(PDBIO):
       squery = squery%sfields
       queries.append(squery)
 
-    # Upload the chains and residues
-    for c in s[0]:
-      cquery  = "INSERT IGNORE INTO Chain VALUES "
-      cquery += '("%(label)s","%(id)s",'%sfields # structure id
-      cquery += '"%(id)s","%(unp)s",%(offset)d,%(hybrid)d,"%(sequence)s")'
-      cfields = dict((key,c.__getattribute__(key)) for key in dir(c) 
+    # Upload the models, chains,and residues
+    for m in s:
+      mfields = dict((key,c.__getattribute__(key)) for key in dir(m) 
                       if isinstance(key,collections.Hashable))
-      cfields["label"] = self.label
-      cquery = cquery%cfields
-      queries.append(cquery)
-      rquery  = "INSERT IGNORE INTO Residue VALUES "
-      for r in c:
-        rquery += '("%(label)s","%(id)s",'%sfields # structure id
-        rquery += '"%(id)s",'%cfields # chain id
-        rquery += '"%(resname)s","%(rescode)s",%(seqid)d,'
-        rquery += '"%(icode)s",%(x)f,%(y)f,%(z)f),'
-        rfields = dict((key,r.__getattribute__(key)) for key in dir(r) 
+      for c in m:
+        cquery  = "INSERT IGNORE INTO Chain VALUES "
+        cquery += '("%(label)s","%(id)s",%(biounit)d,'%sfields # structure id
+        cquery += '%(model)d,'%mfields # model id
+        cquery += '"%(id)s","%(unp)s",%(offset)d,%(hybrid)d,"%(sequence)s")'
+        cfields = dict((key,c.__getattribute__(key)) for key in dir(c) 
                         if isinstance(key,collections.Hashable))
-        rfields["label"] = self.label
-        rquery = rquery%rfields
-      queries.append(rquery[:-1])
+        cfields["label"] = self.label
+        cquery = cquery%cfields
+        queries.append(cquery)
+        rquery  = "INSERT IGNORE INTO Residue VALUES "
+        for r in c:
+          rquery += '("%(label)s","%(id)s",%(biounit)d,'%sfields # structure id
+          rquery += '%(model)d,'%mfields # model id
+          rquery += '"%(id)s",'%cfields  # chain id
+          rquery += '"%(resname)s","%(rescode)s",%(seqid)d,'
+          rquery += '"%(icode)s",%(x)f,%(y)f,%(z)f),'
+          rfields = dict((key,r.__getattribute__(key)) for key in dir(r) 
+                          if isinstance(key,collections.Hashable))
+          rfields["label"] = self.label
+          rquery = rquery%rfields
+        queries.append(rquery[:-1])
 
     # Upload the transcripts
     try:

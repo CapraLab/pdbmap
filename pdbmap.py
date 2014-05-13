@@ -83,15 +83,16 @@ class PDBMap():
 
     # Load the PDB structure
     if not pdb_fname:
-      pdb_fname = "%s/pdb%s.ent.gz"%(self.pdb_dir,pdbid.lower())
+      pdb_fname = "%s/structures/all/pdb/pdb%s.ent.gz"%(self.pdb_dir,pdbid.lower())
       print "  # Fetching %s"%pdbid
       if not os.path.exists(pdb_fname):
         msg = "ERROR (PDBMap) Cannot fetch %s. Not in PDB mirror.\n"%pdbid
         sys.stderr.write(msg)
         return 1
+      biounit_fnames = os.listdir("%s/biounit/coordinates/all/%s.pdb*.gz"%(self.pdb_dir,pdbid.lower()))
     try: # Load the structure
       p  = PDBMapIO.PDBMapParser()
-      s  = p.get_structure(pdbid,pdb_fname)
+      s  = p.get_structure(pdbid,pdb_fname,biounit_fnames=biounit_fnames)
       if not s:
         msg = "Invalid structure"
         raise Exception(msg)
@@ -188,19 +189,24 @@ class PDBMap():
   def filter_data(self,dname,dfiles):
     # Determine which variants were loaded into PDBMap
     io     = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,dname)
-    query  = "SELECT DISTINCT name FROM GenomicIntersection as a "
-    query += "INNER JOIN GenomicData as b "
-    query += "ON a.gc_id=b.gc_id WHERE label=%s"
+    query  = "SELECT DISTINCT b.name FROM GenomicIntersection as a "
+    query += "INNER JOIN GenomicConsequence as b "
+    query += "ON a.gc_id=b.gc_id WHERE a.label=%s"
+    print 'query:\n',query%dname
     res    = io.secure_query(query,[dname],cursorclass="Cursor")
     tempf = "temp/%d.TEMP"%multidigit_rand(10)
+    nrows = 0
     with open(tempf,'wb') as fout:
       for r in res:
         fout.write("%s\n"%r[0])
+        nrows += 1
 
     # Filter original dataset to those variants in PDBMap and save locally
     inputs = []
-    output = os.path.basename(dfiles[0]).split('.')[0]
+    exts   = ['vcf','gz','bed','ped','map']
     for dfile in dfiles:
+      output = os.path.basename(dfile).split('.')
+      output = '.'.join(word for word in output if word not in exts)
       # Determine file type
       gzflag = False
       ext = dfile.split('.')[-1].lower()
@@ -209,19 +215,25 @@ class PDBMap():
         fin[0] += 'gz'
         ext = dfile.split('.')[-2].lower()
       if ext == 'vcf':
-        fin[0] += 'gzvcf'
+        fin[0] += 'vcf'
       elif ext == 'bed':
         fin[0] += 'bed'
+      # Create local storage directory
+      if not os.path.exists('data/pdbmap/%s/vcf'%dname):
+        print "mkdir -p data/pdbmap/%s/vcf"%dname
+        os.system("mkdir -p data/pdbmap/%s/vcf"%dname)
       # Use vcftools to filter VCF and BED datasets and output to VCF
-      if not os.path.exists('results/%s/vcf'%dname):
-        os.system("mkdir -p results/%s/vcf"%dname)
-        os.system("vcftools %s --snps %s --recode --out results/%s/vcf/pdbmap_%s"%(
-                    ' '.join(fin),tempf,dname,output))
+      print "vcftools %s --snps %s --recode --out data/pdbmap/%s/vcf/pdbmap_%s"%(
+                  ' '.join(fin),tempf,dname,output)
+      os.system("vcftools %s --snps %s --recode --out data/pdbmap/%s/vcf/pdbmap_%s"%(
+                  ' '.join(fin),tempf,dname,output))
     # If split by chromosome, merge into a single file
-    os.system("vcf-concat results/%s/vcf/pdbmap_* | gzip -c > results/%s/vcf/pdbmap_%s.vcf.gz"%(
-                dname,dname,output))
-    os.system("rm -f %s"%tempf) # Remove temp file
-    return len(res) # Return the number of kept variants
+    print "vcf-concat data/pdbmap/%s/vcf/pdbmap_*.vcf | gzip -c > data/pdbmap/%s/vcf/pdbmap_%s.vcf.gz"%(
+                dname,dname,dname)
+    os.system("vcf-concat data/pdbmap/%s/vcf/pdbmap_*.vcf | gzip -c > data/pdbmap/%s/vcf/pdbmap_%s.vcf.gz"%(
+                dname,dname,dname))
+    #os.system("rm -f %s"%tempf) # Remove temp file
+    return nrows # Return the number of kept variants
 
   def visualize(self,entity,data_label='1kg',anno_list=['maf'],spectrum_range=None):
     """ Visualizes a PDBMap structure, model, or protein """
@@ -442,14 +454,15 @@ if __name__== "__main__":
       nrows = pdbmap.load_data(dname,dfile,args.cores)
       print " # %d data rows uploaded."%nrows
     # Intersect with dataset with PDBMap (One-time operation)
-    print "## Intersecting %s with PDBMap ##"%dname
-    print " # (This may take a while) #"
-    nrows = pdbmap.intersect_data(dname)
-    print " # %d intersection rows uploaded."%nrows
-  # Store a local, PDBMap-filtered copy of the dataset
-  print "## Creating a local copy of %s for PDBMap ##"%dname
-  print " # (This may also take a while) #"
-  nrows = pdbmap.filter_data(dname,[dfile for dfile,dname in dfiles])
+    for dname in set([dname for dfile,dname in dfiles]):
+      print "## Intersecting %s with PDBMap ##"%dname
+      print " # (This may take a while) #"
+      nrows = pdbmap.intersect_data(dname)
+      print " # %d intersection rows uploaded."%nrows
+      # Store a local, PDBMap-filtered copy of the dataset
+      print "## Creating a local copy of %s for PDBMap ##"%dname
+      print " # (This may also take a while) #"
+      nrows = pdbmap.filter_data(dname,[dfile for dfile,dname in dfiles])
 
   ## visualize ##
   elif args.cmd == "visualize":
@@ -497,6 +510,11 @@ if __name__== "__main__":
       dfiles = zip(args.args,[args.label for i in range(len(args.args))])
     dname  = [dname for dfile,dname in dfiles][0]
     dfiles = [dfile for dfile,dname in dfiles]
-    pdbmap.filter_data(dname,dfiles)
+    nrows  = pdbmap.filter_data(dname,dfiles)
+
+  ## no command specified ##
+  else:
+    msg = "PDBMap must be called with a command. Use -h for help.\n"
+    sys.stderr.write(msg)
 
   print ''
