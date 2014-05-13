@@ -89,7 +89,7 @@ class PDBMap():
         msg = "ERROR (PDBMap) Cannot fetch %s. Not in PDB mirror.\n"%pdbid
         sys.stderr.write(msg)
         return 1
-      biounit_fnames = os.listdir("%s/biounit/coordinates/all/%s.pdb*.gz"%(self.pdb_dir,pdbid.lower()))
+    biounit_fnames = os.listdir("%s/biounit/coordinates/all/%s.pdb*.gz"%(self.pdb_dir,pdbid.lower()))
     try: # Load the structure
       p  = PDBMapIO.PDBMapParser()
       s  = p.get_structure(pdbid,pdb_fname,biounit_fnames=biounit_fnames)
@@ -387,7 +387,7 @@ if __name__== "__main__":
                     pdb_dir=args.pdb_dir)
     if len(args.args) < 1:
       # All structures in the PDB mirror
-      all_pdb_files = glob.glob("%s/*.ent.gz"%args.pdb_dir)
+      all_pdb_files = glob.glob("%s/structures/all/pdb/*.ent.gz"%args.pdb_dir)
       msg = "WARNING (PDBMap) Uploading all %d mirrored RCSB PDB structures.\n"%len(all_pdb_files)
       sys.stderr.write(msg)
       for pdb_files in all_pdb_files:
