@@ -474,20 +474,17 @@ if __name__== "__main__":
   ## visualize ##
   elif args.cmd == "visualize":
     pdbmap = PDBMap()
-    if len(args.args) < 1:
+    if len(args.args) < 3:
       msg = "usage: pdbmap.py -c conf_file visualize entity data_name feature[,...] biounit[,...] [minval:maxval,...]\n"
       print msg; sys.exit(1)
     entity = args.args[0]
     data_label,annotation,spectrum_range = '1kg','maf',None
-    if len(args.args) > 1:
-      data_label = args.args[1]
-    if len(args.args) > 2:
-      anno_list  = args.args[2].split(',')
-    if len(args.args) > 3:
-      if args.args[3].lower() in ['all','.',' ']:
-        biounits = []
-      else:
-        biounits   = args.args[3].split(',')
+    data_label = args.args[1]
+    anno_list  = args.args[2].split(',')
+    if len(args.args) > 3 or args.args[3].lower() in ['all','.',' ']:
+      biounits = []
+    else:
+      biounits   = args.args[3].split(',')
     if len(args.args) > 4:
       spectrum_range = [tuple(p.split(':')) for p in args.args[3].split(',')]
     print "## Visualizing %s[%s]+%s.%s"%(entity,','.join(biounits),data_label,annotation)

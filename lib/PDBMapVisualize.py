@@ -14,8 +14,6 @@
 # See main check for cmd line parsing
 import sys,os,csv,time,math
 from pymol import cmd
-from chimera import runCommand as rc
-from chimera import replyobj
 max_dist = -999 # Used by show_density and dist
 
 class PDBMapVisualize():
@@ -123,7 +121,7 @@ class PDBMapVisualize():
         fout.write("attribute: %s\n"%anno)
         fout.write("match mode: 1-to-1\n")
         fout.write("recipient: residues\n")
-        for row in out
+        for row in out:
           # #0.model:resi.chain value [value ...]
           fout.write("\t:#0.%d:%d.%s\t%s\n"%(tuple(row)))
           if float(row[-1]) < minval: minval=float(row[-1])
@@ -166,23 +164,26 @@ class PDBMapVisualize():
       os.system('mkdir -p %s'%res_dir)
 
     # Visualize with Chimera
-    replyobj.status("Chimera: Visualizing %(structid)s_biounit%(biounit)d_vars_%(anno)s"%params)
-    # Assign the annotation to relevant residues
-    rc("open %(struct_loc)s"%params)
-    rc("defattr %(tempf)s"%params)
-    # Color by chain
-    rc("rainbow chain")
-    # Identify all annotated residues as spheres
-    for resi in params['resis']:
-      rc("shape sphere center #0.%d:%d.%s@CA radius 1 color grey"%tuple(resi[:3]))
-      # If annotation is binary, color grey/red
-      if (params['minval'],params['maxval']) == (0,1):
-        rc("color red #0.%d:%d.%s@CA"%tuple(resi[:3]))
-    # If annotation is continuous, color spectrum
-    if not (params['minval'],params['maxval']) == (0,1):
-      rc("rangecolor %(anno)s %(minval)s blue %(maxval)s red"%params)
-    # Export the image
-    rc("export POV-Ray %(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(anno)s.png"%params)
+    cmd  = "chimera --nogui --silent --script 'lib/PDBMapVisualize.py "
+    cmd += "%s'"%([val for key,val in params if key != 'resis'])
+    os.system(cmd)
+    # replyobj.status("Chimera: Visualizing %(structid)s_biounit%(biounit)d_vars_%(anno)s"%params)
+    # # Assign the annotation to relevant residues
+    # rc("open %(struct_loc)s"%params)
+    # rc("defattr %(tempf)s"%params)
+    # # Color by chain
+    # rc("rainbow chain")
+    # # Identify all annotated residues as spheres
+    # for resi in params['resis']:
+    #   rc("shape sphere center #0.%d:%d.%s@CA radius 1 color grey"%tuple(resi[:3]))
+    #   # If annotation is binary, color grey/red
+    #   if (params['minval'],params['maxval']) == (0,1):
+    #     rc("color red #0.%d:%d.%s@CA"%tuple(resi[:3]))
+    # # If annotation is continuous, color spectrum
+    # if not (params['minval'],params['maxval']) == (0,1):
+    #   rc("rangecolor %(anno)s %(minval)s blue %(maxval)s red"%params)
+    # # Export the image
+    # rc("export POV-Ray %(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(anno)s.png"%params)
 
     # Visualize with PyMol
     # cmd  = "run lib/PDBMapVisualize.py; "
@@ -347,3 +348,36 @@ def multidigit_rand(digits):
 # Add overwrite_bfactors to PyMol scope
 cmd.extend("PDBMapVisualize.overwrite_bfactors",PDBMapVisualize.overwrite_bfactors)
 cmd.extend("PDBMapVisualize.show_density",PDBMapVisualize.show_density)
+
+# Chimera executable
+if __name__ == '__main__':
+  from chimera import runCommand as rc
+  from chimera import replyobj
+  args = [sys.argv.split(' ')]
+  params = {'structid':args[1],'biounit':args[2],'anno':args[3],'tempf':args[4],
+            'minval':args[5],'maxval':args[6],'struct_loc':args[8],'resis':[]}
+  # Read the residues back into memory
+  with open(params['tempf']) as fin:
+    for line in fin:
+      if line.startswith('\t'):
+        line = line.replace('\t','')
+        params[resis].append(line.split(' '))
+
+  # Visualize with Chimera
+  replyobj.status("Chimera: Visualizing %(structid)s_biounit%(biounit)d_vars_%(anno)s"%params)
+  # Assign the annotation to relevant residues
+  rc("open %(struct_loc)s"%params)
+  rc("defattr %(tempf)s"%params)
+  # Color by chain
+  rc("rainbow chain")
+  # Identify all annotated residues as spheres
+  for resi in params['resis']:
+    rc("shape sphere center #0.%d:%d.%s@CA radius 1 color grey"%tuple(resi[:3]))
+    # If annotation is binary, color grey/red
+    if (params['minval'],params['maxval']) == (0,1):
+      rc("color red #0.%d:%d.%s@CA"%tuple(resi[:3]))
+  # If annotation is continuous, color spectrum
+  if not (params['minval'],params['maxval']) == (0,1):
+    rc("rangecolor %(anno)s %(minval)s blue %(maxval)s red"%params)
+  # Export the image
+  rc("export POV-Ray %(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(anno)s.png"%params)
