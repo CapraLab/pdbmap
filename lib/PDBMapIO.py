@@ -34,6 +34,7 @@ class PDBMapParser(PDBParser):
         biological assemblies, or the additional models
         containing the biological assembly coordinates will
         be removed. """
+    print "Processing %s, biounit %d"%(s.id,biounit)
     # Process structural elements
     iter_s = [m for m in s]
     if not biounit:
@@ -67,7 +68,7 @@ class PDBMapParser(PDBParser):
           continue
         iter_c = [r for r in c] # avoid modification during iteration, shallow
         for r in iter_c:
-          if r in dbref[c.id]['drop_resis']: # If residue outside dbref range
+          if dbref and r in dbref[c.id]['drop_resis']: # If residue outside dbref range
             c.detach_child(r.id) # Remove residue
           if r.id[0].strip():    # If residue is a heteroatom
             c.detach_child(r.id) # Remove residue
@@ -147,14 +148,14 @@ class PDBMapParser(PDBParser):
       fin = gzip.open(fname,'rb')
     else:
       fin = open(fname,'rb')
-    dbref = [line for line in fin if line[0:6]=="DBREF " and
+    dbref_fields = [line for line in fin if line[0:6]=="DBREF " and
               line[26:32].strip() == "UNP"]
     fin.close()
-    if len(dbref) < 1:
+    if len(dbref_fields) < 1:
       msg = "ERROR (PDBMapIO) No DBREF fields in %s.\n"%s.id
       raise Exception(msg)
     dbref = {}
-    for ref in dbref:
+    for ref in dbref_fields:
       chain    = ref[12:14].strip()
       unp      = ref[33:41].strip()
       species  = ref[42:54].strip().split('_')[-1]
@@ -217,26 +218,29 @@ class PDBMapParser(PDBParser):
 
     # Preprocess the asymmetric and biological units for this protein
     s = PDBMapParser.process_structure(s) # *must* occur before biounits
+    print "Processing biological assembies"
     for biounit_fname in biounit_fnames:
       try:
         if os.path.basename(biounit_fname).split('.')[-1] == 'gz':
-          fin   = gzip.open(fname,'rb')
+          fin   = gzip.open(biounit_fname,'rb')
           bioid = int(os.path.basename(biounit_fname).split('.')[-2][-1])
         else:
-          fin = open(biounit_fname,'rb')
+          fin   = open(biounit_fname,'rb')
           bioid = int(os.path.basename(biounit_fname).split('.')[-1][-1])
         p = PDBParser()
         filterwarnings('ignore',category=PDBConstructionWarning)
         biounit = p.get_structure(pdbid,fin)
         resetwarnings()
-        biounit = PDBMapStructure(s)
+        biounit = PDBMapStructure(biounit)
         fin.close()
       except Exception as e:
         msg = "ERROR (PDBMapIO) Error while parsing %s biounit %d: %s"%(pdbid,bioid,str(e).replace('\n',' '))
         raise Exception(msg)
       biounit = PDBMapParser.process_structure(biounit,biounit=bioid,dbref=dbref)
+      print "processed."
       # Add the models for this biological assembly to the PDBMapStructure
       for m in biounit:
+        m.id = "%d.%d"%(m.biounit,m.id)
         s.add(m)
     return s
 
@@ -274,7 +278,10 @@ class PDBMapIO(PDBIO):
       self.check_schema()
     self.label = label
 
-  def structure_in_db(self,pdbid,label=None):
+  def structure_in_db(self,pdbid,label=-1):
+    # None is a valid argument to label
+    if label == -1:
+      label=self.label
     self._connect()
     query  = "SELECT * FROM Structure WHERE pdbid=%s "
     if label:
@@ -288,7 +295,10 @@ class PDBMapIO(PDBIO):
     self._close()
     return res
 
-  def model_in_db(self,modelid,label=None):
+  def model_in_db(self,modelid,label=-1):
+    # None is a valid argument to label
+    if label == -1:
+      label=self.label
     self._connect()
     query = "SELECT * FROM Model WHERE modelid=%s "
     if label:
@@ -302,7 +312,10 @@ class PDBMapIO(PDBIO):
     self._close()
     return res
 
-  def unp_in_db(self,unpid,label=None):
+  def unp_in_db(self,unpid,label=-1):
+    # None is a valid argument to label
+    if label == -1:
+      label=self.label
     self._connect()
     query = "SELECT * FROM Chain WHERE unp=%s "
     if label:
@@ -364,12 +377,14 @@ class PDBMapIO(PDBIO):
 
     # Upload the models, chains,and residues
     for m in s:
-      mfields = dict((key,c.__getattribute__(key)) for key in dir(m) 
+      mfields = dict((key,m.__getattribute__(key)) for key in dir(m) 
                       if isinstance(key,collections.Hashable))
+      if mfields['biounit'] > 0: # remove biounit tag
+        mfields['id'] = int(mfields['id'].split('.')[-1])
       for c in m:
         cquery  = "INSERT IGNORE INTO Chain VALUES "
-        cquery += '("%(label)s","%(id)s",%(biounit)d,'%sfields # structure id
-        cquery += '%(model)d,'%mfields # model id
+        cquery += '("%(label)s","%(id)s",'%sfields # structure id
+        cquery += '%(biounit)d,%(id)d,'%mfields # model id
         cquery += '"%(id)s","%(unp)s",%(offset)d,%(hybrid)d,"%(sequence)s")'
         cfields = dict((key,c.__getattribute__(key)) for key in dir(c) 
                         if isinstance(key,collections.Hashable))
@@ -378,8 +393,8 @@ class PDBMapIO(PDBIO):
         queries.append(cquery)
         rquery  = "INSERT IGNORE INTO Residue VALUES "
         for r in c:
-          rquery += '("%(label)s","%(id)s",%(biounit)d,'%sfields # structure id
-          rquery += '%(model)d,'%mfields # model id
+          rquery += '("%(label)s","%(id)s",'%sfields # structure id
+          rquery += '%(biounit)d,%(id)d,'%mfields # model id
           rquery += '"%(id)s",'%cfields  # chain id
           rquery += '"%(resname)s","%(rescode)s",%(seqid)d,'
           rquery += '"%(icode)s",%(x)f,%(y)f,%(z)f),'
@@ -625,11 +640,11 @@ class PDBMapIO(PDBIO):
 
   def detect_entity_type(self,entity):
     """ Given an entity ID, attempts to detect the entity type """
-    if self.model_in_db(entity):
+    if self.model_in_db(entity,label=None):
       return 'model'
-    elif self.structure_in_db(entity):
+    elif self.structure_in_db(entity,label=None):
       return 'structure'
-    elif self.unp_in_db(entity):
+    elif self.unp_in_db(entity,label=None):
       return 'unp'
     else:
       return None
@@ -687,7 +702,8 @@ class PDBMapIO(PDBIO):
     ON c.label=d.label AND c.chr=d.chr AND c.start=d.start AND c.end=d.end AND c.name=d.name
     INNER JOIN Chain as g
     ON a.pdbid=g.pdbid AND a.chain=g.chain
-    WHERE g.label='uniprot-pdb' AND c.label=%s AND a.pdbid=%s AND a.biounit=%s;"""
+    WHERE c.consequence='missense_variant' AND
+    g.label='uniprot-pdb' AND c.label=%s AND a.pdbid=%s AND a.biounit=%s;"""
   model_query = """SELECT
     g.model,g.chain,a.seqid,d.*,c.*
     FROM Residue as a
@@ -699,7 +715,8 @@ class PDBMapIO(PDBIO):
     ON c.label=d.label AND c.chr=d.chr AND c.start=d.start AND c.end=d.end AND c.name=d.name
     INNER JOIN Chain as g
     ON a.pdbid=g.pdbid AND a.chain=g.chain
-    WHERE g.label='uniprot-pdb' AND c.label=%s AND a.pdbid=%s;"""
+    WHERE c.consequence='missense_variant' AND
+    g.label='uniprot-pdb' AND c.label=%s AND a.pdbid=%s;"""
   unp_query = """SELECT DISTINCT c.pdbid FROM 
     GenomicIntersection as a
     INNER JOIN GenomicConsequence as b

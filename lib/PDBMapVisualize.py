@@ -13,7 +13,7 @@
 
 # See main check for cmd line parsing
 import sys,os,csv,time,math
-from pymol import cmd
+# from pymol import cmd
 max_dist = -999 # Used by show_density and dist
 
 class PDBMapVisualize():
@@ -30,7 +30,6 @@ class PDBMapVisualize():
     """ Visualize the annotated dataset within a structure """
     pdbid = pdbid.lower()
     res  = self.io.load_structure(pdbid,biounit)
-
     # Output all annotations to results file
     cols = ['model','seqid','chain']
     cols.extend(anno_list)
@@ -59,7 +58,7 @@ class PDBMapVisualize():
         sys.stderr.write(msg)
         continue # Move to next annotation
       cols = ['model','seqid','chain',anno]
-      out  = [res[col] for col in cols]   # Extract columns as rows
+      out  = [res[col] for col in cols if res[anno]]   # Extract columns as rows
       out  = [list(i) for i in zip(*out)] # Transpose back to columns
       minval,maxval = (999,-999) if not spectrum_range else spectrum_range
       tempf = "temp/%d.TEMP"%multidigit_rand(10)
@@ -71,13 +70,18 @@ class PDBMapVisualize():
         fout.write("recipient: residues\n")
         for row in out:
           # #0.model:resi.chain value [value ...]
-          fout.write("\t:#0.%d:%d.%s\t%s\n"%(tuple(row)))
-          if float(row[-1]) < minval: minval=float(row[-1])
-          if float(row[-1]) > maxval: maxval=float(row[-1])
+          value = -1 if row[-1] is None else float(row[-1])
+          fout.write("\t#0.%d:%d.%s\t%s\n"%(tuple(row)))
+          if -1 < value < minval: minval=value
+          if value > maxval: maxval=value
       minval,maxval = spectrum_range if spectrum_range else (minval,maxval)
+      # Locate the asymmetric unit or biological assembly
+      if biounit < 1:
+        struct_loc = "%s/structures/all/pdb/pdb%s.ent.gz"%(self.pdb_dir,pdbid)
+      else:
+        struct_loc = "%s/biounit/coordinates/all/%s.pdb%d.gz"%(self.pdb_dir,pdbid,biounit)
       params = {'structid':pdbid,'biounit':biounit,'anno':anno,'tempf':tempf,
-                'minval':minval,'maxval':maxval,'resis':out,
-                'struct_loc':"%s/pdb%s.ent.gz"%(self.pdb_dir,pdbid)}
+                'minval':minval,'maxval':maxval,'resis':out,'struct_loc':struct_loc}
       self.visualize(params,group=group)
 
   def visualize_model(self,modelid,biounit=0,anno_list=['maf'],spectrum_range=None,group=None):
@@ -112,7 +116,7 @@ class PDBMapVisualize():
         sys.stderr.write(msg)
         continue # Move to next annotation
       cols = ['model','seqid','chain',anno]
-      out  = [res[col] for col in cols]   # Extract columns as rows
+      out  = [res[col] for col in cols if res[anno]]   # Extract columns as rows
       out  = [list(i) for i in zip(*out)] # Transpose back to columns
       tempf = "temp/%d.TEMP"%multidigit_rand(10)
       # Write the mappings to a temp file
@@ -123,7 +127,7 @@ class PDBMapVisualize():
         fout.write("recipient: residues\n")
         for row in out:
           # #0.model:resi.chain value [value ...]
-          fout.write("\t:#0.%d:%d.%s\t%s\n"%(tuple(row)))
+          fout.write("\t#0.%d:%d.%s\t%s\n"%(tuple(row)))
           if float(row[-1]) < minval: minval=float(row[-1])
           if float(row[-1]) > maxval: maxval=float(row[-1])
       minval,maxval = spectrum_range if spectrum_range else (minval,maxval)
@@ -164,8 +168,10 @@ class PDBMapVisualize():
       os.system('mkdir -p %s'%res_dir)
 
     # Visualize with Chimera
-    cmd  = "chimera --nogui --silent --script 'lib/PDBMapVisualize.py "
-    cmd += "%s'"%([val for key,val in params if key != 'resis'])
+    cmd  = "chimera --silent --script 'lib/PDBMapVisualize.py "
+    keys = ['structid','biounit','anno','tempf','minval','maxval','struct_loc','res_dir']
+    cmd += "%s'"%' '.join([str(params[key]) for key in keys])
+    print cmd
     os.system(cmd)
     # replyobj.status("Chimera: Visualizing %(structid)s_biounit%(biounit)d_vars_%(anno)s"%params)
     # # Assign the annotation to relevant residues
@@ -346,38 +352,53 @@ def multidigit_rand(digits):
   return multidigit_rand
 
 # Add overwrite_bfactors to PyMol scope
-cmd.extend("PDBMapVisualize.overwrite_bfactors",PDBMapVisualize.overwrite_bfactors)
-cmd.extend("PDBMapVisualize.show_density",PDBMapVisualize.show_density)
+# cmd.extend("PDBMapVisualize.overwrite_bfactors",PDBMapVisualize.overwrite_bfactors)
+# cmd.extend("PDBMapVisualize.show_density",PDBMapVisualize.show_density)
 
 # Chimera executable
 if __name__ == '__main__':
   from chimera import runCommand as rc
   from chimera import replyobj
-  args = [sys.argv.split(' ')]
-  params = {'structid':args[1],'biounit':args[2],'anno':args[3],'tempf':args[4],
-            'minval':args[5],'maxval':args[6],'struct_loc':args[8],'resis':[]}
+  # args = [sys.argv.split(' ')]
+  args = sys.argv
+  params = {'structid':args[1],'biounit':int(args[2]),'anno':args[3],'tempf':args[4],
+            'minval':float(args[5]),'maxval':float(args[6]),'struct_loc':args[7],
+            'res_dir':args[8],'resis':[]}
   # Read the residues back into memory
   with open(params['tempf']) as fin:
     for line in fin:
       if line.startswith('\t'):
-        line = line.replace('\t','')
-        params[resis].append(line.split(' '))
+        params['resis'].append(line.strip().split('\t'))
 
   # Visualize with Chimera
   replyobj.status("Chimera: Visualizing %(structid)s_biounit%(biounit)d_vars_%(anno)s"%params)
   # Assign the annotation to relevant residues
   rc("open %(struct_loc)s"%params)
   rc("defattr %(tempf)s"%params)
-  # Color by chain
-  rc("rainbow chain")
+  # Initial colors
+  rc("background solid white")
+  rc("ribcolor dim grey")
+  rc("ribbackbone")
+  rc("~disp")
+  rc("ribspline card smooth strand")
   # Identify all annotated residues as spheres
   for resi in params['resis']:
-    rc("shape sphere center #0.%d:%d.%s@CA radius 1 color grey"%tuple(resi[:3]))
+    rc("disp %s@ca"%resi[0])
     # If annotation is binary, color grey/red
     if (params['minval'],params['maxval']) == (0,1):
-      rc("color red #0.%d:%d.%s@CA"%tuple(resi[:3]))
+      rc("color red,a %s@CA"%resi[0])
+  # Define variant representation
+  rc("represent bs")
+  rc("setattr m autochain 0")
+  rc("setattr m ballScale .6")
   # If annotation is continuous, color spectrum
   if not (params['minval'],params['maxval']) == (0,1):
-    rc("rangecolor %(anno)s %(minval)s blue %(maxval)s red"%params)
+    rc("rangecolor %(anno)s,a %(minval)s blue %(maxval)s red"%params)
+  # Orient the image
+  rc("define plane name p1 @ca:/%(anno)s>=%(minval)s"%params)
+  rc("align p1")
+  rc("~define")
   # Export the image
-  rc("export POV-Ray %(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(anno)s.png"%params)
+  rc("copy file %(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(anno)s.png width 800 height 800 units points dpi 72"%params)
+  # Export the scene
+  rc("save %(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(anno)s.py"%params)

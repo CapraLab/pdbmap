@@ -89,7 +89,8 @@ class PDBMap():
         msg = "ERROR (PDBMap) Cannot fetch %s. Not in PDB mirror.\n"%pdbid
         sys.stderr.write(msg)
         return 1
-    biounit_fnames = os.listdir("%s/biounit/coordinates/all/%s.pdb*.gz"%(self.pdb_dir,pdbid.lower()))
+    # Locate all biological assemblies
+    biounit_fnames = glob.glob("%s/biounit/coordinates/all/%s.pdb*.gz"%(self.pdb_dir,pdbid.lower()))
     try: # Load the structure
       p  = PDBMapIO.PDBMapParser()
       s  = p.get_structure(pdbid,pdb_fname,biounit_fnames=biounit_fnames)
@@ -243,7 +244,7 @@ class PDBMap():
     if entity_type in ['structure','model'] and not biounits:
       # Query all biological assemblies
       query = "SELECT DISTINCT biounit FROM Chain WHERE pdbid=%s"
-      res   = self.io.secure_query(query,(entity),cursorclass=Cursor)
+      res   = io.secure_query(query,(entity),cursorclass='Cursor')
       biounits = [r[0] for r in res]
     try:
       if entity_type == 'structure':
@@ -260,7 +261,8 @@ class PDBMap():
         return 1
     except Exception as e:
       msg = "ERROR (PDBMap) Visualization failed: %s"%str(e)
-      raise Exception(msg)
+      # raise Exception(msg)
+      raise
 
   def summarize(self):
     """ Returns summary statistics for the PDBMap database """
@@ -481,10 +483,10 @@ if __name__== "__main__":
     data_label,annotation,spectrum_range = '1kg','maf',None
     data_label = args.args[1]
     anno_list  = args.args[2].split(',')
-    if len(args.args) > 3 or args.args[3].lower() in ['all','.',' ']:
-      biounits = []
+    if len(args.args) > 3 and args.args[3].lower() not in ['all','.',' ']:
+        biounits   = args.args[3].split(',')
     else:
-      biounits   = args.args[3].split(',')
+      biounits = []
     if len(args.args) > 4:
       spectrum_range = [tuple(p.split(':')) for p in args.args[3].split(',')]
     print "## Visualizing %s[%s]+%s.%s"%(entity,','.join(biounits),data_label,annotation)
