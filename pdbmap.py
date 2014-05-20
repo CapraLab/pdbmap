@@ -407,7 +407,7 @@ if __name__== "__main__":
       for pdb_files in all_pdb_files:
         pdbid = os.path.basename(pdb_file).split('.')[0][-4:].upper()
         print "\n## Processing (%s) %s ##"%(args.slabel,pdbid)
-        pdbmap.load_pdb(pdbid,pdb_file,label="default")
+        pdbmap.load_pdb(pdbid,pdb_file,label="pdb")
     elif len(args.args) == 1:
       # Process one PDB
       pdb_file = args.args[0]
@@ -444,12 +444,12 @@ if __name__== "__main__":
       # Process one UniProt ID
       unp = args.args[0]
       print "\n## Processing (%s) %s ##"%(args.slabel,unp)
-      pdbmap.load_unp(unp,label="default")
+      pdbmap.load_unp(unp,label="uniprot-pdb")
     else:
       # Process many UniProt IDs
       for unp in args.args:
         print "\n## Processing (%s) %s ##"%(args.slabel,unp)
-        pdbmap.load_unp(unp,label="default")
+        pdbmap.load_unp(unp,label="uniprot-pdb")
 
   ## load_data ##
   elif args.cmd == "load_data":
