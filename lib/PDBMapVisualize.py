@@ -181,39 +181,8 @@ class PDBMapVisualize():
     cmd  = "chimera --silent --script 'lib/PDBMapVisualize.py "
     keys = ['structid','biounit','anno','tempf','minval','maxval','struct_loc','res_dir']
     cmd += "%s'"%' '.join([str(params[key]) for key in keys])
-    print cmd
     os.system(cmd)
-    # replyobj.status("Chimera: Visualizing %(structid)s_biounit%(biounit)d_vars_%(anno)s"%params)
-    # # Assign the annotation to relevant residues
-    # rc("open %(struct_loc)s"%params)
-    # rc("defattr %(tempf)s"%params)
-    # # Color by chain
-    # rc("rainbow chain")
-    # # Identify all annotated residues as spheres
-    # for resi in params['resis']:
-    #   rc("shape sphere center #0.%d:%d.%s@CA radius 1 color grey"%tuple(resi[:3]))
-    #   # If annotation is binary, color grey/red
-    #   if (params['minval'],params['maxval']) == (0,1):
-    #     rc("color red #0.%d:%d.%s@CA"%tuple(resi[:3]))
-    # # If annotation is continuous, color spectrum
-    # if not (params['minval'],params['maxval']) == (0,1):
-    #   rc("rangecolor %(anno)s %(minval)s blue %(maxval)s red"%params)
-    # # Export the image
-    # rc("export POV-Ray %(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(anno)s.png"%params)
-
-    # Visualize with PyMol
-    # cmd  = "run lib/PDBMapVisualize.py; "
-    # cmd += "load %(struct_loc)s,%(structid)s; "
-    # cmd += "PDBMapVisualize.overwrite_bfactors('%(structid)s','%(tempf)s',var_spheres=True,spec_range=%(spec_range)s); "
-    # cmd += "orient;mset 1 x360; movie.roll 1,180,1,axis=y; movie.roll 181,360,1,axis=x; "
-    # cmd += "save %(res_dir)s/%(structid)s_vars_%(anno)s.pdb; "
-    # cmd += "save %(res_dir)s/%(structid)s_vars_%(anno)s.pse; "
-    # cmd += "png %(res_dir)s/%(structid)s_vars_%(anno)s.png, dpi=300, ray=2400,2400;"
-    # cmd = cmd % params
-    # print cmd
-    # os.system('/usr/bin/pymol -c -d "%s"'%cmd)
-
-    # os.system('rm -f %s'%params['tempf']) # clean up temp file
+    os.system('rm -f %s'%params['tempf']) # clean up temp file
 
   # Executed in PyMol
   @classmethod

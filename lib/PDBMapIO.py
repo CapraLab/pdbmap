@@ -278,6 +278,10 @@ class PDBMapIO(PDBIO):
     self.dlabel = dlabel
 
   def structure_in_db(self,pdbid,label=-1):
+    # Dirty dirty hack fix after rebuilding process has finished!
+    return False
+    # Fix it Fix it Fix it Fix Fix it!
+    # ---------- # ---------- # ---------- #
     # None is a valid argument to label
     if label == -1:
       label=self.slabel
