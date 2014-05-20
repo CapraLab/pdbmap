@@ -57,13 +57,13 @@ class PDBMap():
     if self.pdb:
       pdbids = list(set(PDBMapProtein.PDBMapProtein.unp2pdb(unp)))
       for pdbid in pdbids:
-        print " # Processing PDB %s # "%pdbid
+        print " # Processing (%s) PDB %s # "%(label,pdbid)
         self.load_pdb(pdbid,label=label)
         sys.stdout.flush() # Force stdout flush after each PDB
     if self.modbase:
       models = PDBMapModel.PDBMapModel.unp2modbase(unp)
       for model in models:
-        print " # Processing Model %s #"%model[1]
+        print " # (%s) Processing Model %s #"%(label,model[1])
         self.load_model(model,label=label)
         sys.stdout.flush() # Force stdout flush after each model
 
@@ -72,7 +72,7 @@ class PDBMap():
 
     # Create a PDBMapIO object
     io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,
-                            args.dbpass,args.dbname,label)
+                            args.dbpass,args.dbname,slabel=label)
 
     # Check if PDB is already in the database
     if io.structure_in_db(pdbid,label):
@@ -116,7 +116,7 @@ class PDBMap():
     
     # Create a PDBMapIO object
     io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,
-                            args.dbpass,args.dbname,label)
+                            args.dbpass,args.dbname,slabel=label)
 
     # Check if model is already in the database
     modelid = model_summary[1] # extract ModBase model ID
@@ -175,13 +175,13 @@ class PDBMap():
     else:
       msg = "ERROR (PDBMap) Unsupported file type: %s"%ext
       raise Exception(msg)
-    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,dname)
+    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,dlabel=dname)
     nrows = io.upload_genomic_data(generator,dname)
     return(nrows)
   
   def intersect_data(self,dname,sname=None,dtype="Genomic"):
     """ Intersects a loaded dataset with the PDBMap structural domain """
-    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,dname)
+    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,dlabel=dname)
     i = PDBMapIntersect.PDBMapIntersect(io)
     # Note: Only all-structures <-> genomic data intersections supported
     nrows = i.intersect(dname,sname,dtype)
@@ -189,7 +189,7 @@ class PDBMap():
 
   def filter_data(self,dname,dfiles):
     # Determine which variants were loaded into PDBMap
-    io     = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,dname)
+    io     = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,dlabel=dname)
     query  = "SELECT DISTINCT b.name FROM GenomicIntersection as a "
     query += "INNER JOIN GenomicConsequence as b "
     query += "ON a.gc_id=b.gc_id WHERE a.label=%s"
@@ -236,14 +236,16 @@ class PDBMap():
     #os.system("rm -f %s"%tempf) # Remove temp file
     return nrows # Return the number of kept variants
 
-  def visualize(self,entity,biounits=[],data_label='1kg',anno_list=['maf'],spectrum_range=None):
+  def visualize(self,entity,biounits=[],struct_label='uniprot-pdb',
+                data_label='1kg',anno_list=['maf'],spectrum_range=None):
     """ Visualizes a PDBMap structure, model, or protein """
-    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,data_label)
+    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,
+                            slabel=struct_label,dlabel=data_label)
     v  = PDBMapVisualize(io,args.pdb_dir,args.modbase_dir)
     entity_type = io.detect_entity_type(entity)
     if entity_type in ['structure','model'] and not biounits:
-      # Query all biological assemblies
-      query = "SELECT DISTINCT biounit FROM Chain WHERE pdbid=%s"
+      # Query all biological assemblies, exclude the asymmetric unit
+      query = "SELECT DISTINCT biounit FROM Chain WHERE pdbid=%s AND biounit>0"
       res   = io.secure_query(query,(entity),cursorclass='Cursor')
       biounits = [r[0] for r in res]
     try:
@@ -319,7 +321,8 @@ if __name__== "__main__":
     "sprot" : "",
     "vep" : "variant_effect_predictor.pl",
     "plink" : "plink",
-    "label" : "",
+    "slabel" : "",
+    "dlabel" : "",
     "cores" : 1
     }
   if args.conf_file:
@@ -369,8 +372,10 @@ if __name__== "__main__":
               help="Variant Effect Predictor location")
   parser.add_argument("--plink", 
               help="PLINK location")
-  parser.add_argument("--label", 
-              help="Label for this session")
+  parser.add_argument("--slabel", 
+              help="Structural label for this session")
+  parser.add_argument("--dlabel", 
+              help="Data label for this session")
   parser.add_argument("-j", "--cores", type=int, default=1, 
               help="Number of available processors")
 
@@ -401,25 +406,25 @@ if __name__== "__main__":
       sys.stderr.write(msg)
       for pdb_files in all_pdb_files:
         pdbid = os.path.basename(pdb_file).split('.')[0][-4:].upper()
-        print "\n## Processing %s ##"%pdbid
+        print "\n## Processing (%s) %s ##"%(args.slabel,pdbid)
         pdbmap.load_pdb(pdbid,pdb_file,label="default")
     elif len(args.args) == 1:
       # Process one PDB
       pdb_file = args.args[0]
       if not args.pdbid:
         args.pdbid = os.path.basename(pdb_file).split('.')[0][-4:].upper()
-      print "\n## Processing %s ##"%args.pdbid
-      if not args.label:
-        args.label = "manual"
-      pdbmap.load_pdb(args.pdbid,pdb_file,label=args.label)
+      print "\n## Processing (%s) %s ##"%(args.slabel,args.pdbid)
+      if not args.slabel:
+        args.slabel = "manual"
+      pdbmap.load_pdb(args.pdbid,pdb_file,label=args.slabel)
     else:
       # Process many PDB IDs
       pdbs = [(os.path.basename(pdb_file).split('.')[0][-4:].upper(),pdb_file) for pdb_file in args.args]
       for pdbid,pdb_file in pdbs:
-        print "\n## Processing %s ##"%pdbid
-        if not args.label:
-          args.label = "manual"
-        pdbmap.load_pdb(pdbid,pdb_file,label=args.label)
+        print "\n## Processing (%s) %s ##"%(args.slabel,pdbid)
+        if not args.slabel:
+          args.slabel = "manual"
+        pdbmap.load_pdb(pdbid,pdb_file,label=args.slabel)
 
   ## load_unp ##
   elif args.cmd == "load_unp":
@@ -433,17 +438,17 @@ if __name__== "__main__":
       msg = "WARNING (PDBMap) Uploading all %d Swiss-Prot UniProt IDs.\n"%len(all_pdb_unp)
       sys.stderr.write(msg)
       for unp in all_pdb_unp:
-        print "\n## Processing %s ##"%unp
+        print "\n## Processing (%s) %s ##"%(args.slabel,unp)
         pdbmap.load_unp(unp,label="uniprot-pdb")
     elif len(args.args) == 1:
       # Process one UniProt ID
       unp = args.args[0]
-      print "\n## Processing %s ##"%unp
+      print "\n## Processing (%s) %s ##"%(args.slabel,unp)
       pdbmap.load_unp(unp,label="default")
     else:
       # Process many UniProt IDs
       for unp in args.args:
-        print "\n## Processing %s ##"%unp
+        print "\n## Processing (%s) %s ##"%(args.slabel,unp)
         pdbmap.load_unp(unp,label="default")
 
   ## load_data ##
@@ -454,12 +459,12 @@ if __name__== "__main__":
       msg += "alt:   pdbmap.py -c conf_file --label=data_name load_data data_file [data_file] ...\n"
       print msg; sys.exit(1)
     # Process many data file(s) (set(s))
-    if not args.label: # Assign individual labels
+    if not args.dlabel: # Assign individual labels
       dfiles = zip(args.args[0::2],args.args[1::2])
     else: # Assign shared label
-      dfiles = zip(args.args,[args.label for i in range(len(args.args))])
+      dfiles = zip(args.args,[args.dlabel for i in range(len(args.args))])
     for dfile,dname in dfiles:
-      print "## Processing %s: %s ##"%(dname,dfile)
+      print "## Processing (%s) %s ##"%(dname,dfile)
       nrows = pdbmap.load_data(dname,dfile,args.cores)
       print " # %d data rows uploaded."%nrows
     # Intersect with dataset with PDBMap (One-time operation)
@@ -489,8 +494,8 @@ if __name__== "__main__":
       biounits = []
     if len(args.args) > 4:
       spectrum_range = [tuple(p.split(':')) for p in args.args[3].split(',')]
-    print "## Visualizing %s[%s]+%s.%s"%(entity,','.join(biounits),data_label,annotation)
-    pdbmap.visualize(entity,biounits,data_label,anno_list,spectrum_range)
+    print "## Visualizing (%s) %s[%s]+%s.%s"%(args.slabel,entity,','.join(biounits),data_label,annotation)
+    pdbmap.visualize(entity,biounits,args.slabel,data_label,anno_list,spectrum_range)
 
   ## stats ##
   elif args.cmd == "stats":
@@ -514,10 +519,10 @@ if __name__== "__main__":
     msg  = "WARNING (PDBMap) If loading data, filtering is automatically applied.\n"
     msg += "       : (PDBMap) This is a debug command for filtering dev.\n"
     sys.stderr.write(msg)
-    if not args.label: # Assign individual labels
+    if not args.dlabel: # Assign individual labels
       dfiles = zip(args.args[0::2],args.args[1::2])
     else: # Assign shared label
-      dfiles = zip(args.args,[args.label for i in range(len(args.args))])
+      dfiles = zip(args.args,[args.dlabel for i in range(len(args.args))])
     dname  = [dname for dfile,dname in dfiles][0]
     dfiles = [dfile for dfile,dname in dfiles]
     nrows  = pdbmap.filter_data(dname,dfiles)

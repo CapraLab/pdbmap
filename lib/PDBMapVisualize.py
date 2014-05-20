@@ -34,7 +34,7 @@ class PDBMapVisualize():
     cols = ['model','seqid','chain']
     cols.extend(anno_list)
     timestamp = str(time.strftime("%Y%m%d-%H"))
-    params = {'structid':pdbid,'biounit':biounit}
+    params = {'structid':pdbid,'biounit':biounit,'annos':'-'.join(anno_list)}
     res_dir = 'results/pdbmap_%s_%s'
     if group:
       res_dir = res_dir%(group,timestamp)
@@ -43,13 +43,18 @@ class PDBMapVisualize():
     params['res_dir'] = res_dir
     if not os.path.exists(res_dir):
       os.system('mkdir -p %(res_dir)s'%params)
-    with open("%(res_dir)s/%(structid)s_biounit%(biounit)d_vars_annotations.txt"%params,'wb') as fout:
+    with open("%(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(annos)s.txt"%params,'wb') as fout:
       writer = csv.writer(fout,delimiter='\t')
       writer.writerow(cols)
       out = [res[col] for col in cols]    # Extract columns as rows
       out  = [list(i) for i in zip(*out)] # Transpose back to columns
       for row in out:
         writer.writerow(row)
+
+    # Correct submodel ID for undivided structures
+    maxm = len(set(res['model']))
+    if maxm < 2:
+      res['model'] = [0 for m in res['model']]
 
     # Visualize individual annotations
     for anno in anno_list:
@@ -89,7 +94,7 @@ class PDBMapVisualize():
     res  = self.io.load_model(modelid)
 
     # Output all annotations to results file
-    cols = ['modelid','seqid','chain']
+    cols = ['model','seqid','chain']
     cols.extend(anno_list)
     timestamp = str(time.strftime("%Y%m%d-%H"))
     params = {'structid':modelid,'biounit':biounit}
@@ -108,6 +113,11 @@ class PDBMapVisualize():
       out  = [list(i) for i in zip(*out)] # Transpose back to columns
       for row in out:
         writer.writerow(row)
+
+    # Correct submodel ID for undivided structures
+    maxm = len(set(res['model']))
+    if maxm < 2:
+      res['model'] = [0 for m in res['model']]
 
     # Visualize individual annotations
     for anno in anno_list:
@@ -384,16 +394,14 @@ if __name__ == '__main__':
   # Identify all annotated residues as spheres
   for resi in params['resis']:
     rc("disp %s@ca"%resi[0])
-    # If annotation is binary, color grey/red
-    if (params['minval'],params['maxval']) == (0,1):
-      rc("color red,a %s@CA"%resi[0])
+    # # If annotation is binary, color grey/red
+    # if (params['minval'],params['maxval']) == (0,1):
+    #   rc("color red,a %s@ca"%resi[0])
   # Define variant representation
   rc("represent bs")
   rc("setattr m autochain 0")
   rc("setattr m ballScale .6")
-  # If annotation is continuous, color spectrum
-  if not (params['minval'],params['maxval']) == (0,1):
-    rc("rangecolor %(anno)s,a %(minval)s blue %(maxval)s red"%params)
+  rc("rangecolor %(anno)s,a %(minval)s blue %(maxval)s red"%params)
   # Orient the image
   rc("define plane name p1 @ca:/%(anno)s>=%(minval)s"%params)
   rc("align p1")
