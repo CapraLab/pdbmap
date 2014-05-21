@@ -34,7 +34,7 @@ class PDBMapParser(PDBParser):
         biological assemblies, or the additional models
         containing the biological assembly coordinates will
         be removed. """
-    print "Processing %s, biounit %d"%(s.id,biounit)
+    print "   # Processing biological assemby %d"%biounit
     # Process structural elements
     iter_s = [m for m in s]
     if not biounit:
@@ -53,6 +53,10 @@ class PDBMapParser(PDBParser):
       iter_m = [c for c in m] # avoid modification during iteration, shallow
       for c in iter_m:
         if dbref:
+          if c.id not in dbref:
+            m.detach_child(c.id)
+            continue # chain not human, or other exclusion criteria
+          # Apply DBREF fields from asymmetric unit to biological assembly
           c.unp      = dbref[c.id]['unp']
           c.pdbstart = dbref[c.id]['pdbstart']
           c.pdbend   = dbref[c.id]['pdbend']

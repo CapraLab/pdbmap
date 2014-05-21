@@ -107,7 +107,6 @@ class PDBMap():
     except Exception as e:
       msg = "ERROR (PDBMap) %s could not be uploaded: %s\n"%(pdbid,str(e))
       sys.stderr.write(msg)
-      # raise #DEBUG
       return 1
     return 0
 
@@ -406,24 +405,24 @@ if __name__== "__main__":
       sys.stderr.write(msg)
       for pdb_files in all_pdb_files:
         pdbid = os.path.basename(pdb_file).split('.')[0][-4:].upper()
-        print "\n## Processing (%s) %s ##"%(args.slabel,pdbid)
+        print "\n## Processing (pdb) %s ##"%pdbid
         pdbmap.load_pdb(pdbid,pdb_file,label="pdb")
     elif len(args.args) == 1:
       # Process one PDB
       pdb_file = args.args[0]
       if not args.pdbid:
         args.pdbid = os.path.basename(pdb_file).split('.')[0][-4:].upper()
-      print "\n## Processing (%s) %s ##"%(args.slabel,args.pdbid)
       if not args.slabel:
         args.slabel = "manual"
+      print "\n## Processing (%s) %s ##"%(args.slabel,args.pdbid)
       pdbmap.load_pdb(args.pdbid,pdb_file,label=args.slabel)
     else:
       # Process many PDB IDs
       pdbs = [(os.path.basename(pdb_file).split('.')[0][-4:].upper(),pdb_file) for pdb_file in args.args]
       for pdbid,pdb_file in pdbs:
-        print "\n## Processing (%s) %s ##"%(args.slabel,pdbid)
         if not args.slabel:
           args.slabel = "manual"
+        print "\n## Processing (%s) %s ##"%(args.slabel,pdbid)
         pdbmap.load_pdb(pdbid,pdb_file,label=args.slabel)
 
   ## load_unp ##
@@ -432,24 +431,26 @@ if __name__== "__main__":
                     sprot=args.sprot,pdb_dir=args.pdb_dir,
                     modbase_dir=args.modbase_dir,
                     modbase_summary=args.modbase_summary)
+    if not args.slabel:
+      args.slabel = "uniprot-pdb"
     if len(args.args) < 1:
       # All PDB-mapped UniProt IDs (later expand to all UniProt IDs)
       all_pdb_unp = PDBMapProtein.PDBMapProtein.sprot
       msg = "WARNING (PDBMap) Uploading all %d Swiss-Prot UniProt IDs.\n"%len(all_pdb_unp)
       sys.stderr.write(msg)
       for unp in all_pdb_unp:
-        print "\n## Processing (%s) %s ##"%(args.slabel,unp)
+        print "\n## Processing (uniprot-pdb) %s ##"%unp
         pdbmap.load_unp(unp,label="uniprot-pdb")
     elif len(args.args) == 1:
       # Process one UniProt ID
       unp = args.args[0]
       print "\n## Processing (%s) %s ##"%(args.slabel,unp)
-      pdbmap.load_unp(unp,label="uniprot-pdb")
+      pdbmap.load_unp(unp,label=args.slabel)
     else:
       # Process many UniProt IDs
       for unp in args.args:
         print "\n## Processing (%s) %s ##"%(args.slabel,unp)
-        pdbmap.load_unp(unp,label="uniprot-pdb")
+        pdbmap.load_unp(unp,label=args.slabel)
 
   ## load_data ##
   elif args.cmd == "load_data":
