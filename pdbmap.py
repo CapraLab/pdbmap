@@ -375,7 +375,7 @@ if __name__== "__main__":
               help="Structural label for this session")
   parser.add_argument("--dlabel", 
               help="Data label for this session")
-  parser.add_argument("-j", "--cores", type=int, default=1, 
+  parser.add_argument("-j", "--cores", type=int,
               help="Number of available processors")
 
   args = parser.parse_args(remaining_argv)
