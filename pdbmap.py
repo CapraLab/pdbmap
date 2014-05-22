@@ -28,12 +28,9 @@ from lib.PDBMapVisualize import PDBMapVisualize
 class PDBMap():
   def __init__(self,idmapping=None,sec2prim=None,sprot=None,
                 pdb_dir=None,modbase_dir=None,modbase_summary=None,
-                vep=None,plink=None,refresh=False):
+                vep=None,plink=None):
     self.pdb     = False
     self.modbase = False
-    # If refresh is specified, update all mirrored data
-    if refresh:
-      self.refresh_mirrors(idmapping,sec2prim,pdb_dir,modbase_dir)
     # Initialize
     if idmapping:
       PDBMapProtein.PDBMapProtein.load_idmapping(idmapping)
@@ -76,9 +73,9 @@ class PDBMap():
 
     # Check if PDB is already in the database
     if io.structure_in_db(pdbid,label):
-      msg =  "WARNING (PDBMapIO) Structure %s "%pdbid
-      msg += "already in database. Skipping.\n"
-      sys.stderr.write(msg)
+      # msg =  "WARNING (PDBMapIO) Structure %s "%pdbid
+      # msg += "already in database. Skipping.\n"
+      # sys.stderr.write(msg)
       return 1
 
     # Load the PDB structure
@@ -120,9 +117,9 @@ class PDBMap():
     # Check if model is already in the database
     modelid = model_summary[1] # extract ModBase model ID
     if io.model_in_db(modelid,label):
-      msg  = "WARNING (PDBMapIO) Model %s "%modelid
-      msg += "already in database. Skipping.\n"
-      sys.stderr.write(msg)
+      # msg  = "WARNING (PDBMapIO) Model %s "%modelid
+      # msg += "already in database. Skipping.\n"
+      # sys.stderr.write(msg)
       return 1
 
     # Load the ModBase model
@@ -269,16 +266,20 @@ class PDBMap():
     """ Returns summary statistics for the PDBMap database """
     print "Basic summary statistics for PDBMap. Not implemented."
 
-  def refresh_mirrors(self,idmapping,sec2prim,pdb_dir):
+  def refresh_mirrors(self):
     """ Refreshes all mirrored data """
-    get_pdb       = "%s/get_pdb.sh"%os.path.realpath(pdb_dir)
-    get_modbase   = "%s/get_modbase.sh"%os.path.realpath(modbase_dir)
-    get_idmapping = "%s/get_idmapping.sh"%os.path.realpath(idmapping)
-    get_sec2prim  = "%s/get_sec2prim.sh"%os.path.realpath(sec2prim)
-    os.system(get_pdb)
-    os.system(get_modbase)
-    os.system(get_idmapping)
-    os.system(get_sec2prim)
+    if self.pdb_dir:
+      get_pdb       = "%s/get_pdb.sh"%os.path.realpath(self.pdb_dir)
+      os.system(get_pdb)
+    if self.modbase_dir:
+      get_modbase   = "%s/get_modbase.sh"%os.path.realpath(self.modbase_dir)
+      os.system(get_modbase)
+    if self.idmapping:
+      get_idmapping = "%s/get_idmapping.sh"%os.path.realpath(self.idmapping)
+      os.system(get_idmapping)
+    if self.sec2prim:
+      get_sec2prim  = "%s/get_sec2prim.sh"%os.path.realpath(self.sec2prim)
+      os.system(get_sec2prim)
 
 ## Copied from biolearn
 def multidigit_rand(digits):
@@ -392,7 +393,11 @@ if __name__== "__main__":
 
   # Initialize PDBMap, refresh mirrored data if specified
   if args.cmd=="refresh":
-    pdbmap = PDBMap(refresh=refresh)
+    pdbmap = PDBMap(idmapping=args.idmapping,sec2prim=args.sec2prim,
+                    sprot=args.sprot,pdb_dir=args.pdb_dir,
+                    modbase_dir=args.modbase_dir,
+                    modbase_summary=args.modbase_summary)
+    pdbmap.refresh_mirrors()
 
   ## load_pdb ##
   elif args.cmd == "load_pdb":
