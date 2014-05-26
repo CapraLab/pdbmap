@@ -149,14 +149,15 @@ class PDBMap():
       return 1
     return 0
 
-  def load_data(self,dname,dfile,j):
+  def load_data(self,dname,dfile,indexing=None):
     """ Loads a data file into the PDBMap database """
-    d = PDBMapData.PDBMapData(self.vep,self.plink,j) # j process forks
+    d = PDBMapData.PDBMapData(self.vep,self.plink)
     if not os.path.exists(dfile):
       dfile = "%s.ped"%dfile # Test if PEDMAP basename
       if not os.path.exists(dfile):
         msg = "ERROR (PDBMap) File does not exist: %s"%dfile
         raise Exception(msg)
+    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,dlabel=dname)
     # Determine file type
     ext = dfile.split('.')[-1].lower()
     if ext == 'gz':
@@ -164,14 +165,19 @@ class PDBMap():
     # Process and accordingly
     if ext == 'vcf':
       generator = d.load_vcf(dfile)
-    elif ext == "bed":
+    elif ext in ["bed","txt","csv"]:
+      # Determine the column delimiter by file type
+      delim = '\t'
+      if ext != "bed":
+        delim = ' ' if ext=='txt' else ','
+      indexing = 'ucsc' if ext == 'bed' and not indexing else 'pdbmap'
+      dfile = d.load_bedfile(dfile,io,delim,indexing) # dfile side effect returned
       generator = d.load_bed(dfile)
     elif ext in ["ped","map"] :
       generator = d.load_pedmap(dfile)
     else:
       msg = "ERROR (PDBMap) Unsupported file type: %s"%ext
       raise Exception(msg)
-    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,dlabel=dname)
     nrows = io.upload_genomic_data(generator,dname)
     return(nrows)
   
@@ -189,7 +195,6 @@ class PDBMap():
     query  = "SELECT DISTINCT b.name FROM GenomicIntersection as a "
     query += "INNER JOIN GenomicConsequence as b "
     query += "ON a.gc_id=b.gc_id WHERE a.label=%s"
-    print 'query:\n',query%dname
     res    = io.secure_query(query,[dname],cursorclass="Cursor")
     tempf = "temp/%d.TEMP"%multidigit_rand(10)
     nrows = 0
@@ -323,6 +328,7 @@ if __name__== "__main__":
     "plink" : "plink",
     "slabel" : "",
     "dlabel" : "",
+    "indexing": None,
     "cores" : 1
     }
   if args.conf_file:
@@ -376,6 +382,8 @@ if __name__== "__main__":
               help="Structural label for this session")
   parser.add_argument("--dlabel", 
               help="Data label for this session")
+  parser.add_argument("--indexing",
+ 							help="Indexing used by data file(s) [pdbmap,ensembl,ucsc]")
   parser.add_argument("-j", "--cores", type=int,
               help="Number of available processors")
 
@@ -471,7 +479,7 @@ if __name__== "__main__":
       dfiles = zip(args.args,[args.dlabel for i in range(len(args.args))])
     for dfile,dname in dfiles:
       print "## Processing (%s) %s ##"%(dname,dfile)
-      nrows = pdbmap.load_data(dname,dfile,args.cores)
+      nrows = pdbmap.load_data(dname,dfile,args.indexing)
       print " # %d data rows uploaded."%nrows
     # Intersect with dataset with PDBMap (One-time operation)
     for dname in set([dname for dfile,dname in dfiles]):

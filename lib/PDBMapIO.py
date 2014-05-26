@@ -485,7 +485,7 @@ class PDBMapIO(PDBIO):
 
   def upload_genomic_data(self,dstream,dname):
     """ Uploads genomic data via a PDBMapData generator """
-    self._connect()
+    self._connect(cursorclass=MySQLdb.cursors.Cursor)
     filterwarnings('ignore', category = MySQLdb.Warning)
     for i,record in enumerate(dstream):
       # Upload all but the consequences to GenomicData
@@ -559,6 +559,19 @@ class PDBMapIO(PDBIO):
       yield row
     self._close()
 
+  def secure_command(self,query,qvars=None):
+    """ Executes commands using safe practices """
+    self._connect()
+    filterwarnings('ignore', category = MySQLdb.Warning)
+    try:
+      if qvars: self._c.execute(query,qvars)
+      else:     self._c.execute(query)
+    except Exception as e:
+      msg  = "ERROR (PDBMapIO) Secure command failed; Exception: %s; "%str(e)
+      msg += "Command: %s"%self._c._last_executed
+      raise Exception(msg)
+    resetwarnings()
+
   def secure_query(self,query,qvars=None,cursorclass='SSDictCursor'):
     """ Executes queries using safe practices """
     if cursorclass == 'SSDictCursor':
@@ -569,8 +582,15 @@ class PDBMapIO(PDBIO):
       self._connect(cursorclass=MySQLdb.cursors.Cursor)
     else:
       self._connect()
-    if qvars: self._c.execute(query,qvars)
-    else:     self._c.execute(query)
+    filterwarnings('ignore', category = MySQLdb.Warning)
+    try:
+      if qvars: self._c.execute(query,qvars)
+      else:     self._c.execute(query)
+    except Exception as e:
+      msg  = "ERROR (PDBMapIO) Secure query failed; Exception: %s; "%str(e)
+      msg += "Query: %s"%self._c._last_executed
+      raise Exception(msg)
+    resetwarnings()
     for row in self._c:
       yield row
     self._close()

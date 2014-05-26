@@ -36,6 +36,7 @@ class PDBMapData():
       registry = None
     # Construct the VEP command
     self.vep_cmd = [self.vep,'-i','','--database']
+    self.vep_cmd.extend(['--format',''])
     if registry:
       # Use a local Ensembl database
       self.vep_cmd.extend(['--registry',registry])
@@ -59,74 +60,152 @@ class PDBMapData():
       # Fork to decrease runtime
       self.vep_cmd.extend(['--fork',str(j)])
 
+  def vep_record_parser(self,record,info_headers,csq_headers):
+    # Adjust some specific fields
+    if "END" not in record.INFO:
+      record.INFO["END"] = int(record.POS) + 1
+    for header in info_headers:
+      if header not in record.INFO:
+        record.INFO[header] = None
+    # Process fields which may or may not be included in VEP output
+    if 'SNPSOURCE' in record.INFO and record.INFO['SNPSOURCE']:
+      record.INFO['SNPSOURCE'] = ';'.join(record.INFO['SNPSOURCE'])
+    else: record.INFO['SNPSOURCE'] = None
+    if 'AMR_AF' in record.INFO:
+      if not record.INFO['AMR_AF']: record.INFO['AMR_AF'] = 0.0
+    else: record.INFO['AMR_AF']    = None
+    if 'ASN_AF' in record.INFO:
+      if not record.INFO['ASN_AF']: record.INFO['ASN_AF'] = 0.0
+    else: record.INFO['ASN_AF']    = None
+    if 'AFR_AF' in record.INFO:
+      if not record.INFO['AFR_AF']: record.INFO['AFR_AF'] = 0.0
+    else: record.INFO['AFR_AF']    = None
+    if 'EUR_AF' in record.INFO:
+      if not record.INFO['EUR_AF']: record.INFO['EUR_AF'] = 0.0
+    else: record.INFO['EUR_AF']    = None
+    if 'AA' in record.INFO and record.INFO['AA']:
+      record.INFO['AA'] = record.INFO['AA'].upper()
+    else: record.INFO['AA']        = None
+    if 'AC' in record.INFO:
+      record.INFO['AC'] = record.INFO['AC'][0]
+    else: record.INFO['AC']        = None
+    # Ensure fields are present in record.INFO
+    if 'AN' not in record.INFO: record.INFO['AN']           = None
+    if 'AF' not in record.INFO: record.INFO['AF']           = None
+    if 'VT' not in record.INFO: record.INFO['VT']           = None
+    if 'SVTYPE' not in record.INFO: record.INFO['SVTYPE']   = None
+    if 'SVLEN' not in record.INFO: record.INFO['SVLEN']     = None
+    if 'AVGPOST' not in record.INFO: record.INFO['AVGPOST'] = None
+    if 'RSQ' not in record.INFO: record.INFO['RSQ']         = None
+    if 'ERATE' not in record.INFO: record.INFO['ERATE']     = None
+    if 'THETA' not in record.INFO: record.INFO['THETA']     = None
+    if 'LDAF' not in record.INFO: record.INFO['LDAF']       = None
+    # Add attribute fields to INFO
+    record.INFO["ID"] = record.ID
+    record.INFO["CHROM"] = "chr%s"%record.CHROM
+    record.INFO["START"] = record.POS
+    record.INFO["REF"] = record.REF
+    record.INFO["ALT"] = record.ALT[0] # only the most common
+    record.INFO["QUAL"] = record.QUAL
+    record.INFO["FILTER"] = str(record.FILTER)
+    # Extract the consequences
+    record.CSQ = self._parse_csq(csq_headers,record.INFO['CSQ'])
+    # Add some "consequence" info to the variant info
+    record.INFO["EXISTING"] = record.CSQ[0]['Existing_variation']
+    record.INFO["GENE"] = record.CSQ[0]['Gene']
+    if record.CSQ[0]['SYMBOL_SOURCE'] == 'HGNC':
+      record.INFO["HGNC"] = record.CSQ[0]["SYMBOL"]
+    else: record.INFO["HGNC"] = None
+    # Add some variant info to the consequences
+    for csq in record.CSQ:
+      csq["ID"] = record.INFO["ID"]
+      csq["CHROM"] = record.INFO["CHROM"]
+      csq["START"] = record.INFO["START"]
+      csq["END"] = record.INFO["END"]
+    return record
+
   def load_vcf(self,fname):
     """ Pipe VCF file through VEP and yield VEP rows """
     print "Initializing VCF generator."
     # Parse the VCF output from VEP
-    parser = vcf.Reader(self.load_vep(fname))
+    parser = vcf.Reader(self.load_vep(fname,'vcf'))
     # Determine Info headers
     info_headers = parser.infos.keys()
     # Determine Consequence headers
     csq_headers  = parser.infos['CSQ'].desc.split(': ')[-1].split('|')
     for record in parser:
-      print " # Processing %s #"%record.ID
-      # Adjust some specific fields
-      if "END" not in record.INFO:
-        record.INFO["END"] = int(record.POS) + 1
-      for header in info_headers:
-        if header not in record.INFO:
-          record.INFO[header] = None
-      record.INFO['AC'] = record.INFO['AC'][0]
-      if record.INFO['SNPSOURCE']:
-        record.INFO['SNPSOURCE'] = ';'.join(record.INFO['SNPSOURCE'])
-      if not record.INFO['AMR_AF']: record.INFO['AMR_AF'] = 0.0
-      if not record.INFO['ASN_AF']: record.INFO['ASN_AF'] = 0.0
-      if not record.INFO['AFR_AF']: record.INFO['AFR_AF'] = 0.0
-      if not record.INFO['EUR_AF']: record.INFO['EUR_AF'] = 0.0
-      if record.INFO['AA']:
-        record.INFO['AA'] = record.INFO['AA'].upper()
-      # Add attribute fields to INFO
-      record.INFO["ID"] = record.ID
-      record.INFO["CHROM"] = "chr%s"%record.CHROM
-      record.INFO["START"] = record.POS
-      record.INFO["REF"] = record.REF
-      record.INFO["ALT"] = record.ALT[0] # only the most common
-      record.INFO["QUAL"] = record.QUAL
-      record.INFO["FILTER"] = str(record.FILTER)
-      # Extract the consequences
-      record.CSQ = self._parse_csq(csq_headers,record.INFO['CSQ'])
-      # Add some "consequence" info to the variant info
-      record.INFO["EXISTING"] = record.CSQ[0]['Existing_variation']
-      record.INFO["GENE"] = record.CSQ[0]['Gene']
-      if record.CSQ[0]['SYMBOL_SOURCE'] == 'HGNC':
-        record.INFO["HGNC"] = record.CSQ[0]["SYMBOL"]
-      else: record.INFO["HGNC"] = None
-      # Add some variant info to the consequences
-      for csq in record.CSQ:
-        csq["ID"] = record.INFO["ID"]
-        csq["CHROM"] = record.INFO["CHROM"]
-        csq["START"] = record.INFO["START"]
-        csq["END"] = record.INFO["END"]
-      yield record
+      yield self.vep_record_parser(record,info_headers,csq_headers)
 
   def load_pedmap(self,fname):
     """ Convert PED/MAP to VCF, pipe VCF through VEP and load VEP output """
     print "load_pedmap not implemented"
 
-  def load_bed(self,fname,vep=False):
+  def load_bed(self,fname):
     """ Load data from BED """
     print "Initializing BED generator."
-    if vep:
-      for record in vcf.Reader(self.load_vep(fname)):
-        yield record
-    else:
-      print "load_bed not implemented without VEP"
+    # Parse the VCF output from VEP
+    parser = vcf.Reader(self.load_vep(fname,'id'))
+    # Determine Info headers
+    info_headers = parser.infos.keys()
+    # Determine Consequence headers
+    csq_headers  = parser.infos['CSQ'].desc.split(': ')[-1].split('|')
+    for record in parser:
+      yield self.vep_record_parser(record,info_headers,csq_headers)
 
-  def load_vep(self,fname):
+  def load_bedfile(self,fname,io,delim='\t',indexing=None):
+    """ Creates a supplementary table for original datafile """
+    print "Uploading original datafile to supplementary database."
+    with open(fname,'rb') as fin:
+      header = fin.readline().strip().split('\t')
+      header[0:4] = ["chr","start","end","name"]
+      header = [f.replace('.','_') for f in header]
+      reader = csv.reader(fin,delimiter='\t')
+      row1   = reader.next()
+    # Remove header from bed file
+    types = ["VARCHAR(100)","INT","INT","VARCHAR(100)"]
+    for i,col in enumerate(row1):
+      if i < 3: continue
+      try:
+        col = float(col)
+        types.insert(i,"DOUBLE")
+      except ValueError,TypeError:
+        if len(col) > 150:
+          types.insert(i,"TEXT")
+        else:
+          types.insert(i,"VARCHAR(%d)"%(len(col)*2))
+    table_def = ["%s %s"%(header[i],types[i]) for i in range(len(header))]
+    query = "CREATE TABLE IF NOT EXISTS pdbmap_supp.%s (%s, PRIMARY KEY(chr,start,end,name))"
+    query = query%(io.dlabel,','.join(table_def))
+    io.secure_command(query)
+    query  = "LOAD DATA LOCAL INFILE '%s' INTO TABLE pdbmap_supp.%s "%(fname,io.dlabel)
+    if delim != '\t':
+      query += r"FIELDS TERMINATED BY '%s'"%delim
+    else:
+      query += r"FIELDS TERMINATED BY '\t'"
+    query += "IGNORE 1 LINES"
+    io.secure_command(query)
+    # Make any necessary indexing conversions
+    if indexing == 'ucsc':
+      query = "UPDATE pdbmap_supp.%s SET start=start+1, end=end+1 ORDER BY start,end DESC"%io.dlabel
+      io.secure_command(query)
+    elif indexing == 'ensembl':
+      query = "UPDATE pdbmap_supp.%s SET end=end+1 ORDER BY start,end DESC"%io.dlabel
+      io.secure_command(query)
+    # Retain only rsID for VEP
+    if delim == '\t':
+      os.system("sed '1d' %s | cut -f4 > %sVEPPREP.txt"%(fname,fname.replace('.','_')))
+    else:
+      os.system("sed '1d' %s | cut -d'%s' -f4 > %sVEPPREP.txt"%(fname,delim,fname.replace('.','_')))
+    fname = "%sVEPPREP.txt"%fname.replace('.','_')
+    return fname
+
+  def load_vep(self,fname,intype='vcf'):
     """ Yield VEP rows """
     print "Initializing VEP generator."
     cmd = [f for f in self.vep_cmd]
     cmd[2] = fname
+    cmd[5] = intype
+    print ' '.join(cmd)
     try:
       # Call VEP and capture stdout
       p = sp.Popen(cmd,stdout=sp.PIPE)
