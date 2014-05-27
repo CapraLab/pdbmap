@@ -30,6 +30,12 @@ class PDBMapVisualize():
     """ Visualize the annotated dataset within a structure """
     pdbid = pdbid.lower()
     res  = self.io.load_structure(pdbid,biounit)
+    for anno in anno_list:
+      # If any specified annotation isn't in the default return
+      if anno not in res:
+        # Join with the user-supplied annotations
+        res = self.io.load_structure(pdbid,biounit,useranno=True)
+        break
     # Output all annotations to results file
     cols = ['model','seqid','chain']
     cols.extend(anno_list)
@@ -92,7 +98,12 @@ class PDBMapVisualize():
   def visualize_model(self,modelid,biounit=0,anno_list=['maf'],spectrum_range=None,group=None):
     """ Visualize the annotated dataset within a model """
     res  = self.io.load_model(modelid)
-
+    for anno in anno_list:
+      # If any specified annotation isn't in the default return
+      if anno not in res:
+        # Join with the user-supplied annotations
+        res  = self.io.load_model(modelid,useranno=True)
+        break
     # Output all annotations to results file
     cols = ['model','seqid','chain']
     cols.extend(anno_list)
