@@ -20,6 +20,7 @@
 # See main check for cmd line parsing
 import argparse,ConfigParser
 import sys,os,csv,time,pdb,glob
+import subprocess as sp
 from lib import PDBMapIO,PDBMapStructure,PDBMapProtein
 from lib import PDBMapAlignment,PDBMapData,PDBMapTranscript
 from lib import PDBMapIntersect,PDBMapModel
@@ -181,12 +182,15 @@ class PDBMap():
     nrows = io.upload_genomic_data(generator,dname)
     return(nrows)
   
-  def intersect_data(self,dname,sname=None,dtype="Genomic"):
+  def intersect_data(self,dname,sname=None,dtype="Genomic",quick=False):
     """ Intersects a loaded dataset with the PDBMap structural domain """
     io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,dlabel=dname)
     i = PDBMapIntersect.PDBMapIntersect(io)
     # Note: Only all-structures <-> genomic data intersections supported
-    nrows = i.intersect(dname,sname,dtype)
+    if quick:
+    	nrows = i.quick_intersect(dname,sname,dtype)
+    else:
+    	nrows = i.intersect(dname,sname,dtype)
     return(nrows) # Return the number of intersections
 
   def filter_data(self,dname,dfiles):
@@ -202,7 +206,6 @@ class PDBMap():
       for r in res:
         fout.write("%s\n"%r[0])
         nrows += 1
-
     # Filter original dataset to those variants in PDBMap and save locally
     inputs = []
     exts   = ['vcf','gz','bed','ped','map']
@@ -218,21 +221,35 @@ class PDBMap():
         ext = dfile.split('.')[-2].lower()
       if ext == 'vcf':
         fin[0] += 'vcf'
-      elif ext == 'bed':
-        fin[0] += 'bed'
       # Create local storage directory
       if not os.path.exists('data/pdbmap/%s/vcf'%dname):
         print "mkdir -p data/pdbmap/%s/vcf"%dname
         os.system("mkdir -p data/pdbmap/%s/vcf"%dname)
-      # Use vcftools to filter VCF and BED datasets and output to VCF
-      print "vcftools %s --snps %s --recode --out data/pdbmap/%s/vcf/pdbmap_%s"%(
-                  ' '.join(fin),tempf,dname,output)
-      os.system("vcftools %s --snps %s --recode --out data/pdbmap/%s/vcf/pdbmap_%s"%(
-                  ' '.join(fin),tempf,dname,output))
+      # Use vcftools to filter VCF and output to VCF
+      if ext == 'vcf':
+        cmd = "vcftools %s --snps %s --recode --out data/pdbmap/%s/vcf/pdbmap_%s"%(
+                ' '.join(fin),tempf,dname,output)
+        print cmd
+        os.system(cmd)
+      # Use the variant effect predictor to produce a VCF containing provided variants
+      elif ext == 'bed':
+        cmd = [self.vep,'-i',tempf,'--format','id','--no_progress','--check_existing']
+        cmd.extend(['--database','--force_overwrite'])
+        registry = "%s/dbconn.conf"%os.path.dirname(self.vep)
+        if not os.path.exists(registry):
+          msg = "WARNING (PDBMapData) Not registry specified. Using Ensembl.\n"
+          sys.stderr.write(msg)
+          registry = None
+        if registry:
+          cmd.extend(['--registry',registry])
+        cmd.extend(['--no_stats','--vcf','-o','data/pdbmap/%s/vcf/pdbmap_%s'%(dname,output)])
+        print ' '.join(cmd)
+        status = sp.check_call(cmd,stdout=sp.PIPE,stderr=sp.PIPE)
     # If split by chromosome, merge into a single file
-    print "vcf-concat data/pdbmap/%s/vcf/pdbmap_*.vcf | gzip -c > data/pdbmap/%s/vcf/pdbmap_%s.vcf.gz"%(
+    if len(dfiles) > 1:
+      print "vcf-concat data/pdbmap/%s/vcf/pdbmap_*.vcf | gzip -c > data/pdbmap/%s/vcf/pdbmap_%s.vcf.gz"%(
                 dname,dname,dname)
-    os.system("vcf-concat data/pdbmap/%s/vcf/pdbmap_*.vcf | gzip -c > data/pdbmap/%s/vcf/pdbmap_%s.vcf.gz"%(
+      os.system("vcf-concat data/pdbmap/%s/vcf/pdbmap_*.vcf | gzip -c > data/pdbmap/%s/vcf/pdbmap_%s.vcf.gz"%(
                 dname,dname,dname))
     #os.system("rm -f %s"%tempf) # Remove temp file
     return nrows # Return the number of kept variants
@@ -477,15 +494,17 @@ if __name__== "__main__":
       dfiles = zip(args.args[0::2],args.args[1::2])
     else: # Assign shared label
       dfiles = zip(args.args,[args.dlabel for i in range(len(args.args))])
+    nrows = 0
     for dfile,dname in dfiles:
       print "## Processing (%s) %s ##"%(dname,dfile)
-      nrows = pdbmap.load_data(dname,dfile,args.indexing)
+      nrows += pdbmap.load_data(dname,dfile,args.indexing)
       print " # %d data rows uploaded."%nrows
     # Intersect with dataset with PDBMap (One-time operation)
     for dname in set([dname for dfile,dname in dfiles]):
       print "## Intersecting %s with PDBMap ##"%dname
-      print " # (This may take a while) #"
-      nrows = pdbmap.intersect_data(dname)
+      quick = True if nrows < 500 else False
+      print [" # (This may take a while) #"," # Using quick-intersect #"][int(quick)]
+      nrows = pdbmap.intersect_data(dname,quick=quick)
       print " # %d intersection rows uploaded."%nrows
       # Store a local, PDBMap-filtered copy of the dataset
       print "## Creating a local copy of %s for PDBMap ##"%dname
@@ -525,7 +544,12 @@ if __name__== "__main__":
     msg += "       : (PDBMap) This is a debug command for intersection dev.\n"
     sys.stderr.write(msg)
     dname = args.args[0] # Get the dataset name
-    pdbmap.intersect_data(dname)
+    nrows = int(args.args[1]) if len(args.args) > 1 else 501
+    print "## Intersecting %s with PDBMap ##"%dname
+    quick = True if nrows < 500 else False
+    print [" # (This may take a while) #"," # Using quick-intersect #"][int(quick)]
+    nrows = pdbmap.intersect_data(dname,quick=quick)
+    print " # %d intersection rows uploaded."%nrows
 
   ## filter ##
   elif args.cmd == "filter":

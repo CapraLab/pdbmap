@@ -25,6 +25,36 @@ class PDBMapIntersect():
     """ Initialization requires a PDBMapIO object """
     self.io = pdbmapio
 
+  def quick_intersect(self,dlabel,slabel=None,dtype='Genomic'):
+    # Intersects small datasets using a mysql join
+    if dtype == "Genomic":
+      pass
+    elif dtype == 'Protein':
+      msg = "ERROR (PDBMapIntersect) Protein intersection not implemented."
+      raise Exception(msg)
+    elif dtype == 'Structural':
+      msg = "ERROR (PDBMapIntersect) Structural intersection not implemented."
+      raise Exception(msg)
+    else:
+      msg = "ERROR (PDBMapIntersect) %s intersection is not a valid option."
+      raise Exception(msg%dtype)
+    query  = "INSERT IGNORE INTO GenomicIntersection "
+    query += "SELECT a.label,c.pdbid,c.chain,c.chain_seqid,a.gc_id "
+    query += "FROM GenomicConsequence as a "
+    query += "INNER JOIN Transcript as b "
+    query += "ON a.transcript=b.transcript AND a.chr=b.chr "
+    query += "AND a.start >= b.start AND a.end <= b.end "
+    query += "INNER JOIN Alignment as c "
+    query += "ON b.transcript=c.transcript AND b.seqid=c.trans_seqid "
+    query += "WHERE a.label=%s "
+    if slabel:
+      query += "AND c.label=%s"
+    if slabel:
+      self.io.secure_command(query,(dlabel,slabel))
+    else:
+      self.io.secure_command(query,(dlabel,))
+    return(-1) # No row feedback for quick-intersect
+
   def intersect(self,dlabel,slabel=None,dtype='Genomic'):
     # Intersects a structure set with a dataset using intersectBed
     # Slow, but intersection pointers are stored permanently (1-time op)
@@ -86,7 +116,7 @@ class PDBMapIntersect():
       parser = process_parser(p)
       nrows = self.io.upload_intersection(parse_intersection(parser))
      
-      ## Intersection completed and uploaded. Cleaning up temp files ##    
+    ## Intersection completed and uploaded. Cleaning up temp files ##    
     except: raise
     finally:
       # Remove temp files

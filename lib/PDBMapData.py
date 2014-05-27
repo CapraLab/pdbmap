@@ -205,7 +205,6 @@ class PDBMapData():
     cmd = [f for f in self.vep_cmd]
     cmd[2] = fname
     cmd[5] = intype
-    print ' '.join(cmd)
     try:
       # Call VEP and capture stdout
       p = sp.Popen(cmd,stdout=sp.PIPE)
