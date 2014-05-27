@@ -260,11 +260,11 @@ class PDBMap():
     io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,
                             slabel=struct_label,dlabel=data_label)
     v  = PDBMapVisualize(io,args.pdb_dir,args.modbase_dir)
-    entity_type = io.detect_entity_type(entity) if not entity='all' else 'all'
+    entity_type = io.detect_entity_type(entity) if not entity=='all' else 'all'
     if entity_type in ['structure','model'] and not biounits:
       # Query all biological assemblies, exclude the asymmetric unit
       query = "SELECT DISTINCT biounit FROM Chain WHERE pdbid=%s AND biounit>0"
-      res   = io.secure_query(query,(entity),cursorclass='Cursor')
+      res   = io.secure_query(query,(entity,),cursorclass='Cursor')
       biounits = [r[0] for r in res]
     try:
       if entity_type == 'structure':
@@ -520,17 +520,18 @@ if __name__== "__main__":
       msg = "usage: pdbmap.py -c conf_file visualize entity data_name feature[,...] biounit[,...] [minval:maxval,...]\n"
       print msg; sys.exit(1)
     entity = args.args[0]
-    data_label,annotation,spectrum_range = '1kg','maf',None
+    struct_label   = 'uniprot-pdb' if not args.slabel else args.slabel
     data_label = args.args[1]
     anno_list  = args.args[2].split(',')
     if len(args.args) > 3 and args.args[3].lower() not in ['all','.',' ']:
-        biounits   = args.args[3].split(',')
+      biounits = args.args[3].split(',')
     else:
       biounits = []
+    spectrum_range = None
     if len(args.args) > 4:
       spectrum_range = [tuple(p.split(':')) for p in args.args[3].split(',')]
-    print "## Visualizing (%s) %s[%s]+%s.%s"%(args.slabel,entity,','.join(biounits),data_label,annotation)
-    pdbmap.visualize(entity,biounits,args.slabel,data_label,anno_list,spectrum_range)
+    print "## Visualizing (%s) %s[%s]+%s.%s"%(struct_label,entity,','.join(biounits),data_label,','.join(anno_list))
+    pdbmap.visualize(entity,biounits,struct_label,data_label,anno_list,spectrum_range)
 
   ## stats ##
   elif args.cmd == "stats":

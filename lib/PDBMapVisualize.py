@@ -104,8 +104,12 @@ class PDBMapVisualize():
         # Join with the user-supplied annotations
         res  = self.io.load_model(modelid,useranno=True)
         break
+    if not res:
+      msg = "ERROR (PDBMapVisualize) %s contains no variant mappings"%modelid
+      sys.stderr.write(msg)
+      return
     # Output all annotations to results file
-    cols = ['model','seqid','chain']
+    cols = ['model','seqid']
     cols.extend(anno_list)
     timestamp = str(time.strftime("%Y%m%d-%H"))
     params = {'structid':modelid,'biounit':biounit}
@@ -136,11 +140,12 @@ class PDBMapVisualize():
         msg = "ERROR (PDBMapVisualize) Unknown feature %s\n"%anno
         sys.stderr.write(msg)
         continue # Move to next annotation
-      cols = ['model','seqid','chain',anno]
+      cols = ['model','seqid',anno]
       out  = [res[col] for col in cols if res[anno]]   # Extract columns as rows
       out  = [list(i) for i in zip(*out)] # Transpose back to columns
       tempf = "temp/%d.TEMP"%multidigit_rand(10)
       # Write the mappings to a temp file
+      minval,maxval = 999,-999
       with open(tempf,'w') as fout:
         fout.write("#%s\n"%'\t'.join(cols))
         fout.write("attribute: %s\n"%anno)
@@ -148,10 +153,12 @@ class PDBMapVisualize():
         fout.write("recipient: residues\n")
         for row in out:
           # #0.model:resi.chain value [value ...]
-          fout.write("\t#0.%d:%d.%s\t%s\n"%(tuple(row)))
-          if float(row[-1]) < minval: minval=float(row[-1])
-          if float(row[-1]) > maxval: maxval=float(row[-1])
+          fout.write("\t#0.%d:%d\t%0.6f\n"%(tuple(row)))
+          if row[-1] and float(row[-1]) < minval: minval=float(row[-1])
+          if row[-1] and float(row[-1]) > maxval: maxval=float(row[-1])
       minval,maxval = spectrum_range if spectrum_range else (minval,maxval)
+      if minval > maxval:
+        continue # All values are NULL, ignore annotation
       params = {'structid':modelid,'biounit':biounit,'anno':anno,'tempf':tempf,
                 'minval':minval,'maxval':maxval,'resis':out,
                 'struct_loc':"%s/models/model/%s.pdb.gz"%(self.modbase_dir,modelid)}
@@ -160,16 +167,20 @@ class PDBMapVisualize():
   def visualize_unp(self,unpid,anno_list=['maf'],spectrum_range=None):
     """ Visualize the annotated dataset associated with a protein """
     res_list  = self.io.load_unp(unpid)
-    # Query all biological assemblies
-    query = "SELECT DISTINCT biounit FROM Chain WHERE pdbid=%s"
-    res   = self.io.secure_query(query,(entity),cursorclass='Cursor')
-    biounits = [r[0] for r in res]
     # Visualize for each biological assembly
     for entity_type,entity in res_list:
       if entity_type == 'structure':
+        # Query all biological assemblies
+        query = "SELECT DISTINCT biounit FROM Chain WHERE pdbid=%s"
+        res   = self.io.secure_query(query,(entity,),cursorclass='Cursor')
+        biounits = [r[0] for r in res]
         for biounit in biounits:
           self.visualize_structure(entity,biounit,anno_list,spectrum_range,group=unpid)
       elif entity_type == 'model':
+        # Query all biological assemblies
+        query = "SELECT DISTINCT biounit FROM Chain WHERE pdbid=%s"
+        res   = self.io.secure_query(query,(entity,),cursorclass='Cursor')
+        biounits = [r[0] for r in res]
         for biounit in biounits:
           self.visualize_model(entity,biounit,anno_list,spectrum_range,group=unpid)
       else:
@@ -179,22 +190,25 @@ class PDBMapVisualize():
   def visualize_all(self,anno_list=['maf'],spectrum_range=None):
     """ Visualize all structures and models for the annotated dataset """
     query = "SELECT DISTINCT pdbid FROM GenomicIntersection WHERE label=%s"
-    res   = self.io.secure_query(query,(self.dlabel,),cursorclass='Cursor')
-    structures = [r[0] for r in res if io.detect_entity_type(r[0]) == 'structure']
+    res   = [r for r in self.io.secure_query(query,(self.io.dlabel,),cursorclass='Cursor')]
+    for r in res:
+      print self.io.detect_entity_type(r[0])
+    structures = [r[0] for r in res if self.io.detect_entity_type(r[0]) == 'structure']
     for s in structures:
       query = "SELECT DISTINCT biounit FROM Chain WHERE pdbid=%s"
-      res   = self.io.secure_query(query,(s),cursorclass='Cursor')
+      res   = self.io.secure_query(query,(s,),cursorclass='Cursor')
       biounits = [r[0] for r in res]
       for b in biounits:
+        print "Visualizing %s.%s"%(s,b)
         self.visualize_structure(s,b,anno_list,spectrum_range,group='all')
-    models = [r[0] for r in res if io.detect_entity_type(r[0]) == 'model']
+    models = [r[0] for r in res if self.io.detect_entity_type(r[0]) == 'model']
     for m in models:
       query = "SELECT DISTINCT biounit FROM Chain WHERE pdbid=%s"
-      res   = self.io.secure_query(query,(m),cursorclass='Cursor')
+      res   = self.io.secure_query(query,(m,),cursorclass='Cursor')
       biounits = [r[0] for r in res]
       for b in biounits:
+        print "Visualizing %s.%s"%(m,b)
         self.visualize_model(m,b,anno_list,spectrum_range,group='all')
-
 
   def visualize(self,params,group=None):
     # Visualize with PyMol
@@ -209,11 +223,19 @@ class PDBMapVisualize():
       os.system('mkdir -p %s'%res_dir)
 
     # Visualize with Chimera
-    cmd  = "chimera --silent --script 'lib/PDBMapVisualize.py "
-    keys = ['structid','biounit','anno','tempf','minval','maxval','struct_loc','res_dir']
-    cmd += "%s'"%' '.join([str(params[key]) for key in keys])
-    os.system(cmd)
-    os.system('rm -f %s'%params['tempf']) # clean up temp file
+    params['minval'] = "%0.6f"%params['minval']
+    params['maxval'] = "%0.6f"%params['maxval']
+    keys   = ['structid','biounit','anno','tempf','minval','maxval','struct_loc','res_dir']
+    script = "'lib/PDBMapVisualize.py %s'"%' '.join([str(params[key]) for key in keys])
+    cmd    = "chimera --silent --script %s"%script
+    try:
+      status = os.system(cmd)
+      if status:
+        raise Exception("Chimera process return non-zero exit status.")
+    except Exception as e:
+      raise
+    finally:
+      os.system('rm -f %s'%params['tempf']) # clean up temp file
 
   # Executed in PyMol
   @classmethod
@@ -401,9 +423,13 @@ if __name__ == '__main__':
   rc("represent bs")
   rc("setattr m autochain 0")
   rc("setattr m ballScale .6")
-  rc("rangecolor %(anno)s,a %(minval)s blue %(maxval)s red"%params)
+  if len(params['resis']) < 2 or params['minval'] == params['maxval']:
+    for resi in params['resis']:
+      rc("color red,a %s@ca"%resi[0])
+  else:
+    rc("rangecolor %(anno)s,a %(minval)0.6f blue %(maxval)0.6f red"%params)
   # Orient the image
-  rc("define plane name p1 @ca:/%(anno)s>=%(minval)s"%params)
+  rc("define plane name p1 @ca:/%(anno)s>=%(minval)0.6f"%params)
   rc("align p1")
   rc("~define")
   # Export the image

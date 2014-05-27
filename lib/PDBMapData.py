@@ -174,6 +174,9 @@ class PDBMapData():
         else:
           types.insert(i,"VARCHAR(%d)"%(len(col)*2))
     table_def = ["%s %s"%(header[i],types[i]) for i in range(len(header))]
+    query = "DROP TABLE IF EXISTS pdbmap_supp.%s"
+    query = query%io.dlabel
+    io.secure_command(query)
     query = "CREATE TABLE IF NOT EXISTS pdbmap_supp.%s (%s, PRIMARY KEY(chr,start,end,name))"
     query = query%(io.dlabel,','.join(table_def))
     io.secure_command(query)

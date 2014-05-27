@@ -282,10 +282,6 @@ class PDBMapIO(PDBIO):
     self.dlabel = dlabel
 
   def structure_in_db(self,pdbid,label=-1):
-    # Dirty dirty hack fix after rebuilding process has finished!
-    return False
-    # Fix it Fix it Fix it Fix Fix it!
-    # ---------- # ---------- # ---------- #
     # None is a valid argument to label
     if label == -1:
       label=self.slabel
@@ -630,12 +626,13 @@ class PDBMapIO(PDBIO):
     query = PDBMapIO.structure_query
     if useranno:
       supp_select = ",z.* "
-      supp_table  = "INNER JOIN pdbmap_supp.%s AS z ON z.chr=d.chr "%self.dlabel
+      supp_table  = "\nINNER JOIN pdbmap_supp.%s AS z ON z.chr=d.chr "%self.dlabel
       supp_table += "AND z.start=d.start AND z.end=d.end AND z.name=d.name "
     else:
-      supp_select = ' '
-      supp_table  = ' '
-    q = self.secure_query(query,qvars=(supp_select,supp_table,self.slabel,self.dlabel,pdbid,biounit),cursorclass='DictCursor')
+      supp_select = ''
+      supp_table  = ''
+    query = query%(supp_select,supp_table) # insert additional query statements
+    q = self.secure_query(query,qvars=(self.slabel,self.dlabel,pdbid,biounit),cursorclass='DictCursor')
     res = {}
     for row in q:
       if not res:
@@ -650,12 +647,13 @@ class PDBMapIO(PDBIO):
     query = PDBMapIO.model_query
     if useranno:
       supp_select = ",z.* "
-      supp_table  = "INNER JOIN pdbmap_supp.%s AS z ON z.chr=d.chr "%self.dlabel
+      supp_table  = "\nINNER JOIN pdbmap_supp.%s AS z ON z.chr=d.chr "%self.dlabel
       supp_table += "AND z.start=d.start AND z.end=d.end AND z.name=d.name "
     else:
-      supp_select = ' '
-      supp_table  = ' '
-    q = self.secure_query(query,qvars=(supp_select,supp_table,self.slabel,self.dlabel,modelid),cursorclass='DictCursor')
+      supp_select = ''
+      supp_table  = ''
+    query = query%(supp_select,supp_table) # insert additional query statements
+    q = self.secure_query(query,qvars=(self.slabel,self.dlabel,modelid),cursorclass='DictCursor')
     res = {}
     for row in q:
       if not res:
@@ -668,7 +666,7 @@ class PDBMapIO(PDBIO):
   def load_unp(self,unpid):
     """ Identifies all associated structures, then pulls those structures. """
     query = PDBMapIO.unp_query
-    q = self.secure_query(query,qvars=(self.slabel,unpid),cursorclass='Cursor')
+    q = self.secure_query(query,qvars=(self.dlabel,self.slabel,unpid),cursorclass='Cursor')
     entities = [r[0] for r in q]
     print "%s found in %d structures."%(unpid,len(entities))
     res = []
@@ -743,12 +741,11 @@ class PDBMapIO(PDBIO):
     INNER JOIN GenomicData as d
     ON c.label=d.label AND c.chr=d.chr AND c.start=d.start AND c.end=d.end AND c.name=d.name
     INNER JOIN Chain as g
-    ON a.label=g.label AND a.pdbid=g.pdbid AND a.biounit=g.biounit AND a.model=g.model AND a.chain=g.chain
-    %s
-    WHERE c.consequence='missense_variant' AND
-    a.label=%s AND c.label=%s AND a.pdbid=%s AND a.biounit=%s;"""
+    ON a.label=g.label AND a.pdbid=g.pdbid AND a.biounit=g.biounit AND a.model=g.model AND a.chain=g.chain%s
+    WHERE c.consequence LIKE '%%%%missense_variant%%%%' AND
+    a.label=%%s AND c.label=%%s AND a.pdbid=%s AND a.biounit=%%s;"""
   model_query = """SELECT
-    g.model,g.chain,a.seqid,d.*,c.*%s
+    g.model,a.seqid,d.*,c.*%s
     FROM Residue as a
     INNER JOIN GenomicIntersection as b
     ON a.pdbid=b.pdbid AND a.chain=b.chain AND a.seqid=b.seqid
@@ -757,10 +754,9 @@ class PDBMapIO(PDBIO):
     INNER JOIN GenomicData as d
     ON c.label=d.label AND c.chr=d.chr AND c.start=d.start AND c.end=d.end AND c.name=d.name
     INNER JOIN Chain as g
-    ON a.label=g.label a.pdbid=g.pdbid AND a.biounit=g.biounit AND a.model=g.model AND a.chain=g.chain
-    %s
-    WHERE c.consequence='missense_variant' AND
-    a.label=%s AND c.label=%s AND a.pdbid=%s;"""
+    ON a.label=g.label AND a.pdbid=g.pdbid AND a.biounit=g.biounit AND a.model=g.model AND a.chain=g.chain%s
+    WHERE c.consequence LIKE '%%%%missense_variant%%%%' AND
+    a.label=%%s AND c.label=%%s AND a.pdbid=%%s;"""
   unp_query = """SELECT DISTINCT c.pdbid FROM 
     GenomicIntersection as a
     INNER JOIN GenomicConsequence as b
@@ -769,7 +765,7 @@ class PDBMapIO(PDBIO):
     ON a.pdbid=c.pdbid AND a.chain=c.chain AND a.seqid=c.seqid
     INNER JOIN Chain as d
     ON c.pdbid=d.pdbid AND c.chain=d.chain
-    WHERE b.label=%s AND d.unp=%s;"""
+    WHERE b.label=%s AND c.label=%s AND d.unp=%s;"""
 
 aa_code_map = {"ala" : "A",
         "arg" : "R",
