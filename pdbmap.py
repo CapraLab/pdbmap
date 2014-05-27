@@ -260,7 +260,7 @@ class PDBMap():
     io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,
                             slabel=struct_label,dlabel=data_label)
     v  = PDBMapVisualize(io,args.pdb_dir,args.modbase_dir)
-    entity_type = io.detect_entity_type(entity)
+    entity_type = io.detect_entity_type(entity) if not entity='all' else 'all'
     if entity_type in ['structure','model'] and not biounits:
       # Query all biological assemblies, exclude the asymmetric unit
       query = "SELECT DISTINCT biounit FROM Chain WHERE pdbid=%s AND biounit>0"
@@ -275,6 +275,8 @@ class PDBMap():
           v.visualize_model(entity,biounit,anno_list,spectrum_range)
       elif entity_type == 'unp':
         v.visualize_unp(entity,anno_list,spectrum_range)
+      elif entity_type == 'all':
+        v.visualize_all(anno_list,spectrum_range)
       else:
         msg = "Sorry, but the specified entity is not in the PDBMap database.\n"
         sys.stderr.write(msg)

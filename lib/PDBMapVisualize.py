@@ -162,7 +162,7 @@ class PDBMapVisualize():
     res_list  = self.io.load_unp(unpid)
     # Query all biological assemblies
     query = "SELECT DISTINCT biounit FROM Chain WHERE pdbid=%s"
-    res   = self.io.secure_query(query,(entity),cursorclass=Cursor)
+    res   = self.io.secure_query(query,(entity),cursorclass='Cursor')
     biounits = [r[0] for r in res]
     # Visualize for each biological assembly
     for entity_type,entity in res_list:
@@ -175,6 +175,26 @@ class PDBMapVisualize():
       else:
         msg = "ERROR (PDBMapVisualize) Invalid entity_type for %s: %s"%(entity,entity_type)
         raise Exception(msg)
+
+  def visualize_all(self,anno_list=['maf'],spectrum_range=None):
+    """ Visualize all structures and models for the annotated dataset """
+    query = "SELECT DISTINCT pdbid FROM GenomicIntersection WHERE label=%s"
+    res   = self.io.secure_query(query,(self.dlabel,),cursorclass='Cursor')
+    structures = [r[0] for r in res if io.detect_entity_type(r[0]) == 'structure']
+    for s in structures:
+      query = "SELECT DISTINCT biounit FROM Chain WHERE pdbid=%s"
+      res   = self.io.secure_query(query,(s),cursorclass='Cursor')
+      biounits = [r[0] for r in res]
+      for b in biounits:
+        self.visualize_structure(s,b,anno_list,spectrum_range,group='all')
+    models = [r[0] for r in res if io.detect_entity_type(r[0]) == 'model']
+    for m in models:
+      query = "SELECT DISTINCT biounit FROM Chain WHERE pdbid=%s"
+      res   = self.io.secure_query(query,(m),cursorclass='Cursor')
+      biounits = [r[0] for r in res]
+      for b in biounits:
+        self.visualize_model(m,b,anno_list,spectrum_range,group='all')
+
 
   def visualize(self,params,group=None):
     # Visualize with PyMol
