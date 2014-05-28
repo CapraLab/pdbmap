@@ -425,6 +425,8 @@ if __name__ == '__main__':
   if len(params['resis']) < 2 or params['minval'] == params['maxval']:
     for resi in params['resis']:
       rc("color red,a %s@ca"%resi[0])
+  elif params['minval'] > params['maxval']:
+    rc("rangecolor %(anno)s,a %(minval)0.6f red %(maxval)0.6f blue"%params)
   else:
     rc("rangecolor %(anno)s,a %(minval)0.6f blue %(maxval)0.6f red"%params)
   # Orient the image
