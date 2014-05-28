@@ -41,11 +41,11 @@ class PDBMapVisualize():
     cols.extend(anno_list)
     timestamp = str(time.strftime("%Y%m%d-%H"))
     params = {'structid':pdbid,'biounit':biounit,'annos':'-'.join(anno_list)}
-    res_dir = 'results/pdbmap_%s_%s'
+    res_dir = 'results/pdbmap_%s_%s_%s'
     if group:
-      res_dir = res_dir%(group,timestamp)
+      res_dir = res_dir%(self.io.dlabel,group,timestamp)
     else:
-      res_dir = res_dir%(params['structid'],timestamp)
+      res_dir = res_dir%(self.io.dlabel,params['structid'],timestamp)
     params['res_dir'] = res_dir
     if not os.path.exists(res_dir):
       os.system('mkdir -p %(res_dir)s'%params)
@@ -82,7 +82,7 @@ class PDBMapVisualize():
         for row in out:
           # #0.model:resi.chain value [value ...]
           value = -1 if row[-1] is None else float(row[-1])
-          fout.write("\t#0.%d:%d.%s\t%s\n"%(tuple(row)))
+          fout.write("\t#0.%d:%d.%s\t%0.6f\n"%(tuple(row)))
           if -1 < value < minval: minval=value
           if value > maxval: maxval=value
       minval,maxval = (minval,maxval) if not spectrum_range else spectrum_range[a]
@@ -113,11 +113,11 @@ class PDBMapVisualize():
     cols.extend(anno_list)
     timestamp = str(time.strftime("%Y%m%d-%H"))
     params = {'structid':modelid,'biounit':biounit}
-    res_dir = 'results/pdbmap_%s_%s'
+    res_dir = 'results/pdbmap_%s_%s_%s'
     if group:
-      res_dir = res_dir%(group,timestamp)
+      res_dir = res_dir%(self.io.dlabel,group,timestamp)
     else:
-      res_dir = res_dir%(params['structid'],timestamp)
+      res_dir = res_dir%(self.io.dlabel,params['structid'],timestamp)
     params['res_dir'] = res_dir
     if not os.path.exists(res_dir):
       os.system('mkdir -p %(res_dir)s'%params)
@@ -212,11 +212,11 @@ class PDBMapVisualize():
   def visualize(self,params,group=None):
     # Visualize with PyMol
     timestamp = str(time.strftime("%Y%m%d-%H"))
-    res_dir = 'results/pdbmap_%s_%s'
+    res_dir = 'results/pdbmap_%s_%s_%s'
     if group:
-      res_dir = res_dir%(group,timestamp)
+      res_dir = res_dir%(self.io.dlabel,group,timestamp)
     else:
-      res_dir = res_dir%(params['structid'],timestamp)
+      res_dir = res_dir%(self.io.dlabel,params['structid'],timestamp)
     params['res_dir'] = res_dir
     if not os.path.exists(res_dir):
       os.system('mkdir -p %s'%res_dir)

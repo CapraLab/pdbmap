@@ -731,6 +731,31 @@ class PDBMapIO(PDBIO):
       raise
 
   # Query definitions
+  full_annotation_query = """SELECT
+    /*LABELS*/a.label,c.label,
+    /*STRUCTURE*/s.pdbid,s.method,
+    /*MODEL*/m.modelid,m.method,m.pdbid as template,
+    /*CHAIN*/g.biounit,g.model,g.chain,g.unp,g.hybrid,
+    /*RESIDUE*/a.seqid,a.resname,a.rescode,a.x,a.y,a.z,
+    /*VARIANT*/d.chr,d.start,d.end,d.name,d.variation,d.vtype,d.ref_allele,d.alt_allele,d.maf,d.amr_af,d.asn_af,d.afr_af,d.eur_af,
+    /*CONSEQUENCE*/c.transcript,c.protein_pos,c.consequence,c.ref_amino_acid,c.alt_amino_acid,c.ref_codon,c.alt_codon,c.sift,c.polyphen,c.biotype,c.domains
+    FROM Residue as a
+    INNER JOIN GenomicIntersection as b
+    ON a.pdbid=b.pdbid AND a.chain=b.chain AND a.seqid=b.seqid
+    INNER JOIN GenomicConsequence as c
+    ON b.gc_id=c.gc_id
+    INNER JOIN GenomicData as d
+    ON c.label=d.label AND c.chr=d.chr AND c.start=d.start AND c.end=d.end AND c.name=d.name
+    INNER JOIN Chain as g
+    ON a.pdbid=g.pdbid AND a.biounit=g.biounit AND a.model=g.model AND a.chain=g.chain AND a.label=g.label
+    LEFT JOIN Structure as s
+    ON a.pdbid=s.pdbid AND a.label=s.label
+    LEFT JOIN Model as m
+    ON a.pdbid=m.modelid AND a.label=m.label
+    WHERE c.consequence LIKE '%%%%missense_variant%%%%' AND
+    a.label=%%s AND c.label=%%s AND a.pdbid=%%s
+    ORDER BY g.pdbid,g.biounit,g.model,a.chain,a.seqid;
+    """
   structure_query = """SELECT
     g.model,g.chain,a.seqid,d.*,c.*%s
     FROM Residue as a
