@@ -743,7 +743,7 @@ class PDBMapIO(PDBIO):
     INNER JOIN Chain as g
     ON a.label=g.label AND a.pdbid=g.pdbid AND a.biounit=g.biounit AND a.model=g.model AND a.chain=g.chain%s
     WHERE c.consequence LIKE '%%%%missense_variant%%%%' AND
-    a.label=%%s AND c.label=%%s AND a.pdbid=%s AND a.biounit=%%s;"""
+    a.label=%%s AND c.label=%%s AND a.pdbid=%%s AND a.biounit=%%s;"""
   model_query = """SELECT
     g.model,a.seqid,d.*,c.*%s
     FROM Residue as a

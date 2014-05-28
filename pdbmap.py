@@ -255,7 +255,7 @@ class PDBMap():
     return nrows # Return the number of kept variants
 
   def visualize(self,entity,biounits=[],struct_label='uniprot-pdb',
-                data_label='1kg',anno_list=['maf'],spectrum_range=None):
+                data_label='1kg',anno_list=['maf'],spectrum_range=[]):
     """ Visualizes a PDBMap structure, model, or protein """
     io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,
                             slabel=struct_label,dlabel=data_label)
@@ -527,10 +527,12 @@ if __name__== "__main__":
       biounits = args.args[3].split(',')
     else:
       biounits = []
-    spectrum_range = None
+    spectrum_range = []
     if len(args.args) > 4:
-      spectrum_range = [tuple(p.split(':')) for p in args.args[3].split(',')]
-    print "## Visualizing (%s) %s[%s]+%s.%s"%(struct_label,entity,','.join(biounits),data_label,','.join(anno_list))
+      spectrum_range = [tuple([float(x) for x in p.split(':')]) for p in args.args[4].split(',')]
+    print "## Visualizing (%s) %s[%s]+%s.%s"%(struct_label,
+          entity,','.join(biounits),data_label,','.join(anno_list)),
+    print ','.join(["(%0.2f..%0.2f)"%r for r in spectrum_range])
     pdbmap.visualize(entity,biounits,struct_label,data_label,anno_list,spectrum_range)
 
   ## stats ##

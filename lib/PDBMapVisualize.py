@@ -26,7 +26,7 @@ class PDBMapVisualize():
     self.pdb_dir = pdb_dir
     self.modbase_dir = modbase_dir
 
-  def visualize_structure(self,pdbid,biounit=0,anno_list=['maf'],spectrum_range=None,group=None):
+  def visualize_structure(self,pdbid,biounit=0,anno_list=['maf'],spectrum_range=[],group=None):
     """ Visualize the annotated dataset within a structure """
     pdbid = pdbid.lower()
     res  = self.io.load_structure(pdbid,biounit)
@@ -63,7 +63,7 @@ class PDBMapVisualize():
       res['model'] = [0 for m in res['model']]
 
     # Visualize individual annotations
-    for anno in anno_list:
+    for a,anno in enumerate(anno_list):
       if anno not in res:
         msg = "ERROR (PDBMapVisualize) Unknown feature %s\n"%anno
         sys.stderr.write(msg)
@@ -71,7 +71,7 @@ class PDBMapVisualize():
       cols = ['model','seqid','chain',anno]
       out  = [res[col] for col in cols if res[anno]]   # Extract columns as rows
       out  = [list(i) for i in zip(*out)] # Transpose back to columns
-      minval,maxval = (999,-999) if not spectrum_range else spectrum_range
+      minval,maxval = (999,-999)
       tempf = "temp/%d.TEMP"%multidigit_rand(10)
       # Write the mappings to a temp file
       with open(tempf,'w') as fout:
@@ -85,7 +85,7 @@ class PDBMapVisualize():
           fout.write("\t#0.%d:%d.%s\t%s\n"%(tuple(row)))
           if -1 < value < minval: minval=value
           if value > maxval: maxval=value
-      minval,maxval = spectrum_range if spectrum_range else (minval,maxval)
+      minval,maxval = (minval,maxval) if not spectrum_range else spectrum_range[a]
       # Locate the asymmetric unit or biological assembly
       if biounit < 1:
         struct_loc = "%s/structures/all/pdb/pdb%s.ent.gz"%(self.pdb_dir,pdbid)
@@ -95,7 +95,7 @@ class PDBMapVisualize():
                 'minval':minval,'maxval':maxval,'resis':out,'struct_loc':struct_loc}
       self.visualize(params,group=group)
 
-  def visualize_model(self,modelid,biounit=0,anno_list=['maf'],spectrum_range=None,group=None):
+  def visualize_model(self,modelid,biounit=0,anno_list=['maf'],spectrum_range=[],group=None):
     """ Visualize the annotated dataset within a model """
     res  = self.io.load_model(modelid)
     for anno in anno_list:
@@ -135,7 +135,7 @@ class PDBMapVisualize():
       res['model'] = [0 for m in res['model']]
 
     # Visualize individual annotations
-    for anno in anno_list:
+    for a,anno in enumerate(anno_list):
       if anno not in res:
         msg = "ERROR (PDBMapVisualize) Unknown feature %s\n"%anno
         sys.stderr.write(msg)
@@ -156,7 +156,7 @@ class PDBMapVisualize():
           fout.write("\t#0.%d:%d\t%0.6f\n"%(tuple(row)))
           if row[-1] and float(row[-1]) < minval: minval=float(row[-1])
           if row[-1] and float(row[-1]) > maxval: maxval=float(row[-1])
-      minval,maxval = spectrum_range if spectrum_range else (minval,maxval)
+      minval,maxval = (minval,maxval) if not spectrum_range else spectrum_range[a]
       if minval > maxval:
         continue # All values are NULL, ignore annotation
       params = {'structid':modelid,'biounit':biounit,'anno':anno,'tempf':tempf,
@@ -164,7 +164,7 @@ class PDBMapVisualize():
                 'struct_loc':"%s/models/model/%s.pdb.gz"%(self.modbase_dir,modelid)}
       self.visualize(params,group=group)
 
-  def visualize_unp(self,unpid,anno_list=['maf'],spectrum_range=None):
+  def visualize_unp(self,unpid,anno_list=['maf'],spectrum_range=[]):
     """ Visualize the annotated dataset associated with a protein """
     res_list  = self.io.load_unp(unpid)
     # Visualize for each biological assembly
@@ -187,25 +187,24 @@ class PDBMapVisualize():
         msg = "ERROR (PDBMapVisualize) Invalid entity_type for %s: %s"%(entity,entity_type)
         raise Exception(msg)
 
-  def visualize_all(self,anno_list=['maf'],spectrum_range=None):
+  def visualize_all(self,anno_list=['maf'],spectrum_range=[]):
     """ Visualize all structures and models for the annotated dataset """
     query = "SELECT DISTINCT pdbid FROM GenomicIntersection WHERE label=%s"
     res   = [r for r in self.io.secure_query(query,(self.io.dlabel,),cursorclass='Cursor')]
-    for r in res:
-      print self.io.detect_entity_type(r[0])
     structures = [r[0] for r in res if self.io.detect_entity_type(r[0]) == 'structure']
+    # if False:
     for s in structures:
       query = "SELECT DISTINCT biounit FROM Chain WHERE pdbid=%s"
-      res   = self.io.secure_query(query,(s,),cursorclass='Cursor')
-      biounits = [r[0] for r in res]
+      bres   = self.io.secure_query(query,(s,),cursorclass='Cursor')
+      biounits = [r[0] for r in bres]
       for b in biounits:
         print "Visualizing %s.%s"%(s,b)
         self.visualize_structure(s,b,anno_list,spectrum_range,group='all')
     models = [r[0] for r in res if self.io.detect_entity_type(r[0]) == 'model']
     for m in models:
       query = "SELECT DISTINCT biounit FROM Chain WHERE pdbid=%s"
-      res   = self.io.secure_query(query,(m,),cursorclass='Cursor')
-      biounits = [r[0] for r in res]
+      bres   = self.io.secure_query(query,(m,),cursorclass='Cursor')
+      biounits = [r[0] for r in bres]
       for b in biounits:
         print "Visualizing %s.%s"%(m,b)
         self.visualize_model(m,b,anno_list,spectrum_range,group='all')
