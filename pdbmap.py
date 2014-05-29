@@ -295,15 +295,20 @@ class PDBMap():
     if self.pdb_dir:
       get_pdb       = "%s/get_pdb.sh"%os.path.realpath(self.pdb_dir)
       os.system(get_pdb)
-    if self.modbase_dir:
-      get_modbase   = "%s/get_modbase.sh"%os.path.realpath(self.modbase_dir)
-      os.system(get_modbase)
+    # ModBase does not update in the same way as other resources
+    # if self.modbase_dir:
+    #   get_modbase   = "%s/get_modbase.sh"%os.path.realpath(self.modbase_dir)
+    #   os.system(get_modbase)
+    if self.sprot:
+      get_sprot     = "%s/get_swissprot.sh"%os.path.realpath(self.sprot)
+      os.system(get_sprot)
     if self.idmapping:
       get_idmapping = "%s/get_idmapping.sh"%os.path.realpath(self.idmapping)
       os.system(get_idmapping)
-    if self.sec2prim:
-      get_sec2prim  = "%s/get_sec2prim.sh"%os.path.realpath(self.sec2prim)
-      os.system(get_sec2prim)
+    # Refreshed by get_idmapping.sh
+    # if self.sec2prim:
+    #   get_sec2prim  = "%s/get_sec2prim.sh"%os.path.realpath(self.sec2prim)
+    #   os.system(get_sec2prim)
 
 ## Copied from biolearn
 def multidigit_rand(digits):
@@ -413,10 +418,15 @@ if __name__== "__main__":
   args.cores = int(args.cores)
   if args.create_new_db and not args.force:
     print "You have opted to create a new database."
-    print "This will overwrite any existing database by the same name."
     if raw_input("Are you sure you want to do this? (y/n):") == 'n':
       print "Aborting..."
       sys.exit(0)
+    else:
+      io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,
+                            args.dbpass,args.dbname)
+      io.check_schema()
+      print "Databases created. Please set create_new_db to False."
+      sys.exit(1)
 
   # Initialize PDBMap, refresh mirrored data if specified
   if args.cmd=="refresh":
@@ -425,6 +435,8 @@ if __name__== "__main__":
                     modbase_dir=args.modbase_dir,
                     modbase_summary=args.modbase_summary)
     pdbmap.refresh_mirrors()
+    print "Refresh complete."
+    sys.exit(1)
 
   ## load_pdb ##
   elif args.cmd == "load_pdb":
@@ -549,11 +561,13 @@ if __name__== "__main__":
     msg += "       : (PDBMap) This is a debug command for intersection dev.\n"
     sys.stderr.write(msg)
     dname = args.args[0] # Get the dataset name
-    nrows = int(args.args[1]) if len(args.args) > 1 else 501
+    sname = None if len(args.args) < 2 else args.args[1]
+    if sname == 'all': sname = None
+    nrows = 501 if len(args.args) < 3 else int(args.args[2])
     print "## Intersecting %s with PDBMap ##"%dname
     quick = True if nrows < 500 else False
     print [" # (This may take a while) #"," # Using quick-intersect #"][int(quick)]
-    nrows = pdbmap.intersect_data(dname,quick=quick)
+    nrows = pdbmap.intersect_data(dname,sname=sname,quick=quick)
     print " # %d intersection rows uploaded."%nrows
 
   ## filter ##

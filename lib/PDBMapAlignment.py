@@ -20,15 +20,41 @@ from Bio.SubsMat import MatrixInfo as matlist
 
 class PDBMapAlignment():
 
-  def __init__(self,chain,transcript):
+  def __init__(self,chain,transcript,io=None):
     """ Alignment of PDBMapStructure chain to PDBMapAlignment """
     self.chain      = chain
     self.transcript = transcript
     self.alignment,self.aln_string,self.score,self.perc_aligned,self.perc_identity \
-                    = self.align(chain,transcript)
+                    = self.align(chain,transcript,io=io)
 
-  def align(self,chain,transcript):
+  def align(self,chain,transcript,io=None):
     """ Aligns one chain of a PDBMapStructure to a PDBMapAlignment """
+
+    # Generate chain sequence (may contain gaps)
+    c_end   = max([r.seqid for r in chain.get_residues()])
+    c_seq = ['-' for i in range(c_end+1)]
+    for r in chain.get_residues():
+        c_seq[r.seqid] = r.rescode
+    # Generate transcript/protein sequence
+    t_seq = ''.join([r[0] for r in transcript.sequence.itervalues()])
+    t_seq = '-%s'%t_seq # match 1-indexing with c_seq
+
+    # If an io object was provided, first check for SIFTS alignment
+    if io:
+        q  = "SELECT pdb_seqid,sp_seqid,sp FROM sifts WHERE pdbid=%s "
+        q += "AND chain=%s AND sp=%s ORDER BY pdb_seqid"
+        res = io.secure_query(q,
+            (chain.get_parent().get_parent().id,chain.id,transcript.protein),
+            cursorclass='Cursor')
+        res = [r for r in res] # convert generator to list
+        if len(res) > 0:
+            # A SIFTS alignment is available
+            alignment  = dict((r[0],r[1]) for r in res)
+            aln_string = "%s\n%s"%(''.join([c_seq[r[0]] for r in res]),''.join([t_seq[r[1]] for r in res]))
+            print aln_string
+            score,perc_aligned,perc_identity = (0,1,1)
+            return alignment,aln_string,score,perc_aligned,perc_identity
+
     # Determine start indices
     c_start = min([r.seqid for r in chain.get_residues()])
     t_start = min(transcript.sequence.keys())

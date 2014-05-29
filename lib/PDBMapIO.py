@@ -357,7 +357,6 @@ class PDBMapIO(PDBIO):
       sys.stderr.write(msg)
       return(1)
     # Upload entire structure (structure, chains, residues)
-    self._connect()
     queries = []
     s = self.structure
 
@@ -413,11 +412,12 @@ class PDBMapIO(PDBIO):
     # Upload the transcripts
     try:
       tquery = "INSERT IGNORE INTO Transcript VALUES "
-      if not len(s.get_transcripts()):
+      if not len(s.get_transcripts(io=self)):
         raise Exception("No transcripts for structure %s"%s.id)
-      for t in s.get_transcripts():
+      for t in s.get_transcripts(io=self):
         for seqid,(rescode,chr,start,end,strand) in t.sequence.iteritems():
-          tquery += '("%s","%s","%s",'%(self.slabel,t.transcript,t.gene)
+          # tquery += '("%s","%s","%s",'%(self.slabel,t.transcript,t.gene)
+          tquery += '("%s","%s","%s","%s",'%(self.slabel,t.transcript,t.protein,t.gene)
           tquery += '%d,"%s",'%(seqid,rescode)
           tquery += '"%s",%d,%d,%d),'%(chr,start,end,strand)
       queries.append(tquery[:-1])
@@ -444,7 +444,8 @@ class PDBMapIO(PDBIO):
 
     # Execute all queries at once to ensure everything completed.
     try:
-      for q in queries:
+      self._connect()
+      for q in queries[::-1]:
         self._c.execute(q)
     except:
       msg  = "ERROR (PDBMapIO) Query failed for %s: "%s.id
@@ -463,7 +464,6 @@ class PDBMapIO(PDBIO):
       msg += "already in database.\n"
       sys.stderr.write(msg)
       return(1)
-    self._connect()
 
     # Upload the Model summary information
     mquery  = 'INSERT IGNORE INTO Model VALUES ('
@@ -475,6 +475,7 @@ class PDBMapIO(PDBIO):
     mfields["label"] = self.slabel
     mquery = mquery%mfields
     # Execute upload query
+    self._connect()
     self._c.execute(mquery)
     self._c.close()
     # Pass the underlying PDBMapStructure to upload_structure

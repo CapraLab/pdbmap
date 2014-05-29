@@ -84,7 +84,7 @@ class PDBMapTranscript():
       if line.startswith('#'): continue
       fields = line.split('\t')
       transcript = fields[0]
-      protein    = PDBMapProtein.ensp2unp(fields[1])
+      protein    = PDBMapProtein.ensp2unp(fields[1])[0]
       gene       = fields[2]
       seqid      = int(fields[3])
       rescode    = fields[4].upper()

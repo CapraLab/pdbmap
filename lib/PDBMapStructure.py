@@ -44,7 +44,7 @@ class PDBMapStructure(Structure):
     else:
       return result
 
-  def get_transcripts(self):
+  def get_transcripts(self,io=None):
     # Retrieve the corresponding transcript for each chain
     if self.transcripts:
       return self.transcripts
@@ -53,17 +53,13 @@ class PDBMapStructure(Structure):
       candidate_transcripts = PDBMapTranscript.query_from_unp(chain.unp)
       if len(candidate_transcripts) < 1:
         return []
-      # Align chain to first candidate transcript
-      alignments = [PDBMapAlignment(chain,candidate_transcripts[0])]
-      # Repeat for remaining chains, select highest scoring alignment
-      for trans in candidate_transcripts[1:]:
-        new_alignment = PDBMapAlignment(chain,trans)
+      # Align chains candidate transcripts
+      alignments = []
+      for trans in candidate_transcripts:
+        alignment = PDBMapAlignment(chain,trans,io=io)
         # Exclude alignments with <50% identity, likely bad matches
-        if new_alignment.perc_identity > 0.5:
-          alignments.append(new_alignment)
-        # Determine best alignment
-        # if new_alignment.score > alignment.score:
-        #   alignment = new_alignment
+        if alignment.perc_identity > 0.5:
+          alignments.append(alignment)
       # Store best transcript alignment as element of chain
       chain.alignments  = alignments
       chain.transcripts = [a.transcript for a in alignments]
