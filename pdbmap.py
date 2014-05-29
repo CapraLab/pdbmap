@@ -293,22 +293,22 @@ class PDBMap():
   def refresh_mirrors(self,idmapping=None,sprot=None,sec2prim=None,
                 pdb_dir=None,modbase_dir=None):
     """ Refreshes all mirrored data """
+    if sprot:
+      script_path   = os.path.dirname(os.path.realpath(sprot))
+      get_sprot     = "cd %s; %s/get_swissprot.sh"%(script_path,script_path)
+      os.system(get_sprot)
+    if idmapping:
+      script_path   = os.path.dirname(os.path.realpath(idmapping))
+      get_idmapping = "cd %s; %s/get_idmapping.sh"%(script_path,script_path)
+      os.system(get_idmapping)
     if pdb_dir:
-      script_path   = os.path.realpath(self.pdb_dir)
+      script_path   = os.path.realpath(pdb_dir)
       get_pdb       = "cd %s; %s/get_pdb.sh"%(script_path,script_path)
       os.system(get_pdb)
     # ModBase does not update in the same way as other resources
     # if self.modbase_dir:
     #   get_modbase   = "%s/get_modbase.sh"%os.path.realpath(self.modbase_dir)
     #   os.system(get_modbase)
-    if sprot:
-      script_path   = os.path.realpath(self.sprot)
-      get_sprot     = "cd %s; %s/get_swissprot.sh"%(script_path,script_path)
-      os.system(get_sprot)
-    if idmapping:
-      script_path   = os.path.realpath(self.idmapping)
-      get_idmapping = "cd %s; %s/get_idmapping.sh"%(script_path,script_path)
-      os.system(get_idmapping)
     # Refreshed by get_idmapping.sh
     # if self.sec2prim:
     #   get_sec2prim  = "%s/get_sec2prim.sh"%os.path.realpath(self.sec2prim)
