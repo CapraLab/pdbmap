@@ -293,17 +293,20 @@ class PDBMap():
   def refresh_mirrors(self):
     """ Refreshes all mirrored data """
     if self.pdb_dir:
-      get_pdb       = "%s/get_pdb.sh"%os.path.realpath(self.pdb_dir)
+      script_path   = os.path.realpath(self.pdb_dir)
+      get_pdb       = "cd %s; %s/get_pdb.sh"%(script_path,script_path)
       os.system(get_pdb)
     # ModBase does not update in the same way as other resources
     # if self.modbase_dir:
     #   get_modbase   = "%s/get_modbase.sh"%os.path.realpath(self.modbase_dir)
     #   os.system(get_modbase)
     if self.sprot:
-      get_sprot     = "%s/get_swissprot.sh"%os.path.realpath(self.sprot)
+      script_path   = os.path.realpath(self.sprot)
+      get_sprot     = "cd %s; %s/get_swissprot.sh"%(script_path,script_path)
       os.system(get_sprot)
     if self.idmapping:
-      get_idmapping = "%s/get_idmapping.sh"%os.path.realpath(self.idmapping)
+      script_path   = os.path.realpath(self.idmapping)
+      get_idmapping = "cd %s; %s/get_idmapping.sh"%(script_path,script_path)
       os.system(get_idmapping)
     # Refreshed by get_idmapping.sh
     # if self.sec2prim:
