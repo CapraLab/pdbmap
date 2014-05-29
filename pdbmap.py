@@ -290,9 +290,10 @@ class PDBMap():
     """ Returns summary statistics for the PDBMap database """
     print "Basic summary statistics for PDBMap. Not implemented."
 
-  def refresh_mirrors(self):
+  def refresh_mirrors(self,idmapping=None,sprot=None,sec2prim=None,
+                pdb_dir=None,modbase_dir=None):
     """ Refreshes all mirrored data """
-    if self.pdb_dir:
+    if pdb_dir:
       script_path   = os.path.realpath(self.pdb_dir)
       get_pdb       = "cd %s; %s/get_pdb.sh"%(script_path,script_path)
       os.system(get_pdb)
@@ -300,11 +301,11 @@ class PDBMap():
     # if self.modbase_dir:
     #   get_modbase   = "%s/get_modbase.sh"%os.path.realpath(self.modbase_dir)
     #   os.system(get_modbase)
-    if self.sprot:
+    if sprot:
       script_path   = os.path.realpath(self.sprot)
       get_sprot     = "cd %s; %s/get_swissprot.sh"%(script_path,script_path)
       os.system(get_sprot)
-    if self.idmapping:
+    if idmapping:
       script_path   = os.path.realpath(self.idmapping)
       get_idmapping = "cd %s; %s/get_idmapping.sh"%(script_path,script_path)
       os.system(get_idmapping)
@@ -437,7 +438,8 @@ if __name__== "__main__":
                     sprot=args.sprot,pdb_dir=args.pdb_dir,
                     modbase_dir=args.modbase_dir,
                     modbase_summary=args.modbase_summary)
-    pdbmap.refresh_mirrors()
+    pdbmap.refresh_mirrors(idmapping=args.idmapping,pdb_dir=args.pdb_dir,
+                            sprot=args.sprot,modbase_dir=args.modbase_dir)
     print "Refresh complete."
     sys.exit(1)
 

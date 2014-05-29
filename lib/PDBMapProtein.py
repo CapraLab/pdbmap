@@ -18,6 +18,13 @@
 import sys,csv
 
 class PDBMapProtein():
+
+  _refseq2unp = {}
+  _unp2pdb = {}
+  _unp2ensembltrans = {}
+  _unp2ensp = {}
+  _ensp2unp = {}
+
   def __init__(self):
     msg = "ERROR: (PDBMapProtein) This class should not be instantiated."
     raise Exception(msg)
@@ -50,12 +57,6 @@ class PDBMapProtein():
   @classmethod
   def load_idmapping(cls,idmapping_fname):
     # Load UniProt crossreferences, keyed on UniProt
-    PDBMapProtein._refseq2unp = {}
-    PDBMapProtein._unp2pdb = {}
-    PDBMapProtein._unp2ensembltrans = {}
-    PDBMapProtein._unp2ensp = {}
-    PDBMapProtein._ensp2unp = {}
-
     with open(idmapping_fname) as fin:
       reader = csv.reader(fin,delimiter='\t')
       for (unp,refseqlist,pdblist,translist,protlist) in reader:
@@ -63,8 +64,6 @@ class PDBMapProtein():
         protlist   = [] if not protlist else protlist.strip().split('; ')
         translist  = [] if not translist else translist.strip().split('; ')
         refseqlist = [] if not refseqlist else refseqlist.strip().split('; ')
-        # if "ENSP00000383973" in protlist:
-        #   print unp,refseqlist,pdblist,translist,protlist
         ## Map UniProt IDs to Ensembl Transcript IDs
         if not translist:
           continue # Don't consider UniProt IDs without transcript-mapping
@@ -85,13 +84,9 @@ class PDBMapProtein():
         ## Map Ensembl Protein IDs to UniProt IDs
         for ensp in protlist:
           if ensp in PDBMapProtein._ensp2unp:
-            # if "ENSP00000383973" in protlist: print "subsequent: %s: %s"%(ensp,unp)
             PDBMapProtein._ensp2unp[ensp].append(unp)
           else:
-            # if "ENSP00000383973" in protlist: print "first: %s: %s"%(ensp,unp)
             PDBMapProtein._ensp2unp[ensp] = [unp]
-        # if "ENSP00000383973" in protlist:
-        #   print PDBMapProtein._ensp2unp[ensp]
         ## Map RefSeq IDs to UniProt IDs (Reverse lookup)
         for refseq in refseqlist:
           if refseq in PDBMapProtein._refseq2unp:
