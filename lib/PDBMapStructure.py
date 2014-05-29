@@ -53,13 +53,14 @@ class PDBMapStructure(Structure):
       candidate_transcripts = PDBMapTranscript.query_from_unp(chain.unp)
       if len(candidate_transcripts) < 1:
         return []
-      #UPDATE: Keep all transcript matches
       # Align chain to first candidate transcript
       alignments = [PDBMapAlignment(chain,candidate_transcripts[0])]
       # Repeat for remaining chains, select highest scoring alignment
       for trans in candidate_transcripts[1:]:
         new_alignment = PDBMapAlignment(chain,trans)
-        alignments.append(new_alignment)
+        # Exclude alignments with <50% identity, likely bad matches
+        if new_alignment.perc_identity > 0.5:
+          alignments.append(new_alignment)
         # Determine best alignment
         # if new_alignment.score > alignment.score:
         #   alignment = new_alignment

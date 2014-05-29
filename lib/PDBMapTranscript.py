@@ -22,9 +22,10 @@ class PDBMapTranscript():
   trans_cache = {}
   CACHE_ACCESS_MIN = 25
 
-  def __init__(self,transcript,gene,sequence):
+  def __init__(self,transcript,protein,gene,sequence):
     # Define transcript, gene, and sequence
     self.transcript = transcript
+    self.protein    = protein
     self.gene       = gene
     # Sequence | key:   seqid
     # Sequence | value: (rescode,chr,start,end,strand)
@@ -83,20 +84,24 @@ class PDBMapTranscript():
       if line.startswith('#'): continue
       fields = line.split('\t')
       transcript = fields[0]
-      gene       = fields[1]
-      seqid      = int(fields[2])
-      rescode    = fields[3]
+      protein    = PDBMapProtein.ensp2unp(fields[1])
+      gene       = fields[2]
+      seqid      = int(fields[3])
+      rescode    = fields[4].upper()
+      print rescode,
       if rescode not in aa_code_map.values():
         msg = "Replacing non-standard amino acid: %s[%d]->%s with %s\n"%(transid,seqid,rescode,'S')
         sys.stderr.write(msg)
         rescode  = 'S' # replace non-standard amino acids with Serine
-      start      = int(fields[4])
-      end        = int(fields[5])
-      chr        = fields[6]
-      strand     = int(fields[7])
+      start      = int(fields[5])
+      end        = int(fields[6])
+      chr        = fields[7]
+      strand     = int(fields[8])
       sequence[seqid] = (rescode,chr,start,end,strand)
+    #FIXME
+    print ''
     # Return a new PDBMapTranscript object
-    trans = PDBMapTranscript(transcript,gene,sequence)
+    trans = PDBMapTranscript(transcript,protein,gene,sequence)
     PDBMapTranscript.cache_transcript(transid,trans)
     return trans
 

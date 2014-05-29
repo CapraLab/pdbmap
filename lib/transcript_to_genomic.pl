@@ -30,6 +30,7 @@ my $s_name = $slice->seq_region_name();
 my $s_start = $slice->start();
 my $s_end = $slice->end();
 my $translation = $transcript->translate();
+my $p_stable_id = $transcript->translation()->stable_id();
 if (!defined $translation) {
 	print STDERR "No translation for $transcript_id at $s_name:$s_start-$s_end\n";
 	exit 1;
@@ -47,5 +48,5 @@ for ($i=1; $i<=$peplength; $i++) {
 	if ($q_start < $s_start or $q_end > $s_end) {next;}
 	# Pull the rescode from the peptide sequence
 	my $amino_acid = substr($peptide,$pep_index-1,1);
-	print "$t_stable_id\t$g_stable_id\t$pep_index\t$amino_acid\t$q_start\t$q_end\tchr$s_name\t$q_strand\n";
+	print "$t_stable_id\t$p_stable_id\t$g_stable_id\t$pep_index\t$amino_acid\t$q_start\t$q_end\tchr$s_name\t$q_strand\n";
 }
