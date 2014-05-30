@@ -56,11 +56,6 @@ class PDBMapAlignment():
         if len(res) > 0:
             # A SIFTS alignment is available
             alignment  = dict((r[0],r[1]) for r in res)
-            print len(c_seq),len(t_seq)
-            for r in res:
-                print r[0],r[1]
-                c_seq[r[0]]
-                t_seq[r[1]]
             aln_string = "%s\n%s"%(''.join([c_seq[r[0]] for r in res]),''.join([t_seq[r[1]] for r in res]))
             score,perc_aligned,perc_identity = (0,1,1)
             return alignment,aln_string,score,perc_aligned,perc_identity
