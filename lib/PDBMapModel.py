@@ -95,7 +95,8 @@ class PDBMapModel(Structure):
     else:
       return result
 
-  def get_transcripts(self):
+  def get_transcripts(self,io=None):
+    # io is an used parameter required for polymorphic behavior
     # Retrieve the corresponding transcript for each chain
     if self.transcripts:
       return self.transcripts

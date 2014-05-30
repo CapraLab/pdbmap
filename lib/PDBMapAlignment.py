@@ -24,15 +24,21 @@ class PDBMapAlignment():
     """ Alignment of PDBMapStructure chain to PDBMapAlignment """
     self.chain      = chain
     self.transcript = transcript
-    self.alignment,self.aln_string,self.score,self.perc_aligned,self.perc_identity \
+    try:
+        self.alignment,self.aln_string,self.score,self.perc_aligned,self.perc_identity \
                     = self.align(chain,transcript,io=io)
+    except Exception as e:
+        msg = "ERROR (PDBMapAlignment) Error aligning %s to %s: %s\n"%(
+                chain.id,transcript.transcript,str(e))
+        sys.stderr.write(msg)
+        raise
 
   def align(self,chain,transcript,io=None):
     """ Aligns one chain of a PDBMapStructure to a PDBMapAlignment """
 
     # Generate chain sequence (may contain gaps)
-    c_end   = max([r.seqid for r in chain.get_residues()])
-    c_seq = ['-' for i in range(c_end+1)]
+    c_end = max([r.seqid for r in chain.get_residues()])
+    c_seq = ['-' for i in range(c_end+2)]
     for r in chain.get_residues():
         c_seq[r.seqid] = r.rescode
     # Generate transcript/protein sequence
@@ -50,8 +56,12 @@ class PDBMapAlignment():
         if len(res) > 0:
             # A SIFTS alignment is available
             alignment  = dict((r[0],r[1]) for r in res)
+            print len(c_seq),len(t_seq)
+            for r in res:
+                print r[0],r[1]
+                c_seq[r[0]]
+                t_seq[r[1]]
             aln_string = "%s\n%s"%(''.join([c_seq[r[0]] for r in res]),''.join([t_seq[r[1]] for r in res]))
-            print aln_string
             score,perc_aligned,perc_identity = (0,1,1)
             return alignment,aln_string,score,perc_aligned,perc_identity
 

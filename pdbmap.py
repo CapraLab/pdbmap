@@ -105,6 +105,7 @@ class PDBMap():
     except Exception as e:
       msg = "ERROR (PDBMap) %s could not be uploaded: %s\n"%(pdbid,str(e))
       sys.stderr.write(msg)
+      raise #debug
       return 1
     return 0
 

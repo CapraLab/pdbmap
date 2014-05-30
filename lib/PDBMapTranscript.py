@@ -97,8 +97,6 @@ class PDBMapTranscript():
       chr        = fields[7]
       strand     = int(fields[8])
       sequence[seqid] = (rescode,chr,start,end,strand)
-    #FIXME
-    print ''
     # Return a new PDBMapTranscript object
     trans = PDBMapTranscript(transcript,protein,gene,sequence)
     PDBMapTranscript.cache_transcript(transid,trans)
