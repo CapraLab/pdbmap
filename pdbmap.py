@@ -452,9 +452,10 @@ if __name__== "__main__":
       all_pdb_files = glob.glob("%s/structures/all/pdb/*.ent.gz"%args.pdb_dir)
       msg = "WARNING (PDBMap) Uploading all %d mirrored RCSB PDB structures.\n"%len(all_pdb_files)
       sys.stderr.write(msg)
-      for pdb_files in all_pdb_files:
+      n = len(all_pdb_files)
+      for i,pdb_files in enumerate(all_pdb_files):
         pdbid = os.path.basename(pdb_file).split('.')[0][-4:].upper()
-        print "\n## Processing (pdb) %s ##"%pdbid
+        print "\n## Processing (pdb) %s (%d/%d) ##"%(pdbid,i,n)
         pdbmap.load_pdb(pdbid,pdb_file,label="pdb")
     elif len(args.args) == 1:
       # Process one PDB
@@ -468,10 +469,11 @@ if __name__== "__main__":
     else:
       # Process many PDB IDs
       pdbs = [(os.path.basename(pdb_file).split('.')[0][-4:].upper(),pdb_file) for pdb_file in args.args]
-      for pdbid,pdb_file in pdbs:
+      n = len(pdbs)
+      for i,(pdbid,pdb_file) in enumerate(pdbs):
         if not args.slabel:
           args.slabel = "manual"
-        print "\n## Processing (%s) %s ##"%(args.slabel,pdbid)
+        print "\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,pdbid,i,n)
         pdbmap.load_pdb(pdbid,pdb_file,label=args.slabel)
 
   ## load_unp ##
@@ -487,8 +489,9 @@ if __name__== "__main__":
       all_pdb_unp = PDBMapProtein.PDBMapProtein.sprot
       msg = "WARNING (PDBMap) Uploading all %d Swiss-Prot UniProt IDs.\n"%len(all_pdb_unp)
       sys.stderr.write(msg)
+      n = len(all_pdb_unp)
       for i,unp in enumerate(all_pdb_unp):
-        print "\n## Processing (uniprot-pdb) %s ##"%unp
+        print "\n## Processing (uniprot-pdb) %s (%d/%d) ##"%(unp,i,n)
         pdbmap.load_unp(unp,label="uniprot-pdb")
     elif len(args.args) == 1:
       # Process one UniProt ID
@@ -497,8 +500,9 @@ if __name__== "__main__":
       pdbmap.load_unp(unp,label=args.slabel)
     else:
       # Process many UniProt IDs
-      for unp in args.args:
-        print "\n## Processing (%s) %s ##"%(args.slabel,unp)
+      n = len(args.args)
+      for i,unp in enumerate(args.args):
+        print "\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,unp,i,n)
         pdbmap.load_unp(unp,label=args.slabel)
 
   ## load_data ##
