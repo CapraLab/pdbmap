@@ -105,7 +105,6 @@ class PDBMap():
     except Exception as e:
       msg = "ERROR (PDBMap) %s could not be uploaded: %s\n"%(pdbid,str(e))
       sys.stderr.write(msg)
-      raise #debug
       return 1
     return 0
 
@@ -488,7 +487,7 @@ if __name__== "__main__":
       all_pdb_unp = PDBMapProtein.PDBMapProtein.sprot
       msg = "WARNING (PDBMap) Uploading all %d Swiss-Prot UniProt IDs.\n"%len(all_pdb_unp)
       sys.stderr.write(msg)
-      for unp in all_pdb_unp:
+      for i,unp in enumerate(all_pdb_unp):
         print "\n## Processing (uniprot-pdb) %s ##"%unp
         pdbmap.load_unp(unp,label="uniprot-pdb")
     elif len(args.args) == 1:

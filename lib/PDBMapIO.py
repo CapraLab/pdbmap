@@ -34,7 +34,7 @@ class PDBMapParser(PDBParser):
         biological assemblies, or the additional models
         containing the biological assembly coordinates will
         be removed. """
-    print "   # Processing biological assemby %d"%biounit
+    print "   # Processing biological assembly %d"%biounit
     # Process structural elements
     iter_s = [m for m in s]
     if not biounit:
