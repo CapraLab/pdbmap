@@ -519,15 +519,24 @@ class PDBMapIO(PDBIO):
     self._close()
     return i # return the number of uploaded rows
 
-  def upload_intersection(self,dstream):
+  def upload_intersection(self,dstream,dlabel=None,slabel=None):
     """ Uploads an intersection via a process parser generator """
     self._connect()
     query  = "INSERT IGNORE INTO GenomicIntersection "
-    query += "(label,pdbid,chain,seqid,gc_id) VALUES "
-    query += "(%s,%s,%s,%s,%s)" # Direct reference
+    query += "(dlabel,slabel,pdbid,chain,seqid,gc_id) VALUES "
+    query += "(%s,%s,%s,%s,%s,%s)" # Direct reference
     for i,row in enumerate(dstream):
       row = list(row) # convert from tuple
-      row.insert(0,self.slabel)
+      # Prepend the slabel
+      if not slabel:
+        row.insert(0,self.slabel)
+      else:
+        row.insert(0,slabel)
+      # Prepend the dlabel
+      if not dlabel:
+        row.insert(0,self.dlabel)
+      else:
+        row.insert(0,dlabel)
       row = tuple(row) # convert to tuple
       try:
         self._c.execute(query,row)
@@ -535,26 +544,6 @@ class PDBMapIO(PDBIO):
         raise
     self._close()
     return(i) # Return the number of uploaded rows
-
-  def download_genomic_data(self,dname):
-    #FIXME: Poorly conceived. Do not use.
-    """ Queries all genomic data with specified name """
-    self._connect(cursorclass=MySQLdb.cursors.SSDictCursor)
-    query = "SELECT * FROM GenomicData WHERE label=%s"
-    self._c.execute(query,(dname,))
-    for row in self._c:
-      yield row
-    self._close()
-
-  def download_structures(self,dname):
-    """ Queries all structures with specified name """
-    #FIXME: Poorly conceived. Do not use.
-    self._connect(cursorclass=MySQLdb.cursors.SSDictCursor)
-    query = "SELECT * FROM Structure WHERE label=%s"
-    self._c.execute(query,(dname,))
-    for row in self._c:
-      yield row
-    self._close()
 
   def secure_command(self,query,qvars=None):
     """ Executes commands using safe practices """
@@ -742,55 +731,55 @@ class PDBMapIO(PDBIO):
     /*CONSEQUENCE*/c.transcript,c.protein_pos,c.consequence,c.ref_amino_acid,c.alt_amino_acid,c.ref_codon,c.alt_codon,c.sift,c.polyphen,c.biotype,c.domains
     FROM Residue as a
     INNER JOIN GenomicIntersection as b
-    ON a.pdbid=b.pdbid AND a.chain=b.chain AND a.seqid=b.seqid
+    ON a.structid=b.structid AND a.chain=b.chain AND a.seqid=b.seqid
     INNER JOIN GenomicConsequence as c
     ON b.gc_id=c.gc_id
     INNER JOIN GenomicData as d
     ON c.label=d.label AND c.chr=d.chr AND c.start=d.start AND c.end=d.end AND c.name=d.name
     INNER JOIN Chain as g
-    ON a.pdbid=g.pdbid AND a.biounit=g.biounit AND a.model=g.model AND a.chain=g.chain AND a.label=g.label
+    ON a.structid=g.structid AND a.biounit=g.biounit AND a.model=g.model AND a.chain=g.chain AND a.label=g.label
     LEFT JOIN Structure as s
-    ON a.pdbid=s.pdbid AND a.label=s.label
+    ON a.structid=s.pdbid AND a.label=s.label
     LEFT JOIN Model as m
-    ON a.pdbid=m.modelid AND a.label=m.label
+    ON a.structid=m.modelid AND a.label=m.label
     WHERE c.consequence LIKE '%%%%missense_variant%%%%' AND
-    a.label=%%s AND c.label=%%s AND a.pdbid=%%s
-    ORDER BY g.pdbid,g.biounit,g.model,a.chain,a.seqid;
+    a.label=%%s AND c.label=%%s AND a.structid=%%s
+    ORDER BY g.structid,g.biounit,g.model,a.chain,a.seqid;
     """
   structure_query = """SELECT
     g.model,g.chain,a.seqid,d.*,c.*%s
     FROM Residue as a
     INNER JOIN GenomicIntersection as b
-    ON a.pdbid=b.pdbid AND a.chain=b.chain AND a.seqid=b.seqid
+    ON a.structid=b.structid AND a.chain=b.chain AND a.seqid=b.seqid
     INNER JOIN GenomicConsequence as c
     ON b.gc_id=c.gc_id
     INNER JOIN GenomicData as d
     ON c.label=d.label AND c.chr=d.chr AND c.start=d.start AND c.end=d.end AND c.name=d.name
     INNER JOIN Chain as g
-    ON a.label=g.label AND a.pdbid=g.pdbid AND a.biounit=g.biounit AND a.model=g.model AND a.chain=g.chain%s
+    ON a.label=g.label AND a.structid=g.structid AND a.biounit=g.biounit AND a.model=g.model AND a.chain=g.chain%s
     WHERE c.consequence LIKE '%%%%missense_variant%%%%' AND
-    a.label=%%s AND c.label=%%s AND a.pdbid=%%s AND a.biounit=%%s;"""
+    a.label=%%s AND c.label=%%s AND a.structid=%%s AND a.biounit=%%s;"""
   model_query = """SELECT
     g.model,a.seqid,d.*,c.*%s
     FROM Residue as a
     INNER JOIN GenomicIntersection as b
-    ON a.pdbid=b.pdbid AND a.chain=b.chain AND a.seqid=b.seqid
+    ON a.structid=b.structid AND a.chain=b.chain AND a.seqid=b.seqid
     INNER JOIN GenomicConsequence as c
     ON b.gc_id=c.gc_id
     INNER JOIN GenomicData as d
     ON c.label=d.label AND c.chr=d.chr AND c.start=d.start AND c.end=d.end AND c.name=d.name
     INNER JOIN Chain as g
-    ON a.label=g.label AND a.pdbid=g.pdbid AND a.biounit=g.biounit AND a.model=g.model AND a.chain=g.chain%s
+    ON a.label=g.label AND a.structid=g.structid AND a.biounit=g.biounit AND a.model=g.model AND a.chain=g.chain%s
     WHERE c.consequence LIKE '%%%%missense_variant%%%%' AND
-    a.label=%%s AND c.label=%%s AND a.pdbid=%%s;"""
-  unp_query = """SELECT DISTINCT c.pdbid FROM 
+    a.label=%%s AND c.label=%%s AND a.structid=%%s;"""
+  unp_query = """SELECT DISTINCT c.structid FROM 
     GenomicIntersection as a
     INNER JOIN GenomicConsequence as b
     ON a.gc_id=b.gc_id
     INNER JOIN Residue as c
-    ON a.pdbid=c.pdbid AND a.chain=c.chain AND a.seqid=c.seqid
+    ON a.structid=c.structid AND a.chain=c.chain AND a.seqid=c.seqid
     INNER JOIN Chain as d
-    ON c.pdbid=d.pdbid AND c.chain=d.chain
+    ON c.structid=d.structid AND c.chain=d.chain
     WHERE b.label=%s AND c.label=%s AND d.unp=%s;"""
 
 aa_code_map = {"ala" : "A",

@@ -39,7 +39,7 @@ class PDBMapIntersect():
       msg = "ERROR (PDBMapIntersect) %s intersection is not a valid option."
       raise Exception(msg%dtype)
     query  = "INSERT IGNORE INTO GenomicIntersection "
-    query += "SELECT a.label,c.pdbid,c.chain,c.chain_seqid,a.gc_id "
+    query += "SELECT a.label,c.label,c.structid,c.chain,c.chain_seqid,a.gc_id "
     query += "FROM GenomicConsequence as a "
     query += "INNER JOIN Transcript as b "
     query += "ON a.transcript=b.transcript AND a.chr=b.chr "
@@ -87,12 +87,12 @@ class PDBMapIntersect():
           writer.writerow(row)
 
       # Query and write PDBMap ranges to temp file, adjusted for UCSC indexing
-      query  = "SELECT chr,start-1,end-1,pdbid,chain,chain_seqid,a.transcript FROM "
+      query  = "SELECT chr,start-1,end-1,structid,chain,chain_seqid,a.transcript FROM "
       query += "Transcript as a "
       query += "INNER JOIN Alignment as b "
       query += "ON a.transcript=b.transcript AND a.seqid=b.trans_seqid "
       if slabel:
-        query += "WHERE b.pdbid=%s "
+        query += "WHERE b.structid=%s "
       with open(temp2,'wb') as fout:
         writer = csv.writer(fout,delimiter='\t')
         if slabel:
@@ -114,7 +114,8 @@ class PDBMapIntersect():
       cmd = ["intersectBed","-wb","-a",temp1,"-b",temp2]
       p = sp.Popen(cmd,stdout=sp.PIPE)
       parser = process_parser(p)
-      nrows = self.io.upload_intersection(parse_intersection(parser))
+      nrows = self.io.upload_intersection(parse_intersection(parser),
+                      dlabel=dlabel,slabel=slabel)
      
     ## Intersection completed and uploaded. Cleaning up temp files ##    
     except: raise

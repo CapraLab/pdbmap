@@ -171,14 +171,14 @@ class PDBMapVisualize():
     for entity_type,entity in res_list:
       if entity_type == 'structure':
         # Query all biological assemblies
-        query = "SELECT DISTINCT biounit FROM Chain WHERE pdbid=%s"
+        query = "SELECT DISTINCT biounit FROM Chain WHERE structid=%s"
         res   = self.io.secure_query(query,(entity,),cursorclass='Cursor')
         biounits = [r[0] for r in res]
         for biounit in biounits:
           self.visualize_structure(entity,biounit,anno_list,spectrum_range,group=unpid)
       elif entity_type == 'model':
         # Query all biological assemblies
-        query = "SELECT DISTINCT biounit FROM Chain WHERE pdbid=%s"
+        query = "SELECT DISTINCT biounit FROM Chain WHERE structid=%s"
         res   = self.io.secure_query(query,(entity,),cursorclass='Cursor')
         biounits = [r[0] for r in res]
         for biounit in biounits:
@@ -189,12 +189,12 @@ class PDBMapVisualize():
 
   def visualize_all(self,anno_list=['maf'],spectrum_range=[]):
     """ Visualize all structures and models for the annotated dataset """
-    query = "SELECT DISTINCT pdbid FROM GenomicIntersection WHERE label=%s"
+    query = "SELECT DISTINCT structid FROM GenomicIntersection WHERE label=%s"
     res   = [r for r in self.io.secure_query(query,(self.io.dlabel,),cursorclass='Cursor')]
     structures = [r[0] for r in res if self.io.detect_entity_type(r[0]) == 'structure']
     # if False:
     for s in structures:
-      query = "SELECT DISTINCT biounit FROM Chain WHERE pdbid=%s"
+      query = "SELECT DISTINCT biounit FROM Chain WHERE structid=%s"
       bres   = self.io.secure_query(query,(s,),cursorclass='Cursor')
       biounits = [r[0] for r in bres]
       for b in biounits:
@@ -202,7 +202,7 @@ class PDBMapVisualize():
         self.visualize_structure(s,b,anno_list,spectrum_range,group='all')
     models = [r[0] for r in res if self.io.detect_entity_type(r[0]) == 'model']
     for m in models:
-      query = "SELECT DISTINCT biounit FROM Chain WHERE pdbid=%s"
+      query = "SELECT DISTINCT biounit FROM Chain WHERE structid=%s"
       bres   = self.io.secure_query(query,(m,),cursorclass='Cursor')
       biounits = [r[0] for r in bres]
       for b in biounits:
