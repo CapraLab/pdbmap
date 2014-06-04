@@ -60,7 +60,7 @@ class PDBMapAlignment():
             # print alignment
             perc_aligned  = min(len(alignment) / n, 1.)
             perc_identity = min(len([1 for cid,tid in alignment.iteritems() if
-                                    0 < cid <= c_end and 0 < tid < len(t_seq)
+                                    0 < cid < len(c_seq) and 0 < tid < len(t_seq)
                                     and c_seq[cid]==t_seq[tid]]) / n, 
                                 1.)
             aln_string    = "<sifts>"
