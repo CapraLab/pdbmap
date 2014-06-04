@@ -62,11 +62,18 @@ class PDBMapStructure(Structure):
           alignments.append((alignment.perc_identity,len(alignment.alignment),alignment))
       # Store best transcript alignment as element of chain
       alignments.sort()
-      chain.alignments  = [alignments[0][2]]
+      if len(alignments) > 0:
+        chain.alignments  = [alignments[0][2]]
+      else:
+        chain.alignments  = []
       chain.transcripts = [a.transcript for a in chain.alignments]
     # Return the matched transcripts
-    self.transcripts = [t for c in self.structure[0] for t in c.transcripts]
-    self.alignments  = [a for c in self.structure[0] for a in c.alignments]
+    try:
+      self.transcripts = [t for c in self.structure[0] for t in c.transcripts]
+      self.alignments  = [a for c in self.structure[0] for a in c.alignments]
+    except:
+      self.transcripts = []
+      self.alignments  = []
     return self.transcripts
 
   def get_alignments(self):

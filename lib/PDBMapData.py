@@ -30,13 +30,21 @@ class PDBMapData():
       raise Exception(msg)
     # Check for a dbconn file
     registry = "%s/dbconn.conf"%os.path.dirname(vep)
+    cache    = "$HOME/.vep/homo_sapiens/74/Homo_sapiens.GRCh37.74.dna.primary_assembly.fa.gz"
+    if not os.path.exists(cache):
+      msg = "WARNING (PDBMapData) No cache exists. Using network connection.\n"
+      sys.stderr.write(msg)
+      cache = None
     if not os.path.exists(registry):
-      msg = "WARNING (PDBMapData) Not registry specified. Using Ensembl.\n"
+      msg = "WARNING (PDBMapData) No registry specified. Using Ensembl.\n"
       sys.stderr.write(msg)
       registry = None
     # Construct the VEP command
     self.vep_cmd = [self.vep,'-i','','--database']
     self.vep_cmd.extend(['--format',''])
+    if cache:
+      # Use a local Ensembl cache
+      self.vep_cmd.extend(['--cache'])
     if registry:
       # Use a local Ensembl database
       self.vep_cmd.extend(['--registry',registry])
