@@ -48,9 +48,9 @@ class PDBMapIntersect():
     query += "ON b.transcript=c.transcript AND b.seqid=c.trans_seqid "
     query += "WHERE a.label=%s "
     if slabel:
-      query += "AND c.label=%s"
+      query += "AND b.label=%s AND c.label=%s"
     if slabel:
-      self.io.secure_command(query,(dlabel,slabel))
+      self.io.secure_command(query,(dlabel,slabel,slabel))
     else:
       self.io.secure_command(query,(dlabel,))
     return(-1) # No row feedback for quick-intersect

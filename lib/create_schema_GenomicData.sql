@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS GenomicData (
 # Standard columns
 label VARCHAR(100), # Dataset label
-chr VARCHAR(10),
+chr VARCHAR(50),
 start INT, # Start site, always specified
 end INT,   # End site, specified by END or assumed start + 1
 name VARCHAR(100),  # Provided name

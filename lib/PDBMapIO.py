@@ -556,6 +556,7 @@ class PDBMapIO(PDBIO):
       msg  = "ERROR (PDBMapIO) Secure command failed; Exception: %s; "%str(e)
       msg += "Command: %s"%self._c._last_executed
       raise Exception(msg)
+    self._close()
     resetwarnings()
 
   def secure_query(self,query,qvars=None,cursorclass='SSDictCursor'):

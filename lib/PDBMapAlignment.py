@@ -56,16 +56,13 @@ class PDBMapAlignment():
         if len(res) > 0:
             # A SIFTS alignment is available
             n = float(len([r for r in chain.get_residues()]))
-            print n,'according to the chain residues'
             alignment     = dict((r[0],r[1]) for r in res)
             # print alignment
             perc_aligned  = min(len(alignment) / n, 1.)
-            print 'aligned:',perc_aligned
             perc_identity = min(len([1 for cid,tid in alignment.iteritems() if
                                     0 < cid <= c_end and 0 < tid < len(t_seq)
                                     and c_seq[cid]==t_seq[tid]]) / n, 
                                 1.)
-            print 'identity:',perc_identity
             aln_string    = "<sifts>"
             score         = -1
             return alignment,aln_string,score,perc_aligned,perc_identity
