@@ -59,10 +59,11 @@ class PDBMapStructure(Structure):
         alignment = PDBMapAlignment(chain,trans,io=io)
         # Exclude alignments with <50% identity, likely bad matches
         if alignment.perc_identity > 0.5:
-          alignments.append(alignment)
+          alignments.append((alignment.perc_identity,len(alignment.alignment),alignment))
       # Store best transcript alignment as element of chain
-      chain.alignments  = alignments
-      chain.transcripts = [a.transcript for a in alignments]
+      alignments.sort()
+      chain.alignments  = [alignments[0][2]]
+      chain.transcripts = [a.transcript for a in chain.alignments]
     # Return the matched transcripts
     self.transcripts = [t for c in self.structure[0] for t in c.transcripts]
     self.alignments  = [a for c in self.structure[0] for a in c.alignments]

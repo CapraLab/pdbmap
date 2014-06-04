@@ -105,9 +105,13 @@ class PDBMapModel(Structure):
       candidate_transcripts = PDBMapTranscript.query_from_unp(chain.unp)
       # But limit to those relevant to this model's template ENSP
       candidate_transcripts = [ct for ct in candidate_transcripts if
-                               PDBMapProtein.enst2ensp(ct)==self.structid.split('_')[0]]
+                               PDBMapProtein.enst2ensp(ct)==self.id.split('_')[0]]
       if len(candidate_transcripts) < 1:
         return []
+      if len(candidate_transcripts) > 1:
+        msg = "WARNING (PDBMapModel) Too many transcripts for %s. Truncating.\n"%self.id
+        sys.stderr.write(msg)
+        candidate_transcripts = [candidate_transcripts[0]]
       #UPDATE: Keep all transcript matches
       # Align chain to first candidate transcript
       alignments = [PDBMapAlignment(chain,candidate_transcripts[0])]
