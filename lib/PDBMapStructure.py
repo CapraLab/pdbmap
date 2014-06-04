@@ -63,7 +63,7 @@ class PDBMapStructure(Structure):
       # Store best transcript alignment as element of chain
       alignments.sort()
       if len(alignments) > 0:
-        chain.alignments  = [alignments[0][2]]
+        chain.alignments  = [alignments[-1][2]]
       else:
         chain.alignments  = []
       chain.transcripts = [a.transcript for a in chain.alignments]
