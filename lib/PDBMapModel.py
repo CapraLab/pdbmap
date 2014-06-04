@@ -105,7 +105,7 @@ class PDBMapModel(Structure):
       candidate_transcripts = PDBMapTranscript.query_from_unp(chain.unp)
       # But limit to those relevant to this model's template ENSP
       candidate_transcripts = [ct for ct in candidate_transcripts if
-                               PDBMapProtein.enst2ensp(ct)==self.id.split('_')[0]]
+                               PDBMapProtein.enst2ensp(ct.transcript)==self.id.split('_')[0]]
       if len(candidate_transcripts) < 1:
         return []
       if len(candidate_transcripts) > 1:
