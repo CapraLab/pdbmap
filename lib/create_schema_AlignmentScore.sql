@@ -8,9 +8,9 @@ perc_aligned REAL,
 perc_identity REAL,
 alignment TEXT,
 PRIMARY KEY(label,structid,chain,transcript),
-KEY(structid,chain),
-KEY(transcript),
-KEY(score),
-KEY(perc_aligned),
-KEY(perc_identity)
+KEY(label,structid,chain),
+KEY(label,transcript),
+KEY(label,score),
+KEY(label,perc_aligned),
+KEY(label,perc_identity)
 )

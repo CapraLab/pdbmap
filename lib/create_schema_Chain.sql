@@ -9,5 +9,5 @@ offset INT,
 hybrid TINYINT,
 sequence TEXT,
 PRIMARY KEY(label,structid,biounit,model,chain),
-KEY(unp)
+KEY(label,unp)
 )

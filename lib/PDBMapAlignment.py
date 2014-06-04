@@ -55,12 +55,12 @@ class PDBMapAlignment():
         res = [r for r in res] # convert generator to list
         if len(res) > 0:
             # A SIFTS alignment is available
-            alignment  = dict((r[0],r[1]) for r in res)
-            try: # dirty nasty hack because I'm ready to go home
-                aln_string = "%s\n%s"%(''.join([c_seq[r[0]] for r in res]),''.join([t_seq[r[1]] for r in res]))
-            except:
-                aln_string = "<sifts>"
-            score,perc_aligned,perc_identity = (0,1,1)
+            n = float(len(chain.get_residues()))
+            alignment     = dict((r[0],r[1]) for r in res)
+            perc_aligned  = len(alignment) / n
+            perc_identity = len([1 for a in alignment if a[0]==a[1]]) / n
+            aln_string    = "<sifts>"
+            score         = -1
             return alignment,aln_string,score,perc_aligned,perc_identity
 
     # Determine start indices

@@ -12,5 +12,6 @@ x DOUBLE,
 y DOUBLE,
 z DOUBLE,
 PRIMARY KEY(label,structid,biounit,model,chain,seqid,icode),
-KEY(structid,biounit,x,y,z)
+KEY(label,structid,biounit,x,y,z),
+KEY(label,x,y,z)
 )

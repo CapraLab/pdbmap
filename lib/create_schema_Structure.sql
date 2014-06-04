@@ -13,10 +13,9 @@ keywords TEXT,
 reference TEXT,
 structure_reference TEXT,
 PRIMARY KEY(label,pdbid),
-KEY(pdbid),
-KEY(quality),
-KEY(method),
-KEY(quality),
-KEY(resolution),
-KEY(`release`)
+KEY(label,quality),
+KEY(label,method),
+KEY(label,resolution),
+KEY(label,`release`),
+KEY(label,deposition)
 )

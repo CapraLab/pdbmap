@@ -103,6 +103,9 @@ class PDBMapModel(Structure):
     for chain in self.structure[0]:
       # Query all transcripts associated with the chain's UNP ID
       candidate_transcripts = PDBMapTranscript.query_from_unp(chain.unp)
+      # But limit to those relevant to this model's template ENSP
+      candidate_transcripts = [ct for ct in candidate_transcripts if
+                               PDBMapProtein.enst2ensp(ct)==self.structid.split('_')[0]]
       if len(candidate_transcripts) < 1:
         return []
       #UPDATE: Keep all transcript matches
@@ -160,9 +163,7 @@ class PDBMapModel(Structure):
     reader = csv.reader(fin,delimiter='\t')
     for row in reader:
       ensp,i = row[1].split('_')
-      #FIXME: How to represent the list of UniProt IDs this returns?
       unps = PDBMapProtein.ensp2unp(ensp)
-      #FIXME: Current fix: Take only first associated UniProt ID
       unp  = None if not unps else unps[0]
       if not unp: continue # Skip models without associated UniProt IDs
       row.append(unp) # set UniProt ID as last field in model summary

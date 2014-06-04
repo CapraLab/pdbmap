@@ -567,7 +567,7 @@ if __name__== "__main__":
   elif args.cmd == "intersect":
     pdbmap = PDBMap()
     msg  = "WARNING (PDBMap) If loading data, intersections are automatically applied.\n"
-    msg += "       : (PDBMap) This is a debug command for intersection dev.\n"
+    msg += "      : (PDBMap) This is a debug command for intersection dev.\n"
     sys.stderr.write(msg)
     dname = args.args[0] # Get the dataset name
     sname = None if len(args.args) < 2 else args.args[1]
@@ -583,7 +583,7 @@ if __name__== "__main__":
   elif args.cmd == "filter":
     pdbmap = PDBMap()
     msg  = "WARNING (PDBMap) If loading data, filtering is automatically applied.\n"
-    msg += "       : (PDBMap) This is a debug command for filtering dev.\n"
+    msg += "      : (PDBMap) This is a debug command for filtering dev.\n"
     sys.stderr.write(msg)
     if not args.dlabel: # Assign individual labels
       dfiles = zip(args.args[0::2],args.args[1::2])

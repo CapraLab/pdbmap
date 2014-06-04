@@ -12,8 +12,8 @@ zdope DOUBLE,
 pdbid VARCHAR(50),
 chain VARCHAR(10),
 PRIMARY KEY(label,modelid),
-KEY(pdbid),
-KEY(unp),
-KEY(mpqs),
-KEY(zdope)
+KEY(label,pdbid),
+KEY(label,unp),
+KEY(label,mpqs),
+KEY(label,zdope)
 )

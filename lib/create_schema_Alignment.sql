@@ -6,6 +6,6 @@ chain_seqid INT,
 transcript VARCHAR(50),
 trans_seqid INT,
 PRIMARY KEY(label,structid,chain,chain_seqid,transcript,trans_seqid),
-KEY(structid,chain),
-KEY(transcript)
+KEY(label,structid,chain,chain_seqid),
+KEY(label,transcript,trans_seqid)
 )

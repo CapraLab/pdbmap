@@ -20,10 +20,11 @@ import sys,csv
 class PDBMapProtein():
 
   _refseq2unp = {}
-  _unp2pdb = {}
+  _unp2pdb    = {}
   _unp2ensembltrans = {}
-  _unp2ensp = {}
-  _ensp2unp = {}
+  _unp2ensp   = {}
+  _ensp2unp   = {}
+  _enst2ensp  = {}
 
   def __init__(self):
     msg = "ERROR: (PDBMapProtein) This class should not be instantiated."
@@ -46,8 +47,13 @@ class PDBMapProtein():
 
   @classmethod
   def ensp2unp(cls,ensp):
-    # Return Ensembl Protein ID associated with Ensembl Protein ID
+    # Return UniProt ID associated with Ensembl Protein ID
     return PDBMapProtein._ensp2unp.get(ensp,[])
+
+  @classmethod
+  def enst2ensp(cls,enst):
+    # Return Ensembl Protein ID associated with Ensembl Transcript ID
+    return PDBMapProtein._enst2ensp.get(enst,'')
 
   @classmethod
   def unp2pdb(cls,unp):
@@ -67,6 +73,8 @@ class PDBMapProtein():
         ## Map UniProt IDs to Ensembl Transcript IDs
         if not translist:
           continue # Don't consider UniProt IDs without transcript-mapping
+        for i,enst in enumerate(translist):
+          PDBMapProtein._enst2ensp[enst] = protlist[i]
         if unp in PDBMapProtein._unp2ensembltrans:
           PDBMapProtein._unp2ensembltrans[unp].extend(translist)
         else:

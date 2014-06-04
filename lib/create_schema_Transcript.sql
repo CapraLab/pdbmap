@@ -10,7 +10,7 @@ start BIGINT,
 end BIGINT,
 strand INT,
 PRIMARY KEY(label,transcript,seqid),
-KEY(chr,start,end),
-KEY(gene),
-KEY(protein)
+KEY(label,chr,start,end),
+KEY(label,gene),
+KEY(label,protein,seqid)
 )

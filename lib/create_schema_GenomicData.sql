@@ -29,11 +29,10 @@ ens_gene VARCHAR(50), # Ensembl Gene identifier
 hgnc_gene VARCHAR(50), # HGNC Gene identifier
 snpsource VARCHAR(50), # Low coverage or Exome?
 PRIMARY KEY(label,name,chr,start,end),
-KEY(name,chr,start,end),
-KEY(chr,start,end),
-KEY(maf),
-KEY(amr_af),
-KEY(asn_af),
-KEY(afr_af),
-KEY(eur_af)
+KEY(label,chr,start,end),
+KEY(label,maf),
+KEY(label,amr_af),
+KEY(label,asn_af),
+KEY(label,afr_af),
+KEY(label,eur_af)
 )
