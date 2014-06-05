@@ -222,6 +222,9 @@ class PDBMapParser(PDBParser):
 
     # Preprocess the asymmetric and biological units for this protein
     s = PDBMapParser.process_structure(s) # *must* occur before biounits
+    # If the structure is empty, return immediately
+    if not s:
+      return s
     for biounit_fname in biounit_fnames:
       try:
         if os.path.basename(biounit_fname).split('.')[-1] == 'gz':
@@ -240,6 +243,10 @@ class PDBMapParser(PDBParser):
         msg = "ERROR (PDBMapIO) Error while parsing %s biounit %d: %s"%(pdbid,bioid,str(e).replace('\n',' '))
         raise Exception(msg)
       biounit = PDBMapParser.process_structure(biounit,biounit=bioid,dbref=dbref)
+      if not biounit:
+        msg = "ERROR (PDBMapIO) Biological assembly %s.%d contains now human protein chains.\n"%(pdbid,bioid)
+        sys.stderr.write(msg)
+        continue
       # Add the models for this biological assembly to the PDBMapStructure
       for m in biounit:
         m.id = "%d.%d"%(m.biounit,m.id)
@@ -276,11 +283,14 @@ class PDBMapIO(PDBIO):
     self.dbuser = dbuser
     self.dbpass = dbpass
     self.dbname = dbname
-    if dbhost:
-      self.check_schema()
     self.slabel = slabel
     self.dlabel = dlabel
+    self._cons  = []   # Define the connection pool
+    self._con   = None # Define the connection
+    self._c     = None # Define the cursor
     self._connect() # Open a database connection for this object
+    if dbhost:
+      self.check_schema()
 
   def structure_in_db(self,pdbid,label=-1):
     # None is a valid argument to label
@@ -685,35 +695,41 @@ class PDBMapIO(PDBIO):
     return(self.__dict__['structure'])
 
   def _connect(self,usedb=True,cursorclass=MySQLdb.cursors.DictCursor,retry=True):
-    # If a connection is already open
-    if self._con:
-      if self._c:                  # If a cursor exists,
-        self._c._close()           # close it
-      self._c = self._con.cursor() # and open a new one
-      return
-    # If a connection is not open, open one
-    try:
-      if usedb:
-        self._con = MySQLdb.connect(host=self.dbhost,user=self.dbuser,
-                            passwd=self.dbpass,db=self.dbname,
-                            cursorclass = cursorclass)
-      else:
-        self._con = MySQLdb.connect(host=self.dbhost,user=self.dbuser,
-                            passwd=self.dbpass,
-                            cursorclass = cursorclass)
-      self._c = self._con.cursor()
-    except MySQLdb.Error as e:
-      msg = "There was an error connecting to the database: %s\n"%e
-      sys.stderr.write(msg)
-      if retry:
-        msg = "Waiting 30s and retrying...\n"
+    # Search for existing connection with desired cursorclass
+    self._con = None
+    for con in self._cons:
+      if con.cursorclass == cursorclass:
+        # Set as active connection
+        self._con = con
+    # If none was found, open a new connection with desired cursorclass
+    if not self._con:
+      try:
+        if usedb:
+          con = MySQLdb.connect(host=self.dbhost,
+                user=self.dbuser,passwd=self.dbpass,
+                db=self.dbname,cursorclass = cursorclass)
+        else:
+          con = MySQLdb.connect(host=self.dbhost,
+                user=self.dbuser,passwd=self.dbpass,
+                cursorclass = cursorclass)
+        # Add to connection pool and set as active connection
+        self._cons.append(con)
+        self._con = con
+      except MySQLdb.Error as e:
+        msg = "There was an error connecting to the database: %s\n"%e
         sys.stderr.write(msg)
-        time.sleep(30) # Wait 30 seconds and retry
-        self._connect(usedb,cursorclass,retry=False)
-      else:
-        msg = "Database reconnection unsuccessful: %s\n"%e
-        sys.stderr.write(msg)
-      	raise
+        if retry:
+          msg = "Waiting 30s and retrying...\n"
+          sys.stderr.write(msg)
+          time.sleep(30) # Wait 30 seconds and retry
+          return self._connect(usedb,cursorclass,retry=False)
+        else:
+          msg = "Database connection unsuccessful: %s\n"%e
+          sys.stderr.write(msg)
+          raise
+    # Finally, open a cursor from the active connection
+    self._c = self._con.cursor() # and open a new one
+    return self._c
 
   def _close(self):
     self._c.close() # Close only the cursor

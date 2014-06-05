@@ -547,17 +547,19 @@ if __name__== "__main__":
       print "## Processing (%s) %s ##"%(dname,dfile)
       nrows += pdbmap.load_data(dname,dfile,args.indexing)
       print " # %d data rows uploaded."%nrows
-    # Intersect with dataset with PDBMap (One-time operation)
-    for dname in set([dname for dfile,dname in dfiles]):
-      print "## Intersecting %s with PDBMap ##"%dname
-      quick = True if nrows < 500 else False
-      print [" # (This may take a while) #"," # Using quick-intersect #"][int(quick)]
-      nrows = pdbmap.intersect_data(dname,quick=quick)
-      print " # %d intersection rows uploaded."%nrows
-      # Store a local, PDBMap-filtered copy of the dataset
-      print "## Creating a local copy of %s for PDBMap ##"%dname
-      print " # (This may also take a while) #"
-      nrows = pdbmap.filter_data(dname,[dfile for dfile,dname in dfiles])
+    #TESTING: Explicit calls allow for parallelization of load_data and filter
+    #       : over each chromosome/file in the dataset
+    # # Intersect with dataset with PDBMap (One-time operation)
+    # for dname in set([dname for dfile,dname in dfiles]):
+    #   print "## Intersecting %s with PDBMap ##"%dname
+    #   quick = True if nrows < 500 else False
+    #   print [" # (This may take a while) #"," # Using quick-intersect #"][int(quick)]
+    #   nrows = pdbmap.intersect_data(dname,quick=quick)
+    #   print " # %d intersection rows uploaded."%nrows
+    #   # Store a local, PDBMap-filtered copy of the dataset
+    #   print "## Creating a local copy of %s for PDBMap ##"%dname
+    #   print " # (This may also take a while) #"
+    #   nrows = pdbmap.filter_data(dname,[dfile for dfile,dname in dfiles])
 
   ## visualize ##
   elif args.cmd == "visualize":
@@ -616,6 +618,8 @@ if __name__== "__main__":
       dfiles = zip(args.args,[args.dlabel for i in range(len(args.args))])
     dname  = [dname for dfile,dname in dfiles][0]
     dfiles = [dfile for dfile,dname in dfiles]
+    print "## Creating a local copy of %s for PDBMap ##"%dname
+    print " # (This may take a while) #"
     nrows  = pdbmap.filter_data(dname,dfiles)
 
   ## no command specified ##
