@@ -52,24 +52,27 @@ class PDBMap():
 
   def load_unp(self,unp,label=""):
     """ Loads all known structures associated with UniProt ID """
+    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,
+                          args.dbpass,args.dbname,slabel=label)
     if self.pdb:
       pdbids = list(set(PDBMapProtein.PDBMapProtein.unp2pdb(unp)))
       for pdbid in pdbids:
         print " # Processing (%s) PDB %s # "%(label,pdbid)
-        self.load_pdb(pdbid,label=label)
+        self.load_pdb(pdbid,label=label,io=io)
         sys.stdout.flush() # Force stdout flush after each PDB
     if self.modbase:
       models = PDBMapModel.PDBMapModel.unp2modbase(unp)
       for model in models:
         print " # (%s) Processing Model %s #"%(label,model[1])
-        self.load_model(model,label=label)
+        self.load_model(model,label=label,io=io)
         sys.stdout.flush() # Force stdout flush after each model
 
-  def load_pdb(self,pdbid,pdb_fname=None,label=""):
+  def load_pdb(self,pdbid,pdb_fname=None,label="",io=None):
     """ Loads a given PDB into the PDBMap database """
 
-    # Create a PDBMapIO object
-    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,
+    if not io:
+      # Create a PDBMapIO object
+      io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,
                             args.dbpass,args.dbname,slabel=label)
 
     # Check if PDB is already in the database
@@ -108,11 +111,12 @@ class PDBMap():
       return 1
     return 0
 
-  def load_model(self,model_summary,model_fname=None,label=""):
+  def load_model(self,model_summary,model_fname=None,label="",io=None):
     """ Loads a given ModBase model into the PDBMap database """
     
-    # Create a PDBMapIO object
-    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,
+    if not io:
+      # Create a PDBMapIO object
+      io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,
                             args.dbpass,args.dbname,slabel=label)
 
     # Check if model is already in the database

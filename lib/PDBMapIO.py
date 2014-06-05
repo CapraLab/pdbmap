@@ -280,6 +280,7 @@ class PDBMapIO(PDBIO):
       self.check_schema()
     self.slabel = slabel
     self.dlabel = dlabel
+    self._connect() # Open a database connection for this object
 
   def structure_in_db(self,pdbid,label=-1):
     # None is a valid argument to label
@@ -684,7 +685,13 @@ class PDBMapIO(PDBIO):
     return(self.__dict__['structure'])
 
   def _connect(self,usedb=True,cursorclass=MySQLdb.cursors.DictCursor,retry=True):
-    self._con = None
+    # If a connection is already open
+    if self._con:
+      if self._c:                  # If a cursor exists,
+        self._c._close()           # close it
+      self._c = self._con.cursor() # and open a new one
+      return
+    # If a connection is not open, open one
     try:
       if usedb:
         self._con = MySQLdb.connect(host=self.dbhost,user=self.dbuser,
@@ -699,29 +706,31 @@ class PDBMapIO(PDBIO):
       msg = "There was an error connecting to the database: %s\n"%e
       sys.stderr.write(msg)
       if retry:
-        while not self._con:
-          msg = "Waiting 30s and retrying...\n"
-          sys.stderr.write(msg)
-          time.sleep(30) # Wait 30 seconds and retry
-          self._connect(usedb,cursorclass,retry=False)
+        msg = "Waiting 30s and retrying...\n"
+        sys.stderr.write(msg)
+        time.sleep(30) # Wait 30 seconds and retry
+        self._connect(usedb,cursorclass,retry=False)
       else:
         msg = "Database reconnection unsuccessful: %s\n"%e
         sys.stderr.write(msg)
       	raise
 
   def _close(self):
-    try:
-      try: # If rows to fetch
-        self._c.fetchall() # burn all remaining rows
-      except: pass
-      try: # If any SS cursor
-        self._c.close() # close the cursor
-      except: pass
-      self._con.close()  # close the connection
-    except MySQLdb.Error as e:
-      msg = "There was an error disconnecting from the database: %s\n"%e
-      sys.stderr.write(msg)
-      raise
+    self._c.close() # Close only the cursor
+    return
+    # The connection will be closed when the PDBMapIO object is destructed
+    # try:
+    #   try: # If rows to fetch
+    #     self._c.fetchall() # burn all remaining rows
+    #   except: pass
+    #   try: # If any SS cursor
+    #     self._c.close() # close the cursor
+    #   except: pass
+    #   self._con.close()  # close the connection
+    # except MySQLdb.Error as e:
+    #   msg = "There was an error disconnecting from the database: %s\n"%e
+    #   sys.stderr.write(msg)
+    #   raise
 
   # Query definitions
   full_annotation_query = """SELECT
