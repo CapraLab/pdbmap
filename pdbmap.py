@@ -357,12 +357,15 @@ if __name__== "__main__":
     "slabel" : "",
     "dlabel" : "",
     "indexing": None,
-    "cores" : 1
+    "cores" : 1,
+    "ppart" : None,
+    "ppidx" : None
     }
   if args.conf_file:
     config = ConfigParser.SafeConfigParser()
     config.read([args.conf_file])
     defaults.update(dict(config.items("Genome_PDB_Mapper")))
+  conf_file = args.conf_file
 
   # Setup the Command Line Parser
   parser = argparse.ArgumentParser(parents=[conf_parser],description=__doc__,formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -412,10 +415,15 @@ if __name__== "__main__":
               help="Data label for this session")
   parser.add_argument("--indexing",
  							help="Indexing used by data file(s) [pdbmap,ensembl,ucsc]")
+  parser.add_argument("--ppart", type=int,
+              help="Used to manage parallel subprocesses. Do not call directly.")
+  parser.add_argument("--ppidx", type=int,
+              help="Used to manage parallel subprocesses. Do not call directly.")
   parser.add_argument("-j", "--cores", type=int,
               help="Number of available processors")
 
   args = parser.parse_args(remaining_argv)
+  args.conf_file = conf_file
   parser.get_default("vep")
   args.create_new_db = bool(args.create_new_db)
   args.force = bool(args.force)
@@ -431,7 +439,6 @@ if __name__== "__main__":
       io.check_schema()
       print "Databases created. Please set create_new_db to False."
       sys.exit(1)
-
   # Initialize PDBMap, refresh mirrored data if specified
   if args.cmd=="refresh":
     pdbmap = PDBMap(idmapping=args.idmapping,sec2prim=args.sec2prim,
@@ -487,12 +494,26 @@ if __name__== "__main__":
     if len(args.args) < 1:
       # All PDB-mapped UniProt IDs (later expand to all UniProt IDs)
       all_pdb_unp = PDBMapProtein.PDBMapProtein.sprot
-      msg = "WARNING (PDBMap) Uploading all %d Swiss-Prot UniProt IDs.\n"%len(all_pdb_unp)
-      sys.stderr.write(msg)
       n = len(all_pdb_unp)
-      for i,unp in enumerate(all_pdb_unp):
-        print "\n## Processing (uniprot-pdb) %s (%d/%d) ##"%(unp,i,n)
-        pdbmap.load_unp(unp,label="uniprot-pdb")
+      # If this is a parallel command with partition parameters
+      if args.ppart != None and args.ppidx != None:
+        psize = n / args.ppart # floor
+        if (args.ppart-1) == args.ppidx:
+          all_pdb_unp = all_pdb_unp[args.ppidx*psize:]
+        else:
+          all_pdb_unp = all_pdb_unp[args.ppidx*psize:(args.ppidx+1)*psize]
+        msg = "WARNING(PDBMap) Subprocess uploading partition %d/%d of Swiss-Prot\n"%(args.ppidx+1,args.ppart)
+        sys.stderr.write(msg)
+        for i,unp in enumerate(all_pdb_unp):
+          print "\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,unp,i+(args.ppidx*psize)+1,n)
+          pdbmap.load_unp(unp,label=args.slabel)
+      # This is a standard, full-set load_unp command
+      else:
+        msg = "WARNING (PDBMap) Uploading all %d Swiss-Prot UniProt IDs.\n"%n
+        sys.stderr.write(msg)
+        for i,unp in enumerate(all_pdb_unp):
+          print "\n## Processing (%s) %s (%d/%d) ##"%(args.slabelunp,i,n)
+          pdbmap.load_unp(unp,label=args.slabel)
     elif len(args.args) == 1:
       # Process one UniProt ID
       unp = args.args[0]

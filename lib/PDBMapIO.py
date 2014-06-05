@@ -684,6 +684,7 @@ class PDBMapIO(PDBIO):
     return(self.__dict__['structure'])
 
   def _connect(self,usedb=True,cursorclass=MySQLdb.cursors.DictCursor,retry=True):
+    self._con = None
     try:
       if usedb:
         self._con = MySQLdb.connect(host=self.dbhost,user=self.dbuser,
@@ -698,10 +699,11 @@ class PDBMapIO(PDBIO):
       msg = "There was an error connecting to the database: %s\n"%e
       sys.stderr.write(msg)
       if retry:
-        msg = "Waiting 30s and retrying...\n"
-        sys.stderr.write(msg)
-        time.sleep(30) # Wait 30 seconds and retry
-        self._connect(usedb,cursorclass,retry=False)
+        while not self._con:
+          msg = "Waiting 30s and retrying...\n"
+          sys.stderr.write(msg)
+          time.sleep(30) # Wait 30 seconds and retry
+          self._connect(usedb,cursorclass,retry=False)
       else:
         msg = "Database reconnection unsuccessful: %s\n"%e
         sys.stderr.write(msg)
