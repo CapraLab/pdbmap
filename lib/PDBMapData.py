@@ -30,7 +30,8 @@ class PDBMapData():
       raise Exception(msg)
     # Check for a dbconn file
     registry = "%s/dbconn.conf"%os.path.dirname(vep)
-    cache    = "$HOME/.vep/homo_sapiens/74/Homo_sapiens.GRCh37.74.dna.primary_assembly.fa.gz"
+    cache    = "~/.vep/homo_sapiens/74/Homo_sapiens.GRCh37.74.dna.primary_assembly.fa.gz"
+    cache    = os.path.expanduser(cache) # replace ~ with explicit home directory
     if not os.path.exists(cache):
       msg = "WARNING (PDBMapData) No cache exists. Using network connection.\n"
       sys.stderr.write(msg)

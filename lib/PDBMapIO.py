@@ -156,7 +156,7 @@ class PDBMapParser(PDBParser):
               line[26:32].strip() == "UNP"]
     fin.close()
     if len(dbref_fields) < 1:
-      msg = "ERROR (PDBMapIO) No DBREF fields in %s.\n"%s.id
+      msg = "ERROR (PDBMapIO) No DBREF fields in %s."%s.id
       raise Exception(msg)
     dbref = {}
     for ref in dbref_fields:
@@ -244,7 +244,7 @@ class PDBMapParser(PDBParser):
         raise Exception(msg)
       biounit = PDBMapParser.process_structure(biounit,biounit=bioid,dbref=dbref)
       if not biounit:
-        msg = "ERROR (PDBMapIO) Biological assembly %s.%d contains now human protein chains.\n"%(pdbid,bioid)
+        msg = "ERROR (PDBMapIO) Biological assembly %s.%d contains no human protein chains.\n"%(pdbid,bioid)
         sys.stderr.write(msg)
         continue
       # Add the models for this biological assembly to the PDBMapStructure
