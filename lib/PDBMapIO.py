@@ -495,6 +495,7 @@ class PDBMapIO(PDBIO):
     """ Uploads genomic data via a PDBMapData generator """
     self._connect(cursorclass=MySQLdb.cursors.Cursor)
     filterwarnings('ignore', category = MySQLdb.Warning)
+    i=0 # ensure initialization
     for i,record in enumerate(dstream):
       # Upload all but the consequences to GenomicData
       record.INFO['LABEL'] = dname
@@ -536,6 +537,7 @@ class PDBMapIO(PDBIO):
     query  = "INSERT IGNORE INTO GenomicIntersection "
     query += "(dlabel,slabel,pdbid,chain,seqid,gc_id) VALUES "
     query += "(%s,%s,%s,%s,%s,%s)" # Direct reference
+    i=0 # ensure initialization
     for i,row in enumerate(dstream):
       row = list(row) # convert from tuple
       # Prepend the slabel

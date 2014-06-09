@@ -62,13 +62,13 @@ class PDBMapIntersect():
     
     # Define the two temp filenames
     temp1  = "temp/%d.TEMP"%multidigit_rand(10)
-    temp2 = "temp/%d.TEMP"%multidigit_rand(10)
+    temp2  = "temp/%d.TEMP"%multidigit_rand(10)
     try: # Ensure proper file cleanup
       # Query and write data ranges to temp file
       if dtype == 'Genomic':
         query  = "SELECT a.chr,a.start-1,a.end-1,a.gc_id,a.transcript FROM "
         query += "GenomicConsequence as a INNER JOIN GenomicData as b "
-        query += "ON a.chr=b.chr AND a.start=b.start AND a.end=b.end "
+        query += "ON a.label=b.label AND a.chr=b.chr AND a.start=b.start AND a.end=b.end "
         query += "WHERE b.label=%s"
       elif dtype == 'Protein':
         msg = "ERROR (PDBMapIntersect) Protein intersection not implemented."
@@ -90,9 +90,9 @@ class PDBMapIntersect():
       query  = "SELECT chr,start-1,end-1,structid,chain,chain_seqid,a.transcript FROM "
       query += "Transcript as a "
       query += "INNER JOIN Alignment as b "
-      query += "ON a.transcript=b.transcript AND a.seqid=b.trans_seqid "
+      query += "ON a.label=b.label AND a.transcript=b.transcript AND a.seqid=b.trans_seqid "
       if slabel:
-        query += "WHERE b.structid=%s "
+        query += "WHERE b.label=%s "
       with open(temp2,'wb') as fout:
         writer = csv.writer(fout,delimiter='\t')
         if slabel:
@@ -101,11 +101,12 @@ class PDBMapIntersect():
           structures = self.io.secure_query(query,cursorclass='SSCursor')
         print " # Fetching PDBMap::Alignment,Transcript #"
         for row in structures:
+          print row
           writer.writerow(row)
 
       # IntersectBed is sensitive, ensure unix encoding
-      os.system("dos2unix %s"%temp1)
-      os.system("dos2unix %s"%temp2)
+      sp.check_call(["dos2unix",temp1])
+      sp.check_call(["dos2unix",temp2])
 
       ## Temp files written. Beginning Intersection and upload. ##
 
@@ -116,13 +117,19 @@ class PDBMapIntersect():
       parser = process_parser(p)
       nrows = self.io.upload_intersection(parse_intersection(parser),
                       dlabel=dlabel,slabel=slabel)
-     
+
+      # Remove temp files only if no exception
+      # sp.check_call(["rm","-f",temp1])
+      # sp.check_call(["rm","-f",temp2])
     ## Intersection completed and uploaded. Cleaning up temp files ##    
-    except: raise
+    except Exception as e: 
+      msg  = "ERROR (PDBMapIntersect) Exception during "
+      msg += "%s Intersection of %s and %s: %s"%(dtype,dlabel,slabel,str(e))
+      raise Exception(msg)
     finally:
-      # Remove temp files
-      os.system("rm -f %s"%temp1)
-      os.system("rm -f %s"%temp2)
+      # # Remove temp files
+      # sp.check_call(["rm","-f",temp1])
+      # sp.check_call(["rm","-f",temp2])
       pass
     return(nrows) # Return the number of intersections
     
@@ -134,9 +141,14 @@ def multidigit_rand(digits):
 
 ## Copied from snp_stats
 def process_parser(p):
+  i = 0
   while True:
     line = p.stdout.readline()
     if not line: break
+    #debug
+    if i % 500 == 0:
+      print "process_tracer: %s"%line.strip()
+    i += 1
     yield line
 
 ## Adapted from snp_stats

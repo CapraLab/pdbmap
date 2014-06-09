@@ -44,7 +44,7 @@ class PDBMapData():
     self.vep_cmd = [self.vep,'-i','','--database']
     self.vep_cmd.extend(['--format',''])
     if cache:
-      # Use a local Ensembl cache
+      # Use a local VEP cache
       self.vep_cmd.extend(['--cache'])
     if registry:
       # Use a local Ensembl database
@@ -54,7 +54,7 @@ class PDBMapData():
     # Specify the species for faster db queries
     self.vep_cmd.extend(['--species','homo_sapiens'])
     # Increase buffer size to improve runtime (default 5,000)
-    self.vep_cmd.extend(['--buffer_size','300000']) # ~15GB
+    self.vep_cmd.extend(['--buffer_size','200000']) # ~5GB per 100,000
     # Annotate with functional info/prediction
     self.vep_cmd.extend(['--sift','s','--polyphen','s','--regulatory'])
     # Annotate with variant, gene, protein, and domain identifiers
@@ -218,7 +218,7 @@ class PDBMapData():
     cmd[2] = fname
     cmd[5] = intype
     try:
-      # Call VEP and capture stdout
+      # Call VEP and capture stdout in realtime
       p = sp.Popen(cmd,stdout=sp.PIPE)
       for line in iter(p.stdout.readline,b''):
         yield line
