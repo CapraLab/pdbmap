@@ -94,9 +94,15 @@ class PDBMapTranscript():
         rescode  = 'S' # replace non-standard amino acids with Serine
       start      = int(fields[5])
       end        = int(fields[6])
-      chr        = fields[7]
+      chrom      = fields[7]
+      # If transcript on a haplotype chromosome, ignore
+      if chrom not in ['chr1','chr2','chr3','chr4','chr5','chr6','chr7','chr8',
+                      'chr9','chr10','chr11','chr12','chr13','chr14','chr15',
+                      'chr16','chr17','chr18','chr19','chr20','chr21','chr22',
+                      'chrX','chrY','chrMT']:
+        return None
       strand     = int(fields[8])
-      sequence[seqid] = (rescode,chr,start,end,strand)
+      sequence[seqid] = (rescode,chrom,start,end,strand)
     # Return a new PDBMapTranscript object
     trans = PDBMapTranscript(transcript,protein,gene,sequence)
     PDBMapTranscript.cache_transcript(transid,trans)
