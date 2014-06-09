@@ -535,7 +535,7 @@ class PDBMapIO(PDBIO):
     """ Uploads an intersection via a process parser generator """
     self._connect()
     query  = "INSERT IGNORE INTO GenomicIntersection "
-    query += "(dlabel,slabel,pdbid,chain,seqid,gc_id) VALUES "
+    query += "(dlabel,slabel,structid,chain,seqid,gc_id) VALUES "
     query += "(%s,%s,%s,%s,%s,%s)" # Direct reference
     i=0 # ensure initialization
     for i,row in enumerate(dstream):
@@ -752,35 +752,56 @@ class PDBMapIO(PDBIO):
 
   # Query definitions
   full_annotation_query = """SELECT
-    /*LABELS*/a.label,c.label,
-    /*STRUCTURE*/s.pdbid,s.method,
-    /*MODEL*/m.modelid,m.method,m.pdbid as template,
-    /*CHAIN*/g.biounit,g.model,g.chain,g.unp,g.hybrid,
-    /*RESIDUE*/a.seqid,a.resname,a.rescode,a.x,a.y,a.z,
-    /*VARIANT*/d.chr,d.start,d.end,d.name,d.variation,d.vtype,d.ref_allele,d.alt_allele,d.maf,d.amr_af,d.asn_af,d.afr_af,d.eur_af,
-    /*CONSEQUENCE*/c.transcript,c.protein_pos,c.consequence,c.ref_amino_acid,c.alt_amino_acid,c.ref_codon,c.alt_codon,c.sift,c.polyphen,c.biotype,c.domains
-    FROM Residue as a
-    INNER JOIN GenomicIntersection as b
-    ON a.structid=b.structid AND a.chain=b.chain AND a.seqid=b.seqid
-    INNER JOIN GenomicConsequence as c
-    ON b.gc_id=c.gc_id
-    INNER JOIN GenomicData as d
-    ON c.label=d.label AND c.chr=d.chr AND c.start=d.start AND c.end=d.end AND c.name=d.name
-    INNER JOIN Chain as g
-    ON a.structid=g.structid AND a.biounit=g.biounit AND a.model=g.model AND a.chain=g.chain AND a.label=g.label
-    LEFT JOIN Structure as s
-    ON a.structid=s.pdbid AND a.label=s.label
-    LEFT JOIN Model as m
-    ON a.structid=m.modelid AND a.label=m.label
-    WHERE c.consequence LIKE '%%%%missense_variant%%%%' AND
-    a.label=%%s AND c.label=%%s AND a.structid=%%s
-    ORDER BY g.structid,g.biounit,g.model,a.chain,a.seqid;
+    /*LABELS*/a.label,d.label,
+    /*VARIANT*/a.name,a.chr,a.start,a.end,b.gc_id,
+    /*CONSEQUENCE*/b.transcript as vep_trans,b.protein as vep_prot,b.protein_pos as vep_prot_pos,b.ref_amino_acid as vep_ref_aa,b.alt_amino_acid as vep_alt_aa,b.consequence,
+    /*ALIGN*/h.chain_seqid as aln_chain_seqid,h.trans_seqid as aln_trans_seqid,j.perc_identity,
+    /*TRANS*/i.gene as ens_gene,i.transcript as ens_trans,i.protein as ens_prot,i.seqid as ens_prot_seqid,i.rescode as ens_prot_aa,
+    /*RESIDUE*/d.seqid as pdb_seqid,d.rescode as pdb_aa,
+    /*CHAIN*/e.biounit,e.model,e.chain as pdb_chain,e.unp as pdb_unp,
+    /*STRUCTURE*/f.pdbid,f.method,f.resolution,
+    /*MODEL*/g.modelid,g.method,g.mpqs
+    FROM GenomicData AS a
+    INNER JOIN GenomicConsequence AS b
+    ON a.label=b.label AND a.chr=b.chr AND a.start=b.start AND a.end=b.end AND a.name=b.name
+    INNER JOIN GenomicIntersection AS c
+    ON b.label=c.dlabel AND b.gc_id=c.gc_id
+    INNER JOIN Residue AS d
+    ON c.slabel=d.label AND c.structid=d.structid AND c.chain=d.chain AND c.seqid=d.seqid
+    INNER JOIN Chain as e
+    ON d.label=e.label AND d.structid=e.structid AND d.biounit=e.biounit AND d.model=e.model AND d.chain=e.chain
+    LEFT JOIN Structure as f
+    ON e.label=f.label AND e.structid=f.pdbid
+    LEFT JOIN Model as g
+    ON e.label=g.label AND e.structid=g.modelid
+    INNER JOIN Alignment as h USE INDEX(PRIMARY)
+    ON d.label=h.label AND d.structid=h.structid AND d.chain=h.chain AND d.seqid=h.chain_seqid AND h.transcript=b.transcript
+    INNER JOIN Transcript as i USE INDEX(PRIMARY)
+    ON h.label=i.label AND h.transcript=i.transcript AND h.trans_seqid=i.seqid
+    INNER JOIN AlignmentScore as j
+    ON h.label=j.label AND h.structid=j.structid AND h.chain=j.chain AND h.transcript=j.transcript
+    WHERE c.consequence LIKE '%%%%missense_variant%%%%'
+    AND a.structid=%%s 
+    AND a.label=%%s
+    AND b.label=%%s
+    AND c.dlabel=%%s AND c.slabel=%%s
+    AND d.label=%%s
+    AND e.label=%%s
+    AND h.label=%%s
+    AND i.label=%%s
+    AND j.label=%%s
+    # Limit to biological assemblies for experimental structures
+    # Limit models to those with quality score > 0.7 (ModBase recommended threshold)
+    AND (e.biounit>0 OR g.mpqs>0.7)
+    ORDER BY d.structid,d.biounit,d.chain,d.seqid;
+    # Do not specify structure/model labels. One will be NULL in each row.
+    # Structure/model labels will still match the chain labels, which are specified.
     """
   structure_query = """SELECT
     g.model,g.chain,a.seqid,d.*,c.*%s
     FROM Residue as a
     INNER JOIN GenomicIntersection as b
-    ON a.structid=b.structid AND a.chain=b.chain AND a.seqid=b.seqid
+    ON a.label=b.slabel AND a.structid=b.structid AND a.chain=b.chain AND a.seqid=b.seqid
     INNER JOIN GenomicConsequence as c
     ON b.gc_id=c.gc_id
     INNER JOIN GenomicData as d
@@ -793,23 +814,25 @@ class PDBMapIO(PDBIO):
     g.model,a.seqid,d.*,c.*%s
     FROM Residue as a
     INNER JOIN GenomicIntersection as b
-    ON a.structid=b.structid AND a.chain=b.chain AND a.seqid=b.seqid
+    ON a.label=b.slabel AND a.structid=b.structid AND a.chain=b.chain AND a.seqid=b.seqid
     INNER JOIN GenomicConsequence as c
     ON b.gc_id=c.gc_id
     INNER JOIN GenomicData as d
     ON c.label=d.label AND c.chr=d.chr AND c.start=d.start AND c.end=d.end AND c.name=d.name
     INNER JOIN Chain as g
     ON a.label=g.label AND a.structid=g.structid AND a.biounit=g.biounit AND a.model=g.model AND a.chain=g.chain%s
-    WHERE c.consequence LIKE '%%%%missense_variant%%%%' AND
+    INNER JOIN Model as e
+    ON g.label=e.label AND g.structid=e.modelid
+    WHERE e.mpqs>0.7 AND c.consequence LIKE '%%%%missense_variant%%%%' AND
     a.label=%%s AND c.label=%%s AND a.structid=%%s;"""
   unp_query = """SELECT DISTINCT c.structid FROM 
     GenomicIntersection as a
     INNER JOIN GenomicConsequence as b
     ON a.gc_id=b.gc_id
     INNER JOIN Residue as c
-    ON a.structid=c.structid AND a.chain=c.chain AND a.seqid=c.seqid
+    ON a.slabel=c.label AND a.structid=c.structid AND a.chain=c.chain AND a.seqid=c.seqid
     INNER JOIN Chain as d
-    ON c.structid=d.structid AND c.chain=d.chain
+    ON c.label=d.label AND c.structid=d.structid AND c.chain=d.chain
     WHERE b.label=%s AND c.label=%s AND d.unp=%s;"""
 
 aa_code_map = {"ala" : "A",

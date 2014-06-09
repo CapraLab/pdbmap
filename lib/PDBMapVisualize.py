@@ -30,6 +30,10 @@ class PDBMapVisualize():
     """ Visualize the annotated dataset within a structure """
     pdbid = pdbid.lower()
     res  = self.io.load_structure(pdbid,biounit)
+    if not res:
+      msg = "WARNING (PDBMapVisualize) No variants for %s, biounit %d\n"%(pdbid,biounit)
+      sys.stderr.write(msg)
+      return
     for anno in anno_list:
       # If any specified annotation isn't in the default return
       if anno not in res:
@@ -98,6 +102,10 @@ class PDBMapVisualize():
   def visualize_model(self,modelid,biounit=0,anno_list=['maf'],spectrum_range=[],group=None):
     """ Visualize the annotated dataset within a model """
     res  = self.io.load_model(modelid)
+    if not res:
+      msg = "WARNING (PDBMapVisualize) No variants for %s, biounit %d\n"%(modelid,biounit)
+      sys.stderr.write(msg)
+      return
     for anno in anno_list:
       # If any specified annotation isn't in the default return
       if anno not in res:
@@ -171,14 +179,14 @@ class PDBMapVisualize():
     for entity_type,entity in res_list:
       if entity_type == 'structure':
         # Query all biological assemblies
-        query = "SELECT DISTINCT biounit FROM Chain WHERE structid=%s"
+        query = "SELECT DISTINCT biounit FROM Chain WHERE structid=%s AND biounit>0"
         res   = self.io.secure_query(query,(entity,),cursorclass='Cursor')
         biounits = [r[0] for r in res]
         for biounit in biounits:
           self.visualize_structure(entity,biounit,anno_list,spectrum_range,group=unpid)
       elif entity_type == 'model':
         # Query all biological assemblies
-        query = "SELECT DISTINCT biounit FROM Chain WHERE structid=%s"
+        query = "SELECT DISTINCT biounit FROM Chain WHERE structid=%s AND biounit>0"
         res   = self.io.secure_query(query,(entity,),cursorclass='Cursor')
         biounits = [r[0] for r in res]
         for biounit in biounits:
@@ -189,12 +197,12 @@ class PDBMapVisualize():
 
   def visualize_all(self,anno_list=['maf'],spectrum_range=[]):
     """ Visualize all structures and models for the annotated dataset """
-    query = "SELECT DISTINCT structid FROM GenomicIntersection WHERE label=%s"
+    query = "SELECT DISTINCT structid FROM GenomicIntersection WHERE dlabel=%s"
     res   = [r for r in self.io.secure_query(query,(self.io.dlabel,),cursorclass='Cursor')]
     structures = [r[0] for r in res if self.io.detect_entity_type(r[0]) == 'structure']
     # if False:
     for s in structures:
-      query = "SELECT DISTINCT biounit FROM Chain WHERE structid=%s"
+      query = "SELECT DISTINCT biounit FROM Chain WHERE structid=%s AND biounit>0"
       bres   = self.io.secure_query(query,(s,),cursorclass='Cursor')
       biounits = [r[0] for r in bres]
       for b in biounits:
@@ -202,7 +210,7 @@ class PDBMapVisualize():
         self.visualize_structure(s,b,anno_list,spectrum_range,group='all')
     models = [r[0] for r in res if self.io.detect_entity_type(r[0]) == 'model']
     for m in models:
-      query = "SELECT DISTINCT biounit FROM Chain WHERE structid=%s"
+      query = "SELECT DISTINCT biounit FROM Chain WHERE structid=%s and biounit>0"
       bres   = self.io.secure_query(query,(m,),cursorclass='Cursor')
       biounits = [r[0] for r in bres]
       for b in biounits:

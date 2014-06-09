@@ -101,7 +101,6 @@ class PDBMapIntersect():
           structures = self.io.secure_query(query,cursorclass='SSCursor')
         print " # Fetching PDBMap::Alignment,Transcript #"
         for row in structures:
-          print row
           writer.writerow(row)
 
       # IntersectBed is sensitive, ensure unix encoding
@@ -119,9 +118,9 @@ class PDBMapIntersect():
                       dlabel=dlabel,slabel=slabel)
 
       # Remove temp files only if no exception
-      # sp.check_call(["rm","-f",temp1])
-      # sp.check_call(["rm","-f",temp2])
-    ## Intersection completed and uploaded. Cleaning up temp files ##    
+      sp.check_call(["rm","-f",temp1])
+      sp.check_call(["rm","-f",temp2])
+        
     except Exception as e: 
       msg  = "ERROR (PDBMapIntersect) Exception during "
       msg += "%s Intersection of %s and %s: %s"%(dtype,dlabel,slabel,str(e))
