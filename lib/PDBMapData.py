@@ -112,7 +112,7 @@ class PDBMapData():
     # Add attribute fields to INFO
     record.INFO["ID"] = record.ID
     record.INFO["CHROM"] = "chr%s"%record.CHROM
-    record.INFO["START"] = record.POS
+    record.INFO["START"] = int(record.POS)
     record.INFO["REF"] = record.REF
     record.INFO["ALT"] = record.ALT[0] # only the most common
     record.INFO["QUAL"] = record.QUAL
@@ -125,6 +125,12 @@ class PDBMapData():
     if record.CSQ[0]['SYMBOL_SOURCE'] == 'HGNC':
       record.INFO["HGNC"] = record.CSQ[0]["SYMBOL"]
     else: record.INFO["HGNC"] = None
+    # Correct missing variant IDs
+    if not record.INFO["ID"]:
+      if record.INFO["EXISTING"]:
+        record.INFO["ID"] = record.INFO["EXISTING"]
+      else:
+        record.INFO["ID"] = "%(CHROM)s:%(START)d-%(END)d"%(record.INFO)
     # Add some variant info to the consequences
     for csq in record.CSQ:
       csq["ID"] = record.INFO["ID"]
@@ -143,6 +149,14 @@ class PDBMapData():
     # Determine Consequence headers
     csq_headers  = parser.infos['CSQ'].desc.split(': ')[-1].split('|')
     for record in parser:
+      # If consequence refers to a haplotype chromosome, ignore
+      if record.INFO['CHROM'] not in ['chr1','chr2','chr3',
+                        'chr4','chr5','chr6','chr7','chr8',
+                        'chr9','chr10','chr11','chr12','chr13',
+                        'chr14','chr15','chr16','chr17','chr18',
+                        'chr19','chr20','chr21','chr22',
+                        'chrX','chrY','chrMT']:
+        continue
       yield self.vep_record_parser(record,info_headers,csq_headers)
 
   def load_pedmap(self,fname):

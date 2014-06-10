@@ -140,14 +140,9 @@ def multidigit_rand(digits):
 
 ## Copied from snp_stats
 def process_parser(p):
-  i = 0
   while True:
     line = p.stdout.readline()
     if not line: break
-    #debug
-    if i % 500 == 0:
-      print "process_tracer: %s"%line.strip()
-    i += 1
     yield line
 
 ## Adapted from snp_stats

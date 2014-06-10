@@ -780,7 +780,7 @@ class PDBMapIO(PDBIO):
     ON h.label=i.label AND h.transcript=i.transcript AND h.trans_seqid=i.seqid
     INNER JOIN AlignmentScore as j
     ON h.label=j.label AND h.structid=j.structid AND h.chain=j.chain AND h.transcript=j.transcript
-    WHERE c.consequence LIKE '%%%%missense_variant%%%%'
+    WHERE b.consequence LIKE '%%%%missense_variant%%%%'
     AND a.structid=%%s 
     AND a.label=%%s
     AND b.label=%%s

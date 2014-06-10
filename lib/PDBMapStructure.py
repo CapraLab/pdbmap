@@ -61,9 +61,9 @@ class PDBMapStructure(Structure):
         if alignment.perc_identity > 0.5:
           alignments.append((alignment.perc_identity,len(alignment.alignment),alignment))
       # Store best transcript alignment as element of chain
-      alignments.sort()
+      alignments.sort() # ascending by perc_identity,length
       if len(alignments) > 0:
-        chain.alignments  = [alignments[-1][2]]
+        chain.alignments  = [alignments[-1][2]] # last (highest) perc_identity
       else:
         chain.alignments  = []
       chain.transcripts = [a.transcript for a in chain.alignments]
