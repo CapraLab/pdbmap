@@ -34,6 +34,9 @@ class PDBMapVisualize():
       msg = "WARNING (PDBMapVisualize) No variants for %s, biounit %d\n"%(pdbid,biounit)
       sys.stderr.write(msg)
       return
+    # Ensure any user-supplied annotations are properly formatted
+    anno_list = [a.replace('.','_') for a in anno_list]
+    anno_list = [a.replace(' ','_') for a in anno_list]
     for anno in anno_list:
       # If any specified annotation isn't in the default return
       if anno not in res:
@@ -210,7 +213,7 @@ class PDBMapVisualize():
         self.visualize_structure(s,b,anno_list,spectrum_range,group='all')
     models = [r[0] for r in res if self.io.detect_entity_type(r[0]) == 'model']
     for m in models:
-      query = "SELECT DISTINCT biounit FROM Chain WHERE structid=%s and biounit>0"
+      query = "SELECT DISTINCT biounit FROM Chain WHERE structid=%s"
       bres   = self.io.secure_query(query,(m,),cursorclass='Cursor')
       biounits = [r[0] for r in bres]
       for b in biounits:
@@ -420,9 +423,11 @@ if __name__ == '__main__':
   rc("ribbackbone")
   rc("~disp")
   rc("ribspline card smooth strand")
-  # Identify all annotated residues as spheres
   for resi in params['resis']:
+    # Identify all annotated residues as spheres
     rc("disp %s@ca"%resi[0])
+    # And show atom/bonds around annotated residues
+    rc("bonddisplay always %s za<5"%resi[0])
     # # If annotation is binary, color grey/red
     # if (params['minval'],params['maxval']) == (0,1):
     #   rc("color red,a %s@ca"%resi[0])
@@ -443,5 +448,9 @@ if __name__ == '__main__':
   rc("~define")
   # Export the image
   rc("copy file %(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(anno)s.png width 800 height 800 units points dpi 72"%params)
+  # Export the movie 
+  #FIXME: terrible quality on these videos
+  # rc("movie record; turn y 3 120; wait 120; movie stop")
+  # rc("movie encode quality highest output %(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(anno)s.mp4"%params)
   # Export the scene
   rc("save %(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(anno)s.py"%params)

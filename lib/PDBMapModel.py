@@ -71,10 +71,10 @@ class PDBMapModel(Structure):
     else:
       self.tvsmod_no35 = 'NULL'
       self.tvsmod_rmsd = 'NULL'
-    self.evalue  = self._sfloat(model_summary[4])
-    self.ga341   = self._sfloat(model_summary[5])
-    self.mpqs    = self._sfloat(model_summary[6])
-    self.zdope   = self._sfloat(model_summary[7])
+    self.evalue  = self._sfloat(model_summary[5])
+    self.ga341   = self._sfloat(model_summary[6])
+    self.mpqs    = self._sfloat(model_summary[7])
+    self.zdope   = self._sfloat(model_summary[8])
     self.pdbid   = model_summary[9]
     self.chain   = model_summary[10]
     self.unp     = model_summary[17]

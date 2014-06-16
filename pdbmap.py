@@ -265,10 +265,14 @@ class PDBMap():
                             slabel=struct_label,dlabel=data_label)
     v  = PDBMapVisualize(io,args.pdb_dir,args.modbase_dir)
     entity_type = io.detect_entity_type(entity) if not entity=='all' else 'all'
-    if entity_type in ['structure','model'] and not biounits:
+    if entity_type == 'structure' and not biounits:
       # Query all biological assemblies, exclude the asymmetric unit
-      query = "SELECT DISTINCT biounit FROM Chain WHERE pdbid=%s AND biounit>0"
-      res   = io.secure_query(query,(entity,),cursorclass='Cursor')
+      query = "SELECT DISTINCT biounit FROM Chain WHERE label=%s AND structid=%s AND biounit>0"
+      res   = io.secure_query(query,(struct_label,entity,),cursorclass='Cursor')
+      biounits = [r[0] for r in res]
+    elif entity_type == 'model' and not biounits:
+      query = "SELECT DISTINCT biounit FROM Chain WHERE label=%s AND structid=%s"
+      res   = io.secure_query(query,(struct_label,entity,),cursorclass='Cursor')
       biounits = [r[0] for r in res]
     try:
       if entity_type == 'structure':

@@ -182,6 +182,7 @@ class PDBMapData():
       header = fin.readline().strip().split('\t')
       header[0:4] = ["chr","start","end","name"]
       header = [f.replace('.','_') for f in header]
+      header = [f.replace(' ','_') for f in header]
       reader = csv.reader(fin,delimiter='\t')
       row1   = reader.next()
     # Remove header from bed file

@@ -790,9 +790,9 @@ class PDBMapIO(PDBIO):
     AND h.label=%%s
     AND i.label=%%s
     AND j.label=%%s
-    # Limit to biological assemblies for experimental structures
-    # Limit models to those with quality score > 1.1 (ModBase recommended threshold)
-    AND (e.biounit>0 OR g.mpqs>1.1)
+    # Limit to biological assemblies for x-ray crystallography
+    # Include all NMR and Models
+    AND (b.method LIKE '%nmr%' OR NOT ISNULL(g.modelid) OR a.biounit>0)
     ORDER BY d.structid,d.biounit,d.chain,d.seqid;
     # Do not specify structure/model labels. One will be NULL in each row.
     # Structure/model labels will still match the chain labels, which are specified.
@@ -823,7 +823,7 @@ class PDBMapIO(PDBIO):
     ON a.label=g.label AND a.structid=g.structid AND a.biounit=g.biounit AND a.model=g.model AND a.chain=g.chain%s
     INNER JOIN Model as e
     ON g.label=e.label AND g.structid=e.modelid
-    WHERE e.mpqs>1.1 AND c.consequence LIKE '%%%%missense_variant%%%%' AND
+    WHERE c.consequence LIKE '%%%%missense_variant%%%%' AND
     a.label=%%s AND c.label=%%s AND a.structid=%%s;"""
   unp_query = """SELECT DISTINCT c.structid FROM 
     GenomicIntersection as a
