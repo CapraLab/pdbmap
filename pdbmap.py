@@ -202,7 +202,7 @@ class PDBMap():
     io     = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,dlabel=dname)
     query  = "SELECT DISTINCT b.name FROM GenomicIntersection as a "
     query += "INNER JOIN GenomicConsequence as b "
-    query += "ON a.gc_id=b.gc_id WHERE a.label=%s"
+    query += "ON a.gc_id=b.gc_id WHERE a.dlabel=%s"
     res    = io.secure_query(query,[dname],cursorclass="Cursor")
     tempf = "temp/%d.TEMP"%multidigit_rand(10)
     nrows = 0
@@ -604,7 +604,7 @@ if __name__== "__main__":
     if sname == 'all': sname = None
     nrows = 501 if len(args.args) < 3 else int(args.args[2])
     print "## Intersecting %s with PDBMap ##"%dname
-    quick = True if nrows < 500 else False
+    quick = True if nrows < 20000 else False
     print [" # (This may take a while) #"," # Using quick-intersect #"][int(quick)]
     nrows = pdbmap.intersect_data(dname,sname=sname,quick=quick)
     print " # %d intersection rows uploaded."%nrows

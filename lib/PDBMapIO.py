@@ -588,7 +588,10 @@ class PDBMapIO(PDBIO):
       else:     self._c.execute(query)
     except Exception as e:
       msg  = "ERROR (PDBMapIO) Secure query failed; Exception: %s; "%str(e)
-      msg += "Query: %s"%self._c._last_executed
+      msg += " Provided query: %s"%query
+      msg += " Provided args: %s"%str(qvars)
+      if "_last_executed" in dir(self._c):
+        msg += " Executed Query: %s"%self._c._last_executed
       raise Exception(msg)
     resetwarnings()
     for row in self._c:
@@ -636,7 +639,9 @@ class PDBMapIO(PDBIO):
       supp_select = ''
       supp_table  = ''
     query = query%(supp_select,supp_table) # insert additional query statements
-    q = self.secure_query(query,qvars=(self.slabel,self.dlabel,pdbid,biounit),cursorclass='DictCursor')
+    q = self.secure_query(query,qvars=(self.slabel,self.slabel,self.dlabel,
+                                        self.dlabel,self.dlabel,self.slabel,
+                                        pdbid,biounit),cursorclass='DictCursor')
     res = {}
     for row in q:
       if not res:
@@ -648,7 +653,7 @@ class PDBMapIO(PDBIO):
 
   def load_model(self,modelid,useranno=False):
     """ Loads the structure from the PDBMap database """
-    query = PDBMapIO.model_query
+    query = PDBMapIO.model_query # now identical to structure query
     if useranno:
       supp_select = ",z.* "
       supp_table  = "\nINNER JOIN pdbmap_supp.%s AS z ON z.chr=d.chr "%self.dlabel
@@ -657,7 +662,9 @@ class PDBMapIO(PDBIO):
       supp_select = ''
       supp_table  = ''
     query = query%(supp_select,supp_table) # insert additional query statements
-    q = self.secure_query(query,qvars=(self.slabel,self.dlabel,modelid),cursorclass='DictCursor')
+    q = self.secure_query(query,qvars=(self.slabel,self.slabel,self.dlabel,
+                                        self.dlabel,self.dlabel,self.slabel,
+                                        modelid,0),cursorclass='DictCursor')
     res = {}
     for row in q:
       if not res:
@@ -670,9 +677,13 @@ class PDBMapIO(PDBIO):
   def load_unp(self,unpid):
     """ Identifies all associated structures, then pulls those structures. """
     query = PDBMapIO.unp_query
-    q = self.secure_query(query,qvars=(self.dlabel,self.slabel,unpid),cursorclass='Cursor')
+    #a.slabel=%s AND a.dlabel=%s AND b.label=%s AND c.label=%s AND d.label=%s AND d.unp=%s
+    q = self.secure_query(query,qvars=(self.slabel,self.dlabel,
+                                        self.dlabel,self.slabel,
+                                        self.slabel,unpid),
+                                        cursorclass='Cursor')
     entities = [r[0] for r in q]
-    print "%s found in %d structures."%(unpid,len(entities))
+    print "%s found in %d structures/models."%(unpid,len(entities))
     res = []
     for entity in entities:
       entity_type = self.detect_entity_type(entity)
@@ -808,8 +819,10 @@ class PDBMapIO(PDBIO):
     ON c.label=d.label AND c.chr=d.chr AND c.start=d.start AND c.end=d.end AND c.name=d.name
     INNER JOIN Chain as g
     ON a.label=g.label AND a.structid=g.structid AND a.biounit=g.biounit AND a.model=g.model AND a.chain=g.chain%s
-    WHERE c.consequence LIKE '%%%%missense_variant%%%%' AND
-    a.label=%%s AND c.label=%%s AND a.structid=%%s AND a.biounit=%%s;"""
+    WHERE c.consequence LIKE '%%%%missense_variant%%%%' 
+    AND a.label=%%s AND b.slabel=%%s AND b.dlabel=%%s AND c.label=%%s 
+    AND d.label=%%s AND g.label=%%s  
+    AND a.structid=%%s AND a.biounit=%%s;"""
   model_query = """SELECT
     g.model,a.seqid,d.*,c.*%s
     FROM Residue as a
@@ -821,10 +834,10 @@ class PDBMapIO(PDBIO):
     ON c.label=d.label AND c.chr=d.chr AND c.start=d.start AND c.end=d.end AND c.name=d.name
     INNER JOIN Chain as g
     ON a.label=g.label AND a.structid=g.structid AND a.biounit=g.biounit AND a.model=g.model AND a.chain=g.chain%s
-    INNER JOIN Model as e
-    ON g.label=e.label AND g.structid=e.modelid
-    WHERE c.consequence LIKE '%%%%missense_variant%%%%' AND
-    a.label=%%s AND c.label=%%s AND a.structid=%%s;"""
+    WHERE c.consequence LIKE '%%%%missense_variant%%%%' 
+    AND a.label=%%s AND b.slabel=%%s AND b.dlabel=%%s AND c.label=%%s 
+    AND d.label=%%s AND g.label=%%s  
+    AND a.structid=%%s AND a.biounit=%%s;"""
   unp_query = """SELECT DISTINCT c.structid FROM 
     GenomicIntersection as a
     INNER JOIN GenomicConsequence as b
@@ -833,7 +846,7 @@ class PDBMapIO(PDBIO):
     ON a.slabel=c.label AND a.structid=c.structid AND a.chain=c.chain AND a.seqid=c.seqid
     INNER JOIN Chain as d
     ON c.label=d.label AND c.structid=d.structid AND c.chain=d.chain
-    WHERE b.label=%s AND c.label=%s AND d.unp=%s;"""
+    WHERE a.slabel=%s AND a.dlabel=%s AND b.label=%s AND c.label=%s AND d.label=%s AND d.unp=%s;"""
 
 aa_code_map = {"ala" : "A",
         "arg" : "R",

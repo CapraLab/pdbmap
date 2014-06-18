@@ -28,6 +28,7 @@ class PDBMapVisualize():
 
   def visualize_structure(self,pdbid,biounit=0,anno_list=['maf'],spectrum_range=[],group=None):
     """ Visualize the annotated dataset within a structure """
+    print "Visualizing structure %s.%s"%(pdbid,biounit)
     pdbid = pdbid.lower()
     res  = self.io.load_structure(pdbid,biounit)
     if not res:
@@ -104,6 +105,7 @@ class PDBMapVisualize():
 
   def visualize_model(self,modelid,biounit=0,anno_list=['maf'],spectrum_range=[],group=None):
     """ Visualize the annotated dataset within a model """
+    print "Visualizing model %s.%s"%(modelid,biounit)
     res  = self.io.load_model(modelid)
     if not res:
       msg = "WARNING (PDBMapVisualize) No variants for %s, biounit %d\n"%(modelid,biounit)
@@ -177,20 +179,21 @@ class PDBMapVisualize():
 
   def visualize_unp(self,unpid,anno_list=['maf'],spectrum_range=[]):
     """ Visualize the annotated dataset associated with a protein """
+    print "Visualizing protein %s"%(unpid)
     res_list  = self.io.load_unp(unpid)
     # Visualize for each biological assembly
     for entity_type,entity in res_list:
       if entity_type == 'structure':
         # Query all biological assemblies
-        query = "SELECT DISTINCT biounit FROM Chain WHERE structid=%s AND biounit>0"
-        res   = self.io.secure_query(query,(entity,),cursorclass='Cursor')
+        query = "SELECT DISTINCT biounit FROM Chain WHERE label=%s AND structid=%s AND biounit>0"
+        res   = self.io.secure_query(query,(self.io.slabel,entity),cursorclass='Cursor')
         biounits = [r[0] for r in res]
         for biounit in biounits:
           self.visualize_structure(entity,biounit,anno_list,spectrum_range,group=unpid)
       elif entity_type == 'model':
         # Query all biological assemblies
-        query = "SELECT DISTINCT biounit FROM Chain WHERE structid=%s AND biounit>0"
-        res   = self.io.secure_query(query,(entity,),cursorclass='Cursor')
+        query = "SELECT DISTINCT biounit FROM Chain WHERE label=%s AND structid=%s"
+        res   = self.io.secure_query(query,(self.io.dlabel,entity),cursorclass='Cursor')
         biounits = [r[0] for r in res]
         for biounit in biounits:
           self.visualize_model(entity,biounit,anno_list,spectrum_range,group=unpid)
@@ -200,6 +203,7 @@ class PDBMapVisualize():
 
   def visualize_all(self,anno_list=['maf'],spectrum_range=[]):
     """ Visualize all structures and models for the annotated dataset """
+    print "Visualizing dataset %s"%self.io.dlabel
     query = "SELECT DISTINCT structid FROM GenomicIntersection WHERE dlabel=%s"
     res   = [r for r in self.io.secure_query(query,(self.io.dlabel,),cursorclass='Cursor')]
     structures = [r[0] for r in res if self.io.detect_entity_type(r[0]) == 'structure']
@@ -209,7 +213,6 @@ class PDBMapVisualize():
       bres   = self.io.secure_query(query,(s,),cursorclass='Cursor')
       biounits = [r[0] for r in bres]
       for b in biounits:
-        print "Visualizing %s.%s"%(s,b)
         self.visualize_structure(s,b,anno_list,spectrum_range,group='all')
     models = [r[0] for r in res if self.io.detect_entity_type(r[0]) == 'model']
     for m in models:
@@ -217,7 +220,6 @@ class PDBMapVisualize():
       bres   = self.io.secure_query(query,(m,),cursorclass='Cursor')
       biounits = [r[0] for r in bres]
       for b in biounits:
-        print "Visualizing %s.%s"%(m,b)
         self.visualize_model(m,b,anno_list,spectrum_range,group='all')
 
   def visualize(self,params,group=None):
