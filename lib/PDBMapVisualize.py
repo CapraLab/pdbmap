@@ -77,8 +77,10 @@ class PDBMapVisualize():
         sys.stderr.write(msg)
         continue # Move to next annotation
       cols = ['model','seqid','chain',anno]
-      out  = [res[col] for col in cols if res[anno]]   # Extract columns as rows
-      out  = [list(i) for i in zip(*out)] # Transpose back to columns
+      print 'res:',res
+      out  = [res[col] for col in cols if res[anno]] # Extract columns as rows
+      out  = [list(i) for i in zip(*out)]            # Transpose back to columns
+      print 'out:',out
       minval,maxval = (999,-999)
       tempf = "temp/%d.TEMP"%multidigit_rand(10)
       # Write the mappings to a temp file

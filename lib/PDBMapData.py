@@ -163,11 +163,11 @@ class PDBMapData():
     """ Convert PED/MAP to VCF, pipe VCF through VEP and load VEP output """
     print "load_pedmap not implemented"
 
-  def load_bed(self,fname):
+  def load_bed(self,fname,id_type="id"):
     """ Load data from BED """
     print "Initializing BED generator."
     # Parse the VCF output from VEP
-    parser = vcf.Reader(self.load_vep(fname,'id'))
+    parser = vcf.Reader(self.load_vep(fname,id_type))
     # Determine Info headers
     info_headers = parser.infos.keys()
     # Determine Consequence headers
@@ -188,6 +188,11 @@ class PDBMapData():
     # Remove header from bed file
     types = ["VARCHAR(100)","INT","INT","VARCHAR(100)"]
     for i,col in enumerate(row1):
+      if i == 3:
+        if col.startswith('rs'):
+          id_type = 'id'
+        else:
+          id_type = 'hgvs'
       if i < 3: continue
       try:
         col = float(col)
@@ -196,7 +201,7 @@ class PDBMapData():
         if len(col) > 150:
           types.insert(i,"TEXT")
         else:
-          types.insert(i,"VARCHAR(%d)"%(len(col)*2))
+          types.insert(i,"VARCHAR(250)") # reasonably large varchar
     table_def = ["%s %s"%(header[i],types[i]) for i in range(len(header))]
     query = "DROP TABLE IF EXISTS pdbmap_supp.%s"
     query = query%io.dlabel
@@ -213,10 +218,10 @@ class PDBMapData():
     io.secure_command(query)
     # Make any necessary indexing conversions
     if indexing == 'ucsc':
-      query = "UPDATE pdbmap_supp.%s SET start=start+1, end=end+1 ORDER BY start,end DESC"%io.dlabel
+      query = "UPDATE IGNORE pdbmap_supp.%s SET start=start+1, end=end+1 ORDER BY start,end DESC"%io.dlabel
       io.secure_command(query)
     elif indexing == 'ensembl':
-      query = "UPDATE pdbmap_supp.%s SET end=end+1 ORDER BY start,end DESC"%io.dlabel
+      query = "UPDATE IGNORE pdbmap_supp.%s SET end=end+1 ORDER BY start,end DESC"%io.dlabel
       io.secure_command(query)
     # Retain only rsID for VEP
     if delim == '\t':
@@ -224,7 +229,7 @@ class PDBMapData():
     else:
       os.system("sed '1d' %s | cut -d'%s' -f4 > %sVEPPREP.txt"%(fname,delim,fname.replace('.','_')))
     fname = "%sVEPPREP.txt"%fname.replace('.','_')
-    return fname
+    return fname,id_type
 
   def load_vep(self,fname,intype='vcf'):
     """ Yield VEP rows """
@@ -232,6 +237,7 @@ class PDBMapData():
     cmd = [f for f in self.vep_cmd]
     cmd[2] = fname
     cmd[5] = intype
+    print ' '.join(cmd)
     try:
       # Call VEP and capture stdout in realtime
       p = sp.Popen(cmd,stdout=sp.PIPE)

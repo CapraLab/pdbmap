@@ -176,8 +176,10 @@ class PDBMap():
       if ext != "bed":
         delim = ' ' if ext=='txt' else ','
       indexing = 'ucsc' if ext == 'bed' and not indexing else 'pdbmap'
-      dfile = d.load_bedfile(dfile,io,delim,indexing) # dfile side effect returned
-      generator = d.load_bed(dfile)
+      msg = "Using %s indexing for %s.\n"%(indexing,dfile)
+      sys.stderr.write(msg)
+      dfile,id_type = d.load_bedfile(dfile,io,delim,indexing) # dfile side effect returned
+      generator = d.load_bed(dfile,id_type)
     elif ext in ["ped","map"] :
       generator = d.load_pedmap(dfile)
     else:
