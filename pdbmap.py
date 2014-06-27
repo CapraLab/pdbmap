@@ -24,12 +24,13 @@ import subprocess as sp
 from lib import PDBMapIO,PDBMapStructure,PDBMapProtein
 from lib import PDBMapAlignment,PDBMapData,PDBMapTranscript
 from lib import PDBMapIntersect,PDBMapModel
+from lib.PDBMapNetwork import PDBMapNetwork
 from lib.PDBMapVisualize import PDBMapVisualize
 
 class PDBMap():
   def __init__(self,idmapping=None,sec2prim=None,sprot=None,
                 pdb_dir=None,modbase_dir=None,modbase_summary=None,
-                vep=None,plink=None):
+                vep=None,plink=None,reduce=None,probe=None):
     self.pdb     = False
     self.modbase = False
     # Initialize
@@ -49,6 +50,10 @@ class PDBMap():
       self.vep = vep
     if plink:
       self.plink = plink
+    if reduce:
+      self.reduce = reduce
+    if probe:
+      self.probe = probe
 
   def load_unp(self,unp,label=""):
     """ Loads all known structures associated with UniProt ID """
@@ -296,6 +301,13 @@ class PDBMap():
       # raise Exception(msg)
       raise
 
+  def network(self,structid,coord_file,backbone=False,pdb_bonds=False):
+    """ Returns the residue interaction network for the structure """
+    net = PDBMapNetwork(self.reduce,self.probe)
+    rin = net.generate_rin(structid,coord_file,backbone,pdb_bonds)
+    for bond in rin:
+      print "%s %d %s %d"%tuple(bond)
+
   def summarize(self):
     """ Returns summary statistics for the PDBMap database """
     print "Basic summary statistics for PDBMap. Not implemented."
@@ -364,6 +376,8 @@ if __name__== "__main__":
     "sprot" : "",
     "vep" : "variant_effect_predictor.pl",
     "plink" : "plink",
+    "reduce" : "reduce",
+    "probe" : "probe",
     "slabel" : "",
     "dlabel" : "",
     "indexing": None,
@@ -595,6 +609,20 @@ if __name__== "__main__":
       msg = "usage: pdbmap.py -c conf_file stats genotypes populations data_name\n"
       print msg; sys.exit(1)
     print "Functionality not yet implemented."
+
+  ## residue interaction network ##
+  elif args.cmd == "network":
+    pdbmap = PDBMap(reduce=args.reduce,probe=args.probe)
+    if len(args.args) < 2:
+      msg = "usage: pdbmap.py -c conf_file network structid [backbone(T/F) pdb_bonds(T/F)]"
+    structid   = args.args[0]
+    coord_file = args.args[1]
+    backbone,pdb_bonds = False,False
+    if len(args.args) > 2:
+      backbone  = True if args.args[2].upper() in ['T','TRUE','YES','ON'] else False
+    if len(args.args) > 3:
+      pdb_bonds = True if args.args[3].upper() in ['T','TRUE','YES','ON'] else False
+    pdbmap.network(structid,coord_file,backbone,pdb_bonds)
 
   ## intersect ##
   elif args.cmd == "intersect":
