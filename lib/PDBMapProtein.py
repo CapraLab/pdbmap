@@ -27,7 +27,7 @@ class PDBMapProtein():
   _enst2ensp  = {}
 
   def __init__(self):
-    msg = "ERROR: (PDBMapProtein) This class should not be instantiated."
+    msg = "ERROR (PDBMapProtein) This class should not be instantiated."
     raise Exception(msg)
 
   @classmethod
@@ -105,11 +105,16 @@ class PDBMapProtein():
   @classmethod
   def load_sec2prim(cls,sec2prim_fname):
     # Method to load the UniProt secondary -> primary AC mapping
+    # load_idmapping MUST be called before calling this function
+    if not PDBMapProtein._unp2ensembltrans:
+      raise Exception("ERROR (PDBMapProtein) load_sec2prim cannot be called before load_idmapping")
     with open(sec2prim_fname) as fin:
       reader = csv.reader(fin,delimiter='\t')
       sec2prim = {}
       for (sec,prim) in reader:
-        sec2prim[sec] = prim
+        # Ensure that this primary AC is human and mappable
+        if prim in PDBMapProtein._unp2ensembltrans:
+          sec2prim[sec] = prim
     PDBMapProtein.sec2prim = sec2prim
 
   @classmethod

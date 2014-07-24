@@ -765,7 +765,7 @@ class PDBMapIO(PDBIO):
   full_annotation_query = """SELECT
     /*LABELS*/a.label,d.label,
     /*VARIANT*/a.name,a.chr,a.start,a.end,b.gc_id,
-    /*CONSEQUENCE*/b.transcript as vep_trans,b.protein as vep_prot,b.protein_pos as vep_prot_pos,b.ref_amino_acid as vep_ref_aa,b.alt_amino_acid as vep_alt_aa,b.consequence,
+    /*CONSEQUENCE*/b.hgnc_gene as gene,b.transcript as vep_trans,b.protein as vep_prot,b.protein_pos as vep_prot_pos,b.ref_amino_acid as vep_ref_aa,b.alt_amino_acid as vep_alt_aa,b.consequence,
     /*ALIGN*/h.chain_seqid as aln_chain_seqid,h.trans_seqid as aln_trans_seqid,j.perc_identity,
     /*TRANS*/i.gene as ens_gene,i.transcript as ens_trans,i.protein as ens_prot,i.seqid as ens_prot_seqid,i.rescode as ens_prot_aa,
     /*RESIDUE*/d.seqid as pdb_seqid,d.rescode as pdb_aa,

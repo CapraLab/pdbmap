@@ -26,7 +26,7 @@ class PDBMapVisualize():
     self.pdb_dir = pdb_dir
     self.modbase_dir = modbase_dir
 
-  def visualize_structure(self,pdbid,biounit=0,anno_list=['maf'],spectrum_range=[],group=None):
+  def visualize_structure(self,pdbid,biounit=0,anno_list=['maf'],spectrum_range=[],group=None,colors=[]):
     """ Visualize the annotated dataset within a structure """
     print "Visualizing structure %s.%s"%(pdbid,biounit)
     pdbid = pdbid.lower()
@@ -77,10 +77,8 @@ class PDBMapVisualize():
         sys.stderr.write(msg)
         continue # Move to next annotation
       cols = ['model','seqid','chain',anno]
-      print 'res:',res
       out  = [res[col] for col in cols if res[anno]] # Extract columns as rows
       out  = [list(i) for i in zip(*out)]            # Transpose back to columns
-      print 'out:',out
       minval,maxval = (999,-999)
       tempf = "temp/%d.TEMP"%multidigit_rand(10)
       # Write the mappings to a temp file
@@ -96,16 +94,17 @@ class PDBMapVisualize():
           if -1 < value < minval: minval=value
           if value > maxval: maxval=value
       minval,maxval = (minval,maxval) if not spectrum_range else spectrum_range[a]
+      colors = None if not colors else colors[a]
       # Locate the asymmetric unit or biological assembly
       if biounit < 1:
         struct_loc = "%s/structures/all/pdb/pdb%s.ent.gz"%(self.pdb_dir,pdbid)
       else:
         struct_loc = "%s/biounit/coordinates/all/%s.pdb%d.gz"%(self.pdb_dir,pdbid,biounit)
-      params = {'structid':pdbid,'biounit':biounit,'anno':anno,'tempf':tempf,
+      params = {'structid':pdbid,'biounit':biounit,'anno':anno,'tempf':tempf,'colors':colors,
                 'minval':minval,'maxval':maxval,'resis':out,'struct_loc':struct_loc}
       self.visualize(params,group=group)
 
-  def visualize_model(self,modelid,biounit=0,anno_list=['maf'],spectrum_range=[],group=None):
+  def visualize_model(self,modelid,biounit=0,anno_list=['maf'],spectrum_range=[],group=None,colors=[]):
     """ Visualize the annotated dataset within a model """
     print "Visualizing model %s.%s"%(modelid,biounit)
     res  = self.io.load_model(modelid)
@@ -172,14 +171,15 @@ class PDBMapVisualize():
           if row[-1] and float(row[-1]) < minval: minval=float(row[-1])
           if row[-1] and float(row[-1]) > maxval: maxval=float(row[-1])
       minval,maxval = (minval,maxval) if not spectrum_range else spectrum_range[a]
+      colors = None if not colors else colors[a]
       if minval > maxval:
         continue # All values are NULL, ignore annotation
       params = {'structid':modelid,'biounit':biounit,'anno':anno,'tempf':tempf,
-                'minval':minval,'maxval':maxval,'resis':out,
+                'minval':minval,'maxval':maxval,'resis':out,'colors':colors,
                 'struct_loc':"%s/models/model/%s.pdb.gz"%(self.modbase_dir,modelid)}
       self.visualize(params,group=group)
 
-  def visualize_unp(self,unpid,anno_list=['maf'],spectrum_range=[]):
+  def visualize_unp(self,unpid,anno_list=['maf'],spectrum_range=[],colors=[]):
     """ Visualize the annotated dataset associated with a protein """
     print "Visualizing protein %s"%(unpid)
     res_list  = self.io.load_unp(unpid)
@@ -191,19 +191,19 @@ class PDBMapVisualize():
         res   = self.io.secure_query(query,(self.io.slabel,entity),cursorclass='Cursor')
         biounits = [r[0] for r in res]
         for biounit in biounits:
-          self.visualize_structure(entity,biounit,anno_list,spectrum_range,group=unpid)
+          self.visualize_structure(entity,biounit,anno_list,spectrum_range,group=unpid,colors=colors)
       elif entity_type == 'model':
         # Query all biological assemblies
         query = "SELECT DISTINCT biounit FROM Chain WHERE label=%s AND structid=%s"
         res   = self.io.secure_query(query,(self.io.dlabel,entity),cursorclass='Cursor')
         biounits = [r[0] for r in res]
         for biounit in biounits:
-          self.visualize_model(entity,biounit,anno_list,spectrum_range,group=unpid)
+          self.visualize_model(entity,biounit,anno_list,spectrum_range,group=unpid,colors=colors)
       else:
         msg = "ERROR (PDBMapVisualize) Invalid entity_type for %s: %s"%(entity,entity_type)
         raise Exception(msg)
 
-  def visualize_all(self,anno_list=['maf'],spectrum_range=[]):
+  def visualize_all(self,anno_list=['maf'],spectrum_range=[],colors=[]):
     """ Visualize all structures and models for the annotated dataset """
     print "Visualizing dataset %s"%self.io.dlabel
     query = "SELECT DISTINCT structid FROM GenomicIntersection WHERE dlabel=%s"
@@ -215,14 +215,14 @@ class PDBMapVisualize():
       bres   = self.io.secure_query(query,(s,),cursorclass='Cursor')
       biounits = [r[0] for r in bres]
       for b in biounits:
-        self.visualize_structure(s,b,anno_list,spectrum_range,group='all')
+        self.visualize_structure(s,b,anno_list,spectrum_range,group='all',colors=colors)
     models = [r[0] for r in res if self.io.detect_entity_type(r[0]) == 'model']
     for m in models:
       query = "SELECT DISTINCT biounit FROM Chain WHERE structid=%s"
       bres   = self.io.secure_query(query,(m,),cursorclass='Cursor')
       biounits = [r[0] for r in bres]
       for b in biounits:
-        self.visualize_model(m,b,anno_list,spectrum_range,group='all')
+        self.visualize_model(m,b,anno_list,spectrum_range,group='all',colors=colors)
 
   def visualize(self,params,group=None):
     # Visualize with PyMol
@@ -239,7 +239,8 @@ class PDBMapVisualize():
     # Visualize with Chimera
     params['minval'] = "%0.6f"%params['minval']
     params['maxval'] = "%0.6f"%params['maxval']
-    keys   = ['structid','biounit','anno','tempf','minval','maxval','struct_loc','res_dir']
+    params['colors'] = '-' if not params['colors'] else ','.join(params['colors'])
+    keys   = ['structid','biounit','anno','tempf','minval','maxval','struct_loc','res_dir','colors']
     script = "'lib/PDBMapVisualize.py %s'"%' '.join([str(params[key]) for key in keys])
     cmd    = "chimera --silent --script %s"%script
     try:
@@ -409,7 +410,11 @@ if __name__ == '__main__':
   args = sys.argv
   params = {'structid':args[1],'biounit':int(args[2]),'anno':args[3],'tempf':args[4],
             'minval':float(args[5]),'maxval':float(args[6]),'struct_loc':args[7],
-            'res_dir':args[8],'resis':[]}
+            'res_dir':args[8],'colors':args[9],'resis':[]}
+  if params['colors'] != '-':
+    params['colors'] = params['colors'].split(',')
+  else:
+    params['colors'] = None
   # Read the residues back into memory
   with open(params['tempf']) as fin:
     for line in fin:
@@ -423,6 +428,7 @@ if __name__ == '__main__':
   rc("defattr %(tempf)s"%params)
   # Initial colors
   rc("background solid white")
+  rc("set bgTransparency")
   rc("ribcolor dim grey")
   rc("ribbackbone")
   rc("~disp")
@@ -431,15 +437,18 @@ if __name__ == '__main__':
     # Identify all annotated residues as spheres
     rc("disp %s@ca"%resi[0])
     # And show atom/bonds around annotated residues
-    rc("bonddisplay always %s za<5"%resi[0])
-    # # If annotation is binary, color grey/red
-    # if (params['minval'],params['maxval']) == (0,1):
-    #   rc("color red,a %s@ca"%resi[0])
+    #rc("bonddisplay always %s za<5"%resi[0])
   # Define variant representation
   rc("represent bs")
   rc("setattr m autochain 0")
-  rc("setattr m ballScale .6")
-  if len(params['resis']) < 2 or params['minval'] == params['maxval']:
+  rc("setattr m ballScale .5")
+  if params['colors']:
+    crange = range(int(params['minval']),int(params['maxval'])+1)
+    colors = params['colors']
+    print ';'.join(["%d->%s"%(val,colors[i]) for i,val in enumerate(crange)])
+    for i,val in enumerate(crange):
+      rc("color %s,a :/%s=%d"%(colors[i],params['anno'],val))
+  elif len(params['resis']) < 2 or params['minval'] == params['maxval']:
     for resi in params['resis']:
       rc("color red,a %s@ca"%resi[0])
   elif params['minval'] > params['maxval']:
@@ -450,11 +459,15 @@ if __name__ == '__main__':
   rc("define plane name p1 @ca:/%(anno)s>=%(minval)0.6f"%params)
   rc("align p1")
   rc("~define")
+  # Export the scene
+  rc("save %(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(anno)s.py"%params)
   # Export the image
+  rc("copy file %(res_dir)s/%(structid)s_biounit%(biounit)d_struct_%(anno)s.png width 800 height 800 units points dpi 72"%params)
+  # remove the structure, leaving only the variants
+  rc("bonddisplay off")
   rc("copy file %(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(anno)s.png width 800 height 800 units points dpi 72"%params)
   # Export the movie 
   #FIXME: terrible quality on these videos
   # rc("movie record; turn y 3 120; wait 120; movie stop")
   # rc("movie encode quality highest output %(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(anno)s.mp4"%params)
-  # Export the scene
-  rc("save %(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(anno)s.py"%params)
+

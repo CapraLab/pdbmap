@@ -266,7 +266,7 @@ class PDBMap():
     return nrows # Return the number of kept variants
 
   def visualize(self,entity,biounits=[],struct_label='uniprot-pdb',
-                data_label='1kg',anno_list=['maf'],spectrum_range=[]):
+                data_label='1kg',anno_list=['maf'],spectrum_range=[],colors=[]):
     """ Visualizes a PDBMap structure, model, or protein """
     io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,
                             slabel=struct_label,dlabel=data_label)
@@ -284,14 +284,14 @@ class PDBMap():
     try:
       if entity_type == 'structure':
         for biounit in biounits:
-          v.visualize_structure(entity,biounit,anno_list,spectrum_range)
+          v.visualize_structure(entity,biounit,anno_list,spectrum_range,colors=colors)
       elif entity_type == 'model':
         for biounit in biounits:
-          v.visualize_model(entity,biounit,anno_list,spectrum_range)
+          v.visualize_model(entity,biounit,anno_list,spectrum_range,colors=colors)
       elif entity_type == 'unp':
-        v.visualize_unp(entity,anno_list,spectrum_range)
+        v.visualize_unp(entity,anno_list,spectrum_range,colors=colors)
       elif entity_type == 'all':
-        v.visualize_all(anno_list,spectrum_range)
+        v.visualize_all(anno_list,spectrum_range,colors=colors)
       else:
         msg = "Sorry, but the specified entity is not in the PDBMap database.\n"
         sys.stderr.write(msg)
@@ -585,7 +585,7 @@ if __name__== "__main__":
   elif args.cmd == "visualize":
     pdbmap = PDBMap()
     if len(args.args) < 3:
-      msg = "usage: pdbmap.py -c conf_file visualize entity data_name feature[,...] biounit[,...] [minval:maxval,...]\n"
+      msg = "usage: pdbmap.py -c conf_file visualize entity data_name feature[,...] biounit[,...] [minval:maxval,...] [color1,color2,...;...]\n"
       print msg; sys.exit(1)
     entity = args.args[0]
     struct_label   = 'uniprot-pdb' if not args.slabel else args.slabel
@@ -598,10 +598,19 @@ if __name__== "__main__":
     spectrum_range = []
     if len(args.args) > 4:
       spectrum_range = [tuple([float(x) for x in p.split(':')]) for p in args.args[4].split(',')]
+    if len(args.args) > 5:
+      colors = [tuple([x for x in p.split(',')]) for p in args.args[5].split(';')]
     print "## Visualizing (%s) %s[%s]+%s.%s"%(struct_label,
           entity,','.join(biounits),data_label,','.join(anno_list)),
-    print ','.join(["(%0.2f..%0.2f)"%r for r in spectrum_range])
-    pdbmap.visualize(entity,biounits,struct_label,data_label,anno_list,spectrum_range)
+    if not colors:
+      print ','.join(["(%0.2f..%0.2f)"%r for r in spectrum_range])
+    else:
+      for i,r in enumerate(spectrum_range):
+        for j,c in enumerate(range(int(r[0]),int(r[1])+1)):
+          print "%0.2f: %s;"%(c,colors[i][j]),
+        print '|'
+      print ''
+    pdbmap.visualize(entity,biounits,struct_label,data_label,anno_list,spectrum_range,colors)
 
   ## stats ##
   elif args.cmd == "stats":
