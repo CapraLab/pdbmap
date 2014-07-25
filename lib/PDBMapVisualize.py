@@ -172,7 +172,7 @@ class PDBMapVisualize():
           if row[-1] and float(row[-1]) > maxval: maxval=float(row[-1])
       minval,maxval = (minval,maxval) if not spectrum_range else spectrum_range[a]
       colors = None if not colors else colors[a]
-      if minval > maxval:
+      if minval==999 or maxval==-999:
         continue # All values are NULL, ignore annotation
       params = {'structid':modelid,'biounit':biounit,'anno':anno,'tempf':tempf,
                 'minval':minval,'maxval':maxval,'resis':out,'colors':colors,
@@ -241,8 +241,8 @@ class PDBMapVisualize():
     params['maxval'] = "%0.6f"%params['maxval']
     params['colors'] = '-' if not params['colors'] else ','.join(params['colors'])
     keys   = ['structid','biounit','anno','tempf','minval','maxval','struct_loc','res_dir','colors']
-    script = "'lib/PDBMapVisualize.py %s'"%' '.join([str(params[key]) for key in keys])
-    cmd    = "chimera --silent --script %s"%script
+    script = '"lib/PDBMapVisualize.py %s"'%' '.join([str(params[key]) for key in keys])
+    cmd    = "TEMP=$PYTHONPATH; unset PYTHONPATH; chimera --nogui --silent --script %s; export PYTHONPATH=$TEMP"%script
     try:
       status = os.system(cmd)
       if status:
@@ -428,7 +428,7 @@ if __name__ == '__main__':
   rc("defattr %(tempf)s"%params)
   # Initial colors
   rc("background solid white")
-  rc("set bgTransparency")
+  #rc("set bgTransparency")
   rc("ribcolor dim grey")
   rc("ribbackbone")
   rc("~disp")
@@ -456,9 +456,12 @@ if __name__ == '__main__':
   else:
     rc("rangecolor %(anno)s,a %(minval)0.6f blue %(maxval)0.6f red"%params)
   # Orient the image
-  rc("define plane name p1 @ca:/%(anno)s>=%(minval)0.6f"%params)
-  rc("align p1")
-  rc("~define")
+  # FIXME: Orientation is inconsistent between datasets
+  # It also does not do a very good job of orienting the image
+  # Removed for consistency until a better solution can be found
+  # rc("define plane name p1 @ca:/%(anno)s>=%(minval)0.6f"%params)
+  # rc("align p1")
+  # rc("~define")
   # Export the scene
   rc("save %(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(anno)s.py"%params)
   # Export the image

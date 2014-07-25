@@ -598,8 +598,9 @@ if __name__== "__main__":
     spectrum_range = []
     if len(args.args) > 4:
       spectrum_range = [tuple([float(x) for x in p.split(':')]) for p in args.args[4].split(',')]
+    colors = []
     if len(args.args) > 5:
-      colors = [tuple([x for x in p.split(',')]) for p in args.args[5].split(';')]
+      colors = [tuple([x for x in p.split(':')]) for p in args.args[5].split(',')]
     print "## Visualizing (%s) %s[%s]+%s.%s"%(struct_label,
           entity,','.join(biounits),data_label,','.join(anno_list)),
     if not colors:
