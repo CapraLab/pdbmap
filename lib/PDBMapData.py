@@ -148,7 +148,9 @@ class PDBMapData():
     info_headers = parser.infos.keys()
     # Determine Consequence headers
     csq_headers  = parser.infos['CSQ'].desc.split(': ')[-1].split('|')
+    nscount = 0
     for record in parser:
+      nscount += 1
       # If consequence refers to a haplotype chromosome, ignore
       if record.INFO['CHROM'] not in ['chr1','chr2','chr3',
                         'chr4','chr5','chr6','chr7','chr8',
@@ -158,6 +160,7 @@ class PDBMapData():
                         'chrX','chrY','chrMT']:
         continue
       yield self.vep_record_parser(record,info_headers,csq_headers)
+    print "Nonsynonymous SNPs in %s: %d"%(fname,nscount)
 
   def load_pedmap(self,fname):
     """ Convert PED/MAP to VCF, pipe VCF through VEP and load VEP output """
@@ -172,8 +175,11 @@ class PDBMapData():
     info_headers = parser.infos.keys()
     # Determine Consequence headers
     csq_headers  = parser.infos['CSQ'].desc.split(': ')[-1].split('|')
+    nscount = 0
     for record in parser:
+      nscount += 1
       yield self.vep_record_parser(record,info_headers,csq_headers)
+    print "Nonsynonymous SNPs in %s: %d"%(fname,nscount)
 
   def load_bedfile(self,fname,io,delim='\t',indexing=None):
     """ Creates a supplementary table for original datafile """
