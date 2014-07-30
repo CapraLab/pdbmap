@@ -27,6 +27,9 @@ from lib import PDBMapIntersect,PDBMapModel
 from lib.PDBMapNetwork import PDBMapNetwork
 from lib.PDBMapVisualize import PDBMapVisualize
 
+# Row count threshold for quick-intersection
+QUICK_THRESH = 20000
+
 class PDBMap():
   def __init__(self,idmapping=None,sec2prim=None,sprot=None,
                 pdb_dir=None,modbase_dir=None,modbase_summary=None,
@@ -642,9 +645,9 @@ if __name__== "__main__":
     dname = args.args[0] # Get the dataset name
     sname = None if len(args.args) < 2 else args.args[1]
     if sname == 'all': sname = None
-    nrows = 501 if len(args.args) < 3 else int(args.args[2])
+    nrows = QUICK_THRESH+1 if len(args.args) < 3 else int(args.args[2])
     print "## Intersecting %s with PDBMap ##"%dname
-    quick = True if nrows < 20000 else False
+    quick = True if nrows < QUICK_THRESH else False
     print [" # (This may take a while) #"," # Using quick-intersect #"][int(quick)]
     nrows = pdbmap.intersect_data(dname,sname=sname,quick=quick)
     print " # %d intersection rows uploaded."%nrows
