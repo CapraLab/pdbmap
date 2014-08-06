@@ -15,7 +15,7 @@
 #=============================================================================#
 
 # See main check for cmd line parsing
-import sys,os,csv
+import sys,os,csv,re
 import subprocess as sp
 from Bio import pairwise2
 from Bio.SubsMat import MatrixInfo as matlist
@@ -195,19 +195,24 @@ class PDBMapData():
     types = ["VARCHAR(100)","INT","INT","VARCHAR(100)"]
     for i,col in enumerate(row1):
       if i == 3:
-        if col.startswith('rs'):
+        # allele specification, VEP default
+        if re.search('\S+\/\S+',col):
+          id_type = 'default'
+        # BED format with existing rsIDs
+        elif col.startswith('rs'):
           id_type = 'id'
+        # BED format with HGVS notation
         else:
           id_type = 'hgvs'
-      if i < 3: continue
-      try:
-        col = float(col)
-        types.insert(i,"DOUBLE")
-      except ValueError,TypeError:
-        if len(col) > 150:
-          types.insert(i,"TEXT")
-        else:
-          types.insert(i,"VARCHAR(250)") # reasonably large varchar
+      if i > 3:
+        try:
+          col = float(col)
+          types.insert(i,"DOUBLE")
+        except ValueError,TypeError:
+          if len(col) > 150:
+            types.insert(i,"TEXT")
+          else:
+            types.insert(i,"VARCHAR(250)") # reasonably large varchar
     table_def = ["%s %s"%(header[i],types[i]) for i in range(len(header))]
     query = "DROP TABLE IF EXISTS pdbmap_supp.%s"
     query = query%io.dlabel
@@ -229,12 +234,13 @@ class PDBMapData():
     elif indexing == 'ensembl':
       query = "UPDATE IGNORE pdbmap_supp.%s SET end=end+1 ORDER BY start,end DESC"%io.dlabel
       io.secure_command(query)
-    # Retain only rsID for VEP
-    if delim == '\t':
-      os.system("sed '1d' %s | cut -f4 > %sVEPPREP.txt"%(fname,fname.replace('.','_')))
-    else:
-      os.system("sed '1d' %s | cut -d'%s' -f4 > %sVEPPREP.txt"%(fname,delim,fname.replace('.','_')))
-    fname = "%sVEPPREP.txt"%fname.replace('.','_')
+    # Retain only rsID if not VEP-default format
+    if id_type != 'default':
+      if delim == '\t':
+        os.system("sed '1d' %s | cut -f4 > %sVEPPREP.txt"%(fname,fname.replace('.','_')))
+      else:
+        os.system("sed '1d' %s | cut -d'%s' -f4 > %sVEPPREP.txt"%(fname,delim,fname.replace('.','_')))
+      fname = "%sVEPPREP.txt"%fname.replace('.','_')
     return fname,id_type
 
   def load_vep(self,fname,intype='vcf'):
@@ -242,7 +248,12 @@ class PDBMapData():
     print "Initializing VEP generator."
     cmd = [f for f in self.vep_cmd]
     cmd[2] = fname
-    cmd[5] = intype
+    if intype == 'default':
+      # No format specification required
+      cmd = cmd[0:4]+cmd[6:]
+    else:
+      # Provide the correct format argument (vcf;id;hgvs)
+      cmd[5] = intype
     print ' '.join(cmd)
     try:
       # Call VEP and capture stdout in realtime
