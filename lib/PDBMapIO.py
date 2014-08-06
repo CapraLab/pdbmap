@@ -14,6 +14,7 @@
 
 # See main check for cmd line parsing
 import sys,os,csv,collections,gzip,time
+import subprocess as sp
 from Bio.PDB.PDBParser import PDBParser
 from Bio.PDB.PDBIO import PDBIO
 from PDBMapStructure import PDBMapStructure
@@ -225,6 +226,22 @@ class PDBMapParser(PDBParser):
     # If the structure is empty, return immediately
     if not s:
       return s
+    m = s[0]
+    # Calculate relative solvent accessibility for this model
+    ssrsa = {}
+    resinfo = PDBMapIO.dssp(m,fname,dssp='dssp')
+    for c in m:
+      for r in c:
+        info  = resinfo[(c.id,r.seqid,r.icode)]
+        r.ss  = info['ss']
+        r.rsa = info['rsa']
+        r.phi = info['phi']
+        r.psi = info['psi']
+        r.tco = info['tco']
+        r.k   = info['kappa']
+        r.a   = info['alpha']
+        ssrsa[(c.id,r.seqid,r.icode)] = (r.ss,r.rsa,r.phi,r.psi,r.tco,r.k,r.a)
+    # Process the biological assemblies for this structure
     for biounit_fname in biounit_fnames:
       try:
         if os.path.basename(biounit_fname).split('.')[-1] == 'gz':
@@ -248,8 +265,11 @@ class PDBMapParser(PDBParser):
         sys.stderr.write(msg)
         continue
       # Add the models for this biological assembly to the PDBMapStructure
-      for m in biounit:
+      for i,m in enumerate(biounit):
         m.id = "%d.%d"%(m.biounit,m.id)
+        for c in m:
+          for r in c:
+            r.ss,r.rsa,r.phi,r.psi,r.tco,r.k,r.a = ssrsa[(c.id,r.seqid,r.icode)]
         s.add(m)
     return s
 
@@ -273,8 +293,20 @@ class PDBMapParser(PDBParser):
       msg = "ERROR (PDBMapIO) Error while parsing %s: %s"%(modelid,str(e).replace('\n',' '))
       raise Exception(msg)
     
-    m = PDBMapParser.process_structure(m)
-    return m
+    s = PDBMapParser.process_structure(m)
+    m = s[0]
+    resinfo = PDBMapIO.dssp(m,fname,dssp='dssp')
+    for c in m:
+      for r in c:
+        info  = resinfo[(c.id,r.seqid,r.icode)]
+        r.ss  = info['ss']
+        r.rsa = info['rsa']
+        r.phi = info['phi']
+        r.psi = info['psi']
+        r.tco = info['tco']
+        r.k   = info['kappa']
+        r.a   = info['alpha']
+    return s
 
 class PDBMapIO(PDBIO):
   def __init__(self,dbhost=None,dbuser=None,dbpass=None,dbname=None,slabel="",dlabel=""):
@@ -411,7 +443,9 @@ class PDBMapIO(PDBIO):
           rquery += '%(biounit)d,%(id)d,'%mfields # model id
           rquery += '"%(id)s",'%cfields  # chain id
           rquery += '"%(resname)s","%(rescode)s",%(seqid)d,'
-          rquery += '"%(icode)s",%(x)f,%(y)f,%(z)f),'
+          rquery += '"%(icode)s",%(x)f,%(y)f,%(z)f,'
+          rquery += '%(ss)f,%(rsa)f,%(phi)f,%(psi)f,'
+          rquery += '%(tco)f,%(k)f,%(a)f),'
           rfields = dict((key,r.__getattribute__(key)) for key in dir(r) 
                           if isinstance(key,collections.Hashable))
           rfields["label"] = self.slabel
@@ -693,6 +727,37 @@ class PDBMapIO(PDBIO):
         res.append((entity_type,entity))
     return res
 
+  @classmethod
+  def dssp(cls,m,fname,dssp='dssp'):
+    cmd = [dssp,fname]
+    p = sp.Popen(cmd,stdout=sp.PIPE)
+    resdict = {}
+    start_flag = False
+    for i,line in enumerate(iter(p.stdout.readline,'')):
+      if not line: continue
+      if not start_flag:
+        if line.startswith('  #'):
+          start_flag = True
+        continue
+      resinfo = {}
+      if not line[5:10].strip(): continue
+      resinfo['seqid'] = int(line[5:10])
+      resinfo['icode'] = line[10:11]
+      resinfo['chain'] = line[11:12].upper()
+      resinfo['aa']    = line[13:14].upper()
+      resinfo['ss']    = line[16:17].upper()
+      resinfo['acc']   = float(line[34:38])
+      resinfo['tco']   = float(line[85:91])
+      resinfo['kappa'] = float(line[92:97])
+      resinfo['alpha'] = float(line[98:103])
+      resinfo['phi']   = float(line[103:109])
+      resinfo['psi']   = float(line[109:115])
+      resinfo['rsa']   = float(resinfo['acc']) / solv_acc[resinfo['aa']]
+      resdict[(resinfo['chain'],resinfo['seqid'],resinfo['icode'])] = resinfo.copy()
+    return resdict
+
+
+
   def detect_entity_type(self,entity):
     """ Given an entity ID, attempts to detect the entity type """
     if self.model_in_db(entity,label=None):
@@ -870,6 +935,28 @@ aa_code_map = {"ala" : "A",
         "trp" : "W",
         "tyr" : "Y",
         "val" : "V"}
+solv_acc = {"A" : 115,
+        "R" : 225,
+        "N" : 150,
+        "D" : 160,
+        "B" : 155,
+        "C" : 135,
+        "E" : 190,
+        "Q" : 180,
+        "Z" : 185,
+        "G" : 75,
+        "H" : 195,
+        "I" : 175,
+        "L" : 170,
+        "K" : 200,
+        "M" : 185,
+        "F" : 210,
+        "P" : 145,
+        "S" : 115,
+        "T" : 140,
+        "W" : 255,
+        "Y" : 230,
+        "V" : 155}
 
 # Main check
 if __name__== "__main__":

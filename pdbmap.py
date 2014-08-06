@@ -77,19 +77,13 @@ class PDBMap():
 
   def load_pdb(self,pdbid,pdb_fname=None,label="",io=None):
     """ Loads a given PDB into the PDBMap database """
-
     if not io:
       # Create a PDBMapIO object
       io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,
                             args.dbpass,args.dbname,slabel=label)
-
     # Check if PDB is already in the database
     if io.structure_in_db(pdbid,label):
-      # msg =  "WARNING (PDBMapIO) Structure %s "%pdbid
-      # msg += "already in database. Skipping.\n"
-      # sys.stderr.write(msg)
-      return 1
-
+      return 0
     # Load the PDB structure
     if not pdb_fname:
       pdb_fname = "%s/structures/all/pdb/pdb%s.ent.gz"%(self.pdb_dir,pdbid.lower())
@@ -107,6 +101,7 @@ class PDBMap():
         msg = "Invalid structure"
         raise Exception(msg)
     except Exception as e:
+      raise
       msg = "ERROR (PDBMap) %s could not be loaded: %s\n"%(pdbid,str(e))
       sys.stderr.write(msg)
       return 1
@@ -114,6 +109,7 @@ class PDBMap():
       io.set_structure(s)
       io.upload_structure()
     except Exception as e:
+      raise
       msg = "ERROR (PDBMap) %s could not be uploaded: %s\n"%(pdbid,str(e))
       sys.stderr.write(msg)
       return 1
@@ -482,6 +478,9 @@ if __name__== "__main__":
     pdbmap = PDBMap(idmapping=args.idmapping,sec2prim=args.sec2prim,
                     pdb_dir=args.pdb_dir)
     if len(args.args) < 1:
+      msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> load_pdb pdb_file [data_file data_name] ...\n"
+      print msg; sys.exit(1)
+    elif args.args[0] == 'all':
       # All structures in the PDB mirror
       all_pdb_files = glob.glob("%s/structures/all/pdb/*.ent.gz"%args.pdb_dir)
       msg = "WARNING (PDBMap) Uploading all %d mirrored RCSB PDB structures.\n"%len(all_pdb_files)
@@ -575,7 +574,7 @@ if __name__== "__main__":
     # # Intersect with dataset with PDBMap (One-time operation)
     # for dname in set([dname for dfile,dname in dfiles]):
     #   print "## Intersecting %s with PDBMap ##"%dname
-    #   quick = True if nrows < 500 else False
+    #   quick = True if nrows < QUICK_THRESH else False
     #   print [" # (This may take a while) #"," # Using quick-intersect #"][int(quick)]
     #   nrows = pdbmap.intersect_data(dname,quick=quick)
     #   print " # %d intersection rows uploaded."%nrows

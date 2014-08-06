@@ -68,7 +68,7 @@ class PDBMapStructure(Structure):
       for gene in alignments:
         alignments[gene].sort() # ascending by length
         if len(alignments[gene]) > 0:
-          chain.alignments.append(alignments[gene][-1][2]) # last (longest) length
+          chain.alignments.append(alignments[gene][-1][1]) # last (longest) length
       chain.transcripts = [a.transcript for a in chain.alignments]
     # Return the matched transcripts
     try:
@@ -83,8 +83,7 @@ class PDBMapStructure(Structure):
     if not self.alignments:
       self.get_transcripts()
     else:
-      return self.alignments
-      
+      return self.alignments  
 
 # Main check
 if __name__== "__main__":

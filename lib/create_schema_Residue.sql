@@ -11,7 +11,17 @@ icode VARCHAR(10),
 x DOUBLE,
 y DOUBLE,
 z DOUBLE,
+ss VARCHAR(1),
+rsa DOUBLE,
+phi DOUBLE,
+psi DOUBLE,
+tco DOUBLE,
+kappa DOUBLE,
+alpha DOUBLE
 PRIMARY KEY(label,structid,biounit,model,chain,seqid,icode),
 KEY(label,structid,biounit,x,y,z),
-KEY(label,x,y,z)
+KEY(label,x,y,z),
+KEY(label,ss),
+KEY(label,rsa),
+KEY(label,phi,psi)
 )
