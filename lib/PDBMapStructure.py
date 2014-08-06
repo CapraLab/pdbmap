@@ -54,18 +54,21 @@ class PDBMapStructure(Structure):
       if len(candidate_transcripts) < 1:
         return []
       # Align chains candidate transcripts
-      alignments = []
+      alignments = {}
       for trans in candidate_transcripts:
         alignment = PDBMapAlignment(chain,trans,io=io)
-        # Exclude alignments with <50% identity, likely bad matches
-        if alignment.perc_identity > 0.5:
-          alignments.append((alignment.perc_identity,len(alignment.alignment),alignment))
-      # Store best transcript alignment as element of chain
-      alignments.sort() # ascending by perc_identity,length
-      if len(alignments) > 0:
-        chain.alignments  = [alignments[-1][2]] # last (highest) perc_identity
-      else:
-        chain.alignments  = []
+        # Exclude alignments with <90% identity, likely bad matches
+        if alignment.perc_identity >= 0.9:
+          if alignment.transcript.gene not in alignments:
+            alignments[alignment.transcript.gene] = [(len(alignment.alignment),alignment)]
+          else:
+            alignments[alignment.transcript.gene].append((len(alignment.alignment),alignment))
+      # Store canonical transcript for each gene alignment as element of chain
+      chain.alignments = []
+      for gene in alignments:
+        alignments[gene].sort() # ascending by length
+        if len(alignments[gene]) > 0:
+          chain.alignments.append(alignments[gene][-1][2]) # last (longest) length
       chain.transcripts = [a.transcript for a in chain.alignments]
     # Return the matched transcripts
     try:
