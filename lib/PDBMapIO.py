@@ -13,7 +13,7 @@
 #=============================================================================#
 
 # See main check for cmd line parsing
-import sys,os,csv,collections,gzip,time
+import sys,os,csv,collections,gzip,time,random
 import subprocess as sp
 from Bio.PDB.PDBParser import PDBParser
 from Bio.PDB.PDBIO import PDBIO
@@ -232,7 +232,10 @@ class PDBMapParser(PDBParser):
     resinfo = PDBMapIO.dssp(m,fname,dssp='dssp')
     for c in m:
       for r in c:
-        info  = resinfo[(c.id,r.seqid,r.icode)]
+        if (c.id,r.seqid,r.icode) not in resinfo:
+          info = dict((i,None) for i in ['ss','rsa','phi','psi','tco','kappa','alpha'])
+        else:
+          info  = resinfo[(c.id,r.seqid,r.icode)]
         r.ss  = info['ss']
         r.rsa = info['rsa']
         r.phi = info['phi']
@@ -296,6 +299,7 @@ class PDBMapParser(PDBParser):
     s = PDBMapParser.process_structure(m)
     m = s[0]
     resinfo = PDBMapIO.dssp(m,fname,dssp='dssp')
+    n = 0
     for c in m:
       for r in c:
         info  = resinfo[(c.id,r.seqid,r.icode)]
@@ -309,7 +313,7 @@ class PDBMapParser(PDBParser):
     return s
 
 class PDBMapIO(PDBIO):
-  def __init__(self,dbhost=None,dbuser=None,dbpass=None,dbname=None,slabel="",dlabel=""):
+  def __init__(self,dbhost=None,dbuser=None,dbpass=None,dbname=None,slabel="",dlabel="",createdb=False):
     super(PDBMapIO,self).__init__()
     self.dbhost = dbhost
     self.dbuser = dbuser
@@ -320,9 +324,10 @@ class PDBMapIO(PDBIO):
     self._cons  = []   # Define the connection pool
     self._con   = None # Define the connection
     self._c     = None # Define the cursor
-    self._connect() # Open a database connection for this object
-    if dbhost:
-      self.check_schema()
+    self.check_schema()
+    # Open the connection only if this wasn't a database creation
+    if not createdb:
+      self._connect()
 
   def structure_in_db(self,pdbid,label=-1):
     # None is a valid argument to label
@@ -444,10 +449,16 @@ class PDBMapIO(PDBIO):
           rquery += '"%(id)s",'%cfields  # chain id
           rquery += '"%(resname)s","%(rescode)s",%(seqid)d,'
           rquery += '"%(icode)s",%(x)f,%(y)f,%(z)f,'
-          rquery += '%(ss)f,%(rsa)f,%(phi)f,%(psi)f,'
-          rquery += '%(tco)f,%(k)f,%(a)f),'
+          rquery += '"%(ss)s",%(rsa)s,%(phi)s,%(psi)s,'
+          rquery += '%(tco)s,%(k)s,%(a)s),'
           rfields = dict((key,r.__getattribute__(key)) for key in dir(r) 
                           if isinstance(key,collections.Hashable))
+          for key,val in rfields.iteritems():
+            if val == None:
+              if key == 'ss':
+                rfields[key] = '?'
+              else:
+                rfields[key] = 'NULL'
           rfields["label"] = self.slabel
           rquery = rquery%rfields
         queries.append(rquery[:-1])
@@ -729,7 +740,13 @@ class PDBMapIO(PDBIO):
 
   @classmethod
   def dssp(cls,m,fname,dssp='dssp'):
-    cmd = [dssp,fname]
+    # Create temp file containing only ATOM rows
+    tmpf = "temp/%d.TEMP"%multidigit_rand(10)
+    cmd  = "grep ^ATOM %s > %s"%(fname,tmpf)
+    if fname.split('.')[-1] == 'gz':
+      cmd = 'z'+cmd
+    os.system(cmd)
+    cmd  = [dssp,tmpf]
     p = sp.Popen(cmd,stdout=sp.PIPE)
     resdict = {}
     start_flag = False
@@ -744,6 +761,8 @@ class PDBMapIO(PDBIO):
       resinfo['seqid'] = int(line[5:10])
       resinfo['icode'] = line[10:11]
       resinfo['chain'] = line[11:12].upper()
+      if not resinfo['chain'].strip():
+        resinfo['chain'] = 'A'
       resinfo['aa']    = line[13:14].upper()
       resinfo['ss']    = line[16:17].upper()
       resinfo['acc']   = float(line[34:38])
@@ -752,11 +771,12 @@ class PDBMapIO(PDBIO):
       resinfo['alpha'] = float(line[98:103])
       resinfo['phi']   = float(line[103:109])
       resinfo['psi']   = float(line[109:115])
-      resinfo['rsa']   = float(resinfo['acc']) / solv_acc[resinfo['aa']]
+      resinfo['rsa']   = resinfo['acc'] / solv_acc[resinfo['aa']]
       resdict[(resinfo['chain'],resinfo['seqid'],resinfo['icode'])] = resinfo.copy()
+    # Remove the temp ATOM file
+    cmd  = "rm -f %s"%tmpf
+    os.system(cmd)
     return resdict
-
-
 
   def detect_entity_type(self,entity):
     """ Given an entity ID, attempts to detect the entity type """
@@ -957,6 +977,12 @@ solv_acc = {"A" : 115,
         "W" : 255,
         "Y" : 230,
         "V" : 155}
+
+## Copied from biolearn
+def multidigit_rand(digits):
+  randlist = [random.randint(1,10) for i in xrange(digits)]
+  multidigit_rand = int(''.join([str(x) for x in randlist]))
+  return multidigit_rand
 
 # Main check
 if __name__== "__main__":

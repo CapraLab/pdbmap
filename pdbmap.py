@@ -101,7 +101,6 @@ class PDBMap():
         msg = "Invalid structure"
         raise Exception(msg)
     except Exception as e:
-      raise
       msg = "ERROR (PDBMap) %s could not be loaded: %s\n"%(pdbid,str(e))
       sys.stderr.write(msg)
       return 1
@@ -109,7 +108,6 @@ class PDBMap():
       io.set_structure(s)
       io.upload_structure()
     except Exception as e:
-      raise
       msg = "ERROR (PDBMap) %s could not be uploaded: %s\n"%(pdbid,str(e))
       sys.stderr.write(msg)
       return 1
@@ -458,8 +456,7 @@ if __name__== "__main__":
       sys.exit(0)
     else:
       io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,
-                            args.dbpass,args.dbname)
-      io.check_schema()
+                            args.dbpass,args.dbname,createdb=True)
       print "Databases created. Please set create_new_db to False."
       sys.exit(1)
   # Initialize PDBMap, refresh mirrored data if specified

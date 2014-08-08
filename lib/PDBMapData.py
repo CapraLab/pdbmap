@@ -64,7 +64,8 @@ class PDBMapData():
     # Retain only nonsynonymous coding variants
     self.vep_cmd.extend(['--vcf','--filter','coding_change'])
     # Send to stdout and don't generate a summary stats file
-    self.vep_cmd.extend(['--no_stats','-o','stdout'])
+    # self.vep_cmd.extend(['--no_stats'])
+    self.vep_cmd.extend(['-o','stdout'])
     if j > 1:
       # Fork to decrease runtime
       self.vep_cmd.extend(['--fork',str(j)])

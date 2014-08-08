@@ -17,7 +17,7 @@ phi DOUBLE,
 psi DOUBLE,
 tco DOUBLE,
 kappa DOUBLE,
-alpha DOUBLE
+alpha DOUBLE,
 PRIMARY KEY(label,structid,biounit,model,chain,seqid,icode),
 KEY(label,structid,biounit,x,y,z),
 KEY(label,x,y,z),
