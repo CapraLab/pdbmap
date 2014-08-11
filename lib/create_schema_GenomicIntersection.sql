@@ -5,8 +5,7 @@ structid VARCHAR(50), # Structure ID
 chain VARCHAR(10), # Structure chain
 seqid INT, # Position in chain sequence
 gc_id MEDIUMINT, # GenomicConsequence direct reference key
-PRIMARY KEY(label,structid,chain,seqid,gc_id),
-KEY(label,gc_id),
-KEY(label,dlabel),
-KEY(label,slabel)
+PRIMARY KEY(slabel,dlabel,structid,chain,seqid,gc_id),
+KEY(slabel,structid,chain,seqid,gc_id),
+KEY(gc_id)
 )
