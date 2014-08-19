@@ -744,39 +744,44 @@ class PDBMapIO(PDBIO):
     # Create temp file containing only ATOM rows
     tmpf = "temp/%d.TEMP"%multidigit_rand(10)
     cmd  = "grep ^ATOM %s > %s"%(fname,tmpf)
-    if fname.split('.')[-1] == 'gz':
-      cmd = 'z'+cmd
-    os.system(cmd)
-    cmd  = [dssp,tmpf]
-    p = sp.Popen(cmd,stdout=sp.PIPE)
-    resdict = {}
-    start_flag = False
-    for i,line in enumerate(iter(p.stdout.readline,'')):
-      if not line: continue
-      if not start_flag:
-        if line.startswith('  #'):
-          start_flag = True
-        continue
-      resinfo = {}
-      if not line[5:10].strip(): continue
-      resinfo['seqid'] = int(line[5:10])
-      resinfo['icode'] = line[10:11]
-      resinfo['chain'] = line[11:12].upper()
-      if not resinfo['chain'].strip():
-        resinfo['chain'] = 'A'
-      resinfo['aa']    = line[13:14].upper()
-      resinfo['ss']    = line[16:17].upper()
-      resinfo['acc']   = float(line[34:38])
-      resinfo['tco']   = float(line[85:91])
-      resinfo['kappa'] = float(line[92:97])
-      resinfo['alpha'] = float(line[98:103])
-      resinfo['phi']   = float(line[103:109])
-      resinfo['psi']   = float(line[109:115])
-      resinfo['rsa']   = resinfo['acc'] / solv_acc[resinfo['aa']]
-      resdict[(resinfo['chain'],resinfo['seqid'],resinfo['icode'])] = resinfo.copy()
-    # Remove the temp ATOM file
-    cmd  = "rm -f %s"%tmpf
-    os.system(cmd)
+    try:
+      if fname.split('.')[-1] == 'gz':
+        cmd = 'z'+cmd
+      os.system(cmd)
+      cmd  = [dssp,tmpf]
+      p = sp.Popen(cmd,stdout=sp.PIPE)
+      resdict = {}
+      start_flag = False
+      for i,line in enumerate(iter(p.stdout.readline,'')):
+        if not line: continue
+        if not start_flag:
+          if line.startswith('  #'):
+            start_flag = True
+          continue
+        resinfo = {}
+        if not line[5:10].strip(): continue
+        resinfo['seqid'] = int(line[5:10])
+        resinfo['icode'] = line[10:11]
+        resinfo['chain'] = line[11:12].upper()
+        if not resinfo['chain'].strip():
+          resinfo['chain'] = 'A'
+        resinfo['aa']    = line[13:14].upper()
+        resinfo['ss']    = line[16:17].upper()
+        resinfo['acc']   = float(line[34:38])
+        resinfo['tco']   = float(line[85:91])
+        resinfo['kappa'] = float(line[92:97])
+        resinfo['alpha'] = float(line[98:103])
+        resinfo['phi']   = float(line[103:109])
+        resinfo['psi']   = float(line[109:115])
+        resinfo['rsa']   = resinfo['acc'] / solv_acc[resinfo['aa']]
+        resdict[(resinfo['chain'],resinfo['seqid'],resinfo['icode'])] = resinfo.copy()
+    except Exception as e:
+      msg = "ERROR (PDBMapIO) Unable to parse output from DSSP: %s"%str(e)
+      raise Exception(msg)
+    finally:        
+      # Remove the temp ATOM file
+      cmd  = "rm -f %s"%tmpf
+      os.system(cmd)
     return resdict
 
   def detect_entity_type(self,entity):

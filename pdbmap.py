@@ -259,7 +259,7 @@ class PDBMap():
                 dname,dname,dname)
       os.system("vcf-concat data/pdbmap/%s/vcf/pdbmap_*.vcf | gzip -c > data/pdbmap/%s/vcf/pdbmap_%s.vcf.gz"%(
                 dname,dname,dname))
-    #os.system("rm -f %s"%tempf) # Remove temp file
+    os.system("rm -f %s"%tempf) # Remove temp file
     return nrows # Return the number of kept variants
 
   def visualize(self,entity,biounits=[],struct_label='uniprot-pdb',

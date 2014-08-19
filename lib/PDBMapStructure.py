@@ -78,7 +78,7 @@ class PDBMapStructure(Structure):
           alignments[gene].sort() # ascending by transcript length, then name
           if len(alignments[gene]) > 0:
             chain.alignments.append(alignments[gene][-1][-1]) # last alignment (longest) length
-            prot2chain[chain.unp].append(alignments[gene][-1][-1])
+        prot2chain[chain.unp] = chain.alignments
       # Recover transcripts from alignments
       chain.transcripts = [a.transcript for a in chain.alignments]
     # Return the matched transcripts
