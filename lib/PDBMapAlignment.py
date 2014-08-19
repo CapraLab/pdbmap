@@ -55,8 +55,11 @@ class PDBMapAlignment():
         res = [r for r in res] # convert generator to list
         if len(res) > 0:
             # A SIFTS alignment is available
-            n = float(len([r for r in chain.get_residues()]))
-            alignment     = dict((r[0],r[1]) for r in res)
+            resis = [r[1] for r in chain.get_residues()]
+            n = float(len(resis))
+            # Only align residues in the structure
+            alignment     = dict((r[0],r[1]) for r in res if r[0] in resis)
+            # Aligned residues over total residues in chain
             perc_aligned  = min(len(alignment) / n, 1.)
             perc_identity = min(len([1 for cid,tid in alignment.iteritems() if
                                     0 < cid < len(c_seq) and 0 < tid < len(t_seq)
