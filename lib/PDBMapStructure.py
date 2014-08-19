@@ -54,7 +54,7 @@ class PDBMapStructure(Structure):
     for chain in self.structure[0]:
       # If a chain of the same protein has already been solved, use solution
       if chain.unp in prot2chain:
-        chain.alignments.append(prot2chain[chain.unp])
+        chain.alignments = prot2chain[chain.unp]
       else:
         # Query all transcripts associated with the chain's UNP ID
         candidate_transcripts = PDBMapTranscript.query_from_unp(chain.unp)
@@ -73,11 +73,12 @@ class PDBMapStructure(Structure):
               alignments[alignment.transcript.gene].append((len(alignment.transcript.sequence),alignment.transcript.transcript,alignment))
         # Store canonical transcript for each gene alignment as element of chain
         chain.alignments = []
+        prot2chain[chain.unp] = []
         for gene in alignments:
           alignments[gene].sort() # ascending by transcript length, then name
           if len(alignments[gene]) > 0:
             chain.alignments.append(alignments[gene][-1][-1]) # last alignment (longest) length
-            prot2chain[chain.unp] = alignments[gene][-1][-1]
+            prot2chain[chain.unp].append(alignments[gene][-1][-1])
       # Recover transcripts from alignments
       chain.transcripts = [a.transcript for a in chain.alignments]
     # Return the matched transcripts
