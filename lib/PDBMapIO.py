@@ -87,7 +87,8 @@ class PDBMapParser(PDBParser):
               r.resname='SER' # if unknown, dummy code serine for alignment
             r.rescode = aa_code_map[r.resname.lower()]
             # Compute the center of mass for all residues
-            r.coord  = sum([a.coord for a in r]) / 3
+            natom = len([a for a in r])
+            r.coord  = sum([a.coord for a in r]) / natom
             # Save the structural coordinate independently
             r.x,r.y,r.z = r.coord
             # Save the sequence coordinates independently
