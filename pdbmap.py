@@ -278,17 +278,26 @@ class PDBMap():
       query = "SELECT DISTINCT biounit FROM Chain WHERE label=%s AND structid=%s"
       res   = io.secure_query(query,(struct_label,entity,),cursorclass='Cursor')
       biounits = [r[0] for r in res]
+    eps,mins = False,False
+    if 'dbscan' in anno_list:
+      idx = anno_list.index('dbscan')
+      anno_list = anno_list[0:idx]+anno_list[idx+1:]
+      eps,mins  = spectrum_range[idx]
+      spectrum_range = spectrum_range[0:idx]+spectrum_range[idx+1:]
+      if len(anno_list): # more than one DBSCAN specification
+        msg = "ERROR (PDBMap) Cannot run other annotations with DBSCAN"
+        raise Exception(msg)
     try:
       if entity_type == 'structure':
         for biounit in biounits:
-          v.visualize_structure(entity,biounit,anno_list,spectrum_range,colors=colors)
+          v.visualize_structure(entity,biounit,anno_list,eps,mins,spectrum_range,colors=colors)
       elif entity_type == 'model':
         for biounit in biounits:
-          v.visualize_model(entity,biounit,anno_list,spectrum_range,colors=colors)
+          v.visualize_model(entity,biounit,anno_list,eps,mins,spectrum_range,colors=colors)
       elif entity_type == 'unp':
-        v.visualize_unp(entity,anno_list,spectrum_range,colors=colors)
+        v.visualize_unp(entity,anno_list,eps,mins,spectrum_range,colors=colors)
       elif entity_type == 'all':
-        v.visualize_all(anno_list,spectrum_range,colors=colors)
+        v.visualize_all(anno_list,eps,mins,spectrum_range,colors=colors)
       else:
         msg = "Sorry, but the specified entity is not in the PDBMap database.\n"
         sys.stderr.write(msg)

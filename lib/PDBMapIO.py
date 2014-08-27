@@ -900,7 +900,7 @@ class PDBMapIO(PDBIO):
     # Structure/model labels will still match the chain labels, which are specified.
     """
   structure_query = """SELECT
-    g.model,g.chain,a.seqid,d.*,c.*%s
+    g.model,g.chain,a.seqid,a.x,a.y,a.z,d.*,c.*%s
     FROM Residue as a
     INNER JOIN GenomicIntersection as b
     ON a.label=b.slabel AND a.structid=b.structid AND a.chain=b.chain AND a.seqid=b.seqid
@@ -915,7 +915,7 @@ class PDBMapIO(PDBIO):
     AND d.label=%%s AND g.label=%%s  
     AND a.structid=%%s AND a.biounit=%%s;"""
   model_query = """SELECT
-    g.model,a.seqid,d.*,c.*%s
+    g.model,a.seqid,a.x,a.y,a.z,d.*,c.*%s
     FROM Residue as a
     INNER JOIN GenomicIntersection as b
     ON a.label=b.slabel AND a.structid=b.structid AND a.chain=b.chain AND a.seqid=b.seqid

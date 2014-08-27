@@ -26,7 +26,7 @@ class PDBMapVisualize():
     self.pdb_dir = pdb_dir
     self.modbase_dir = modbase_dir
 
-  def visualize_structure(self,pdbid,biounit=0,anno_list=['maf'],spectrum_range=[],group=None,colors=[]):
+  def visualize_structure(self,pdbid,biounit=0,anno_list=['maf'],eps=None,mins=None,spectrum_range=[],group=None,colors=[]):
     """ Visualize the annotated dataset within a structure """
     print "Visualizing structure %s.%s"%(pdbid,biounit)
     pdbid = pdbid.lower()
@@ -35,6 +35,7 @@ class PDBMapVisualize():
       msg = "WARNING (PDBMapVisualize) No variants for %s, biounit %d\n"%(pdbid,biounit)
       sys.stderr.write(msg)
       return
+
     # Ensure any user-supplied annotations are properly formatted
     anno_list = [a.replace('.','_') for a in anno_list]
     anno_list = [a.replace(' ','_') for a in anno_list]
@@ -44,6 +45,42 @@ class PDBMapVisualize():
         # Join with the user-supplied annotations
         res = self.io.load_structure(pdbid,biounit,useranno=True)
         break
+
+    # Correct submodel ID for undivided structures
+    maxm = len(set(res['model']))
+    if maxm < 2:
+      res['model'] = [0 for m in res['model']]
+
+    # If DBSCAN Eps specified
+    if eps and mins:
+      import numpy as np
+      from sklearn.cluster import DBSCAN
+      from scipy.spatial.distance import pdist,squareform
+      cols = ['model','seqid','chain']
+      location = np.array([list(coord) for coord in zip(res['x'],res['y'],res['z'])])
+      seen = set()
+      seen_add = seen.add
+      newres = dict((k,[]) for k in res.keys())
+      for i in range(len(res['x'])):
+        coord = (res['x'][i],res['y'][i],res['z'][i])
+        if not (coord in seen or seen_add(coord)):
+          for key in res:
+            newres[key].append(res[key][i])
+      res = newres
+      location = np.array([list(coord) for coord in zip(res['x'],res['y'],res['z'])])
+      distance = squareform(pdist(location,'euclidean'))
+      clusters = DBSCAN(eps=eps,min_samples=mins,metric='precomputed').fit(distance).labels_
+      noise    = int(min(clusters) >= 0)
+      clusters = [c+1 for c in clusters]
+      res['clusters_%d_%d'%(eps,mins)] = clusters
+      cls =  ['grey','red','blue','green','orange','yellow']
+      cls += ['brown','purple','black','white','pink','magenta']
+      cls += ['sienna','firebrick','khaki','turquoise']
+      cls += ['cyan','slate','chartreuse']
+      cls *= len(set(clusters)) / len(cls) + 1
+      colors.append(cls[noise:len(set(clusters))+noise])
+      anno_list.append('clusters_%d_%d'%(eps,mins))
+
     # Output all annotations to results file
     cols = ['model','seqid','chain']
     cols.extend(anno_list)
@@ -64,11 +101,6 @@ class PDBMapVisualize():
       out  = [list(i) for i in zip(*out)] # Transpose back to columns
       for row in out:
         writer.writerow(row)
-
-    # Correct submodel ID for undivided structures
-    maxm = len(set(res['model']))
-    if maxm < 2:
-      res['model'] = [0 for m in res['model']]
 
     # Visualize individual annotations
     for a,anno in enumerate(anno_list):
@@ -122,6 +154,42 @@ class PDBMapVisualize():
       msg = "ERROR (PDBMapVisualize) %s contains no variant mappings"%modelid
       sys.stderr.write(msg)
       return
+
+    # Correct submodel ID for undivided structures
+    maxm = len(set(res['model']))
+    if maxm < 2:
+      res['model'] = [0 for m in res['model']]
+
+    # If DBSCAN Eps specified
+    if eps and mins:
+      import numpy as np
+      from sklearn.cluster import DBSCAN
+      from scipy.spatial.distance import pdist,squareform
+      cols = ['model','seqid','chain']
+      location = np.array([list(coord) for coord in zip(res['x'],res['y'],res['z'])])
+      seen = set()
+      seen_add = seen.add
+      newres = dict((k,[]) for k in res.keys())
+      for i in range(len(res['x'])):
+        coord = (res['x'][i],res['y'][i],res['z'][i])
+        if not (coord in seen or seen_add(coord)):
+          for key in res:
+            newres[key].append(res[key][i])
+      res = newres
+      location = np.array([list(coord) for coord in zip(res['x'],res['y'],res['z'])])
+      distance = squareform(pdist(location,'euclidean'))
+      clusters = DBSCAN(eps=eps,min_samples=mins,metric='precomputed').fit(distance).labels_
+      noise    = int(min(clusters) >= 0)
+      clusters = [c+1 for c in clusters]
+      res['clusters_%d_%d'%(eps,mins)] = clusters
+      cls =  ['grey','red','blue','green','orange','yellow']
+      cls += ['brown','purple','black','white','pink','magenta']
+      cls += ['sienna','firebrick','khaki','turquoise']
+      cls += ['cyan','slate','chartreuse']
+      cls *= len(set(clusters)) / len(cls) + 1
+      colors.append(cls[noise:len(set(clusters))+noise])
+      anno_list.append('clusters_%d_%d'%(eps,mins))
+
     # Output all annotations to results file
     cols = ['model','seqid']
     cols.extend(anno_list)
@@ -142,11 +210,6 @@ class PDBMapVisualize():
       out  = [list(i) for i in zip(*out)] # Transpose back to columns
       for row in out:
         writer.writerow(row)
-
-    # Correct submodel ID for undivided structures
-    maxm = len(set(res['model']))
-    if maxm < 2:
-      res['model'] = [0 for m in res['model']]
 
     # Visualize individual annotations
     for a,anno in enumerate(anno_list):
