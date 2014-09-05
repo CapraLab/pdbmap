@@ -19,6 +19,7 @@ from Bio.PDB.PDBParser import PDBParser
 from Bio.PDB.PDBIO import PDBIO
 from PDBMapStructure import PDBMapStructure
 from PDBMapModel import PDBMapModel
+from PDBMapProtein import PDBMapProtein
 import MySQLdb, MySQLdb.cursors
 from warnings import filterwarnings,resetwarnings
 from Bio.PDB.PDBExceptions import PDBConstructionWarning
@@ -380,6 +381,29 @@ class PDBMapIO(PDBIO):
     res = True if self._c.fetchone() else False
     self._close()
     return res
+
+  def gene_in_db(self,gene,label=-1):
+    # None is a valid argument to label
+    if label == -1:
+      label=self.slabel
+    self._connect()
+    query  = "SELECT protein FROM GenomicData a "
+    query += "INNER JOIN GenomicConsequence b "
+    query += "ON a.label=b.label AND a.chr=b.chr "
+    query += "AND a.start=b.start AND a.end=b.end AND a.name=b.name "
+    query += "WHERE hgnc_gene=%s "
+    if label:
+      query += "AND label=%s"
+    query += "LIMIT 1"
+    if label:
+      self._c.execute(query,(gene,label))
+    else:
+      self._c.execute(query,gene)
+    res = self._c.fetchone()
+    self._close()
+    if res:
+      return True,PDBMapProtein.ensp2unp(res['protein'])[0]
+    return False,None
 
   def genomic_datum_in_db(self,name,label=None):
     self._connect()
@@ -793,7 +817,11 @@ class PDBMapIO(PDBIO):
     elif self.unp_in_db(entity,label=None):
       return 'unp'
     else:
-      return None
+      isgene,unp = self.gene_in_db(entity,label=None)
+      # If a gene, return the associated UniProt ID
+      if isgene:
+        return unp
+    return None
 
   def show(self):
     return(self.__dict__['structure'])

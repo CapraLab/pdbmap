@@ -298,6 +298,10 @@ class PDBMap():
         v.visualize_unp(entity,anno_list,eps,mins,spectrum_range,colors=colors)
       elif entity_type == 'all':
         v.visualize_all(anno_list,eps,mins,spectrum_range,colors=colors)
+      elif entity_type:
+        print "%s matched with UniProt ID: %s"%(entity.upper(),entity_type)
+        entity = entity_type # An HGNC ID was detected and converted to UNP ID
+        v.visualize_unp(entity,anno_list,eps,mins,spectrum_range,colors=colors)
       else:
         msg = "Sorry, but the specified entity is not in the PDBMap database.\n"
         sys.stderr.write(msg)
@@ -591,7 +595,7 @@ if __name__== "__main__":
 
   ## visualize ##
   elif args.cmd == "visualize":
-    pdbmap = PDBMap()
+    pdbmap = PDBMap(idmapping=args.idmapping)
     if len(args.args) < 3:
       msg = "usage: pdbmap.py -c conf_file visualize entity data_name feature[,...] biounit[,...] [minval:maxval,...] [color1,color2,...;...]\n"
       print msg; sys.exit(1)

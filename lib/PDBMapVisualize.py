@@ -136,7 +136,7 @@ class PDBMapVisualize():
                 'minval':minval,'maxval':maxval,'resis':out,'struct_loc':struct_loc}
       self.visualize(params,group=group)
 
-  def visualize_model(self,modelid,biounit=0,anno_list=['maf'],spectrum_range=[],group=None,colors=[]):
+  def visualize_model(self,modelid,biounit=0,anno_list=['maf'],eps=None,mins=None,spectrum_range=[],group=None,colors=[]):
     """ Visualize the annotated dataset within a model """
     print "Visualizing model %s.%s"%(modelid,biounit)
     res  = self.io.load_model(modelid)
@@ -242,7 +242,7 @@ class PDBMapVisualize():
                 'struct_loc':"%s/models/model/%s.pdb.gz"%(self.modbase_dir,modelid)}
       self.visualize(params,group=group)
 
-  def visualize_unp(self,unpid,anno_list=['maf'],spectrum_range=[],colors=[]):
+  def visualize_unp(self,unpid,anno_list=['maf'],eps=None,mins=None,spectrum_range=[],colors=[]):
     """ Visualize the annotated dataset associated with a protein """
     print "Visualizing protein %s"%(unpid)
     res_list  = self.io.load_unp(unpid)
@@ -254,19 +254,21 @@ class PDBMapVisualize():
         res   = self.io.secure_query(query,(self.io.slabel,entity),cursorclass='Cursor')
         biounits = [r[0] for r in res]
         for biounit in biounits:
-          self.visualize_structure(entity,biounit,anno_list,spectrum_range,group=unpid,colors=colors)
+          print "Visualizing structure %s.%s"%(entity,biounit)
+          self.visualize_structure(entity,biounit,anno_list,eps,mins,spectrum_range,group=unpid,colors=colors)
       elif entity_type == 'model':
         # Query all biological assemblies
         query = "SELECT DISTINCT biounit FROM Chain WHERE label=%s AND structid=%s"
-        res   = self.io.secure_query(query,(self.io.dlabel,entity),cursorclass='Cursor')
+        res   = self.io.secure_query(query,(self.io.slabel,entity),cursorclass='Cursor')
         biounits = [r[0] for r in res]
         for biounit in biounits:
-          self.visualize_model(entity,biounit,anno_list,spectrum_range,group=unpid,colors=colors)
+          print "Visualizing model %s.%s"%(entity,biounit)
+          self.visualize_model(entity,biounit,anno_list,eps,mins,spectrum_range,group=unpid,colors=colors)
       else:
         msg = "ERROR (PDBMapVisualize) Invalid entity_type for %s: %s"%(entity,entity_type)
         raise Exception(msg)
 
-  def visualize_all(self,anno_list=['maf'],spectrum_range=[],colors=[]):
+  def visualize_all(self,anno_list=['maf'],eps=None,mins=None,spectrum_range=[],colors=[]):
     """ Visualize all structures and models for the annotated dataset """
     print "Visualizing dataset %s"%self.io.dlabel
     query = "SELECT DISTINCT structid FROM GenomicIntersection WHERE dlabel=%s"
@@ -278,14 +280,14 @@ class PDBMapVisualize():
       bres   = self.io.secure_query(query,(s,),cursorclass='Cursor')
       biounits = [r[0] for r in bres]
       for b in biounits:
-        self.visualize_structure(s,b,anno_list,spectrum_range,group='all',colors=colors)
+        self.visualize_structure(s,b,anno_list,eps,mins,spectrum_range,group='all',colors=colors)
     models = [r[0] for r in res if self.io.detect_entity_type(r[0]) == 'model']
     for m in models:
       query = "SELECT DISTINCT biounit FROM Chain WHERE structid=%s"
       bres   = self.io.secure_query(query,(m,),cursorclass='Cursor')
       biounits = [r[0] for r in bres]
       for b in biounits:
-        self.visualize_model(m,b,anno_list,spectrum_range,group='all',colors=colors)
+        self.visualize_model(m,b,anno_list,eps,mins,spectrum_range,group='all',colors=colors)
 
   def visualize(self,params,group=None):
     # Visualize with PyMol
