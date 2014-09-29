@@ -1,4 +1,4 @@
-#!/usr/bin/python27
+#!/usr/bin/python2.7
 
 # Command Line Arguments:
 # calc_fst.r pop-id-map pedmap krange snp-pdbid-loc
