@@ -402,7 +402,7 @@ if __name__== "__main__":
   conf_file = args.conf_file
 
   # Setup the Command Line Parser
-  parser = argparse.ArgumentParser(parents=[conf_parser],description=__doc__,formatter_class=argparse.RawDescriptionHelpFormatter)
+  parser = argparse.ArgumentParser(prog='pdbmap',parents=[conf_parser],description=__doc__,formatter_class=argparse.RawDescriptionHelpFormatter)
   defaults['create_new_db'] = ('True' == defaults['create_new_db'])
   parser.set_defaults(**defaults)
   parser.add_argument("-v", "--version", action="version", 
@@ -455,6 +455,9 @@ if __name__== "__main__":
               help="Used to manage parallel subprocesses. Do not call directly.")
   parser.add_argument("-j", "--cores", type=int,
               help="Number of available processors")
+
+  # Set up the sub-command parser
+  ## TODO
 
   args = parser.parse_args(remaining_argv)
   args.conf_file = conf_file
