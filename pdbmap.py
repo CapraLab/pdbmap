@@ -31,7 +31,7 @@ from lib.PDBMapVisualize import PDBMapVisualize
 QUICK_THRESH = 20000
 
 class PDBMap():
-  def __init__(self,idmapping=None,sec2prim=None,sprot=None,
+  def __init__(self,idmapping=None,sec2prim=None,sprot=None,pfam=None,
                 pdb_dir=None,modbase_dir=None,modbase_summary=None,
                 vep=None,plink=None,reduce=None,probe=None):
     self.pdb     = False
@@ -43,6 +43,8 @@ class PDBMap():
       PDBMapProtein.PDBMapProtein.load_sec2prim(sec2prim)
     if sprot:
       PDBMapProtein.PDBMapProtein.load_sprot(sprot)
+    if pfam:
+      PDBMapProtein.PDBMapProtein.load_pfam(pfam)
     if pdb_dir:
       self.pdb = True
       self.pdb_dir = pdb_dir
@@ -402,7 +404,7 @@ if __name__== "__main__":
   conf_file = args.conf_file
 
   # Setup the Command Line Parser
-  parser = argparse.ArgumentParser(prog='pdbmap',parents=[conf_parser],description=__doc__,formatter_class=argparse.RawDescriptionHelpFormatter)
+  parser = argparse.ArgumentParser(parents=[conf_parser],description=__doc__,formatter_class=argparse.RawDescriptionHelpFormatter)
   defaults['create_new_db'] = ('True' == defaults['create_new_db'])
   parser.set_defaults(**defaults)
   parser.add_argument("-v", "--version", action="version", 
@@ -455,9 +457,6 @@ if __name__== "__main__":
               help="Used to manage parallel subprocesses. Do not call directly.")
   parser.add_argument("-j", "--cores", type=int,
               help="Number of available processors")
-
-  # Set up the sub-command parser
-  ## TODO
 
   args = parser.parse_args(remaining_argv)
   args.conf_file = conf_file
