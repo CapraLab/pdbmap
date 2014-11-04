@@ -281,6 +281,13 @@ class PDBMap():
       res   = io.secure_query(query,(struct_label,entity,),cursorclass='Cursor')
       biounits = [r[0] for r in res]
     eps,mins = False,False
+    if 'pop' in anno_list:
+      idx = anno_list.index('pop')
+      anno_list  = anno_list[0:idx]+anno_list[idx+1:]
+      anno_list += ['amr_af','asn_af','afr_af','eur_af']
+      sr = spectrum_range[idx]
+      spectrum_range = spectrum_range[0:idx]+spectrum_range[idx+1:]
+      spectrum_range += [sr for i in range(4)]
     if 'dbscan' in anno_list:
       idx = anno_list.index('dbscan')
       anno_list = anno_list[0:idx]+anno_list[idx+1:]

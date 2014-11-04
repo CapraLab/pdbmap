@@ -110,6 +110,9 @@ class PDBMapData():
     if 'ERATE' not in record.INFO: record.INFO['ERATE']     = None
     if 'THETA' not in record.INFO: record.INFO['THETA']     = None
     if 'LDAF' not in record.INFO: record.INFO['LDAF']       = None
+    # If allele frequency is read as a tuple, float the first value
+    if type(record.INFO['AF']) == type((None,)):
+      record.INFO['AF'] = float(record.INFO['AF'][0])
     # Add attribute fields to INFO
     record.INFO["ID"] = record.ID
     record.INFO["CHROM"] = "chr%s"%record.CHROM

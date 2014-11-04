@@ -518,8 +518,12 @@ if __name__ == '__main__':
       rc("color red,a %s@ca"%resi[0])
   elif params['minval'] > params['maxval']:
     rc("rangecolor %(anno)s,a %(maxval)0.6f red %(minval)0.6f blue"%params)
+    rc("color green,a :/%(anno)s=%(minval)s"%params)
+    rc("color grey,a :/%(anno)s=%(maxval)s"%params)
   else:
     rc("rangecolor %(anno)s,a %(minval)0.6f blue %(maxval)0.6f red"%params)
+    rc("color green,a :/%(anno)s=%(maxval)s"%params)
+    rc("color gray,a :/%(anno)s=%(minval)s"%params)
   # Orient the image
   # FIXME: Orientation is inconsistent between datasets
   # It also does not do a very good job of orienting the image
