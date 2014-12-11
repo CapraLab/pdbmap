@@ -20,11 +20,14 @@ ldaf DOUBLE,    # MLE allele frequency accounting for LD
 ac INT, # Alternate Allele Count
 an INT, # Total Allele Count
 aa VARCHAR(50), # Ancestral Allele
+da VARCHAR(50), # Derived Allele
 maf DOUBLE,     # Allele Frequency: Global (AC/AN)
 amr_af DOUBLE,  # Allele Frequency: American
 asn_af DOUBLE, # Allele Frequency: Asian
 afr_af DOUBLE, # Allele Frequency: African
 eur_af DOUBLE, # Allele Frequency: European
+eas_af DOUBLE, # Allele Frequency: East Asian
+sas_af DOUBLE, # Allele Frequency: South Asian
 ens_gene VARCHAR(50), # Ensembl Gene identifier
 hgnc_gene VARCHAR(50), # HGNC Gene identifier
 snpsource VARCHAR(50), # Low coverage or Exome?
@@ -34,5 +37,7 @@ KEY(label,maf),
 KEY(label,amr_af),
 KEY(label,asn_af),
 KEY(label,afr_af),
-KEY(label,eur_af)
+KEY(label,eur_af),
+KEY(label,eas_af),
+KEY(label,sas_af)
 )

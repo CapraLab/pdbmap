@@ -572,8 +572,8 @@ class PDBMapIO(PDBIO):
       query  = "INSERT IGNORE INTO GenomicData VALUES (%(LABEL)s,"
       query += "%(CHROM)s,%(START)s,%(END)s,%(ID)s,%(EXISTING)s,%(VT)s,%(SVTYPE)s,"
       query += "%(REF)s,%(ALT)s,%(SVLEN)s,%(QUAL)s,%(AVGPOST)s,%(RSQ)s,"
-      query += "%(ERATE)s,%(THETA)s,%(LDAF)s,%(AC)s,%(AN)s,%(AA)s,"
-      query += "%(AF)s,%(AMR_AF)s,%(ASN_AF)s,%(AFR_AF)s,%(EUR_AF)s,"
+      query += "%(ERATE)s,%(THETA)s,%(LDAF)s,%(AC)s,%(AN)s,%(AA)s,%(DA)s,"
+      query += "%(AF)s,%(AMR_AF)s,%(ASN_AF)s,%(AFR_AF)s,%(EUR_AF)s,%(EAS_AF)s,%(SAS_AF)s,"
       query += "%(GENE)s,%(HGNC)s,%(SNPSOURCE)s)"
       try: self._c.execute(query,record.INFO)
       except:

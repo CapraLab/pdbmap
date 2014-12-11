@@ -19,7 +19,7 @@ import sys,os,csv,re
 import subprocess as sp
 from Bio import pairwise2
 from Bio.SubsMat import MatrixInfo as matlist
-import vcf
+import vcf # PyVCF
 
 class PDBMapData():
   
@@ -71,56 +71,72 @@ class PDBMapData():
       self.vep_cmd.extend(['--fork',str(j)])
 
   def vep_record_parser(self,record,info_headers,csq_headers):
-    # Adjust some specific fields
-    if "END" not in record.INFO:
-      record.INFO["END"] = int(record.POS) + 1
-    for header in info_headers:
-      if header not in record.INFO:
-        record.INFO[header] = None
-    # Process fields which may or may not be included in VEP output
-    if 'SNPSOURCE' in record.INFO and record.INFO['SNPSOURCE']:
-      record.INFO['SNPSOURCE'] = ';'.join(record.INFO['SNPSOURCE'])
-    else: record.INFO['SNPSOURCE'] = None
-    if 'AMR_AF' in record.INFO:
-      if not record.INFO['AMR_AF']: record.INFO['AMR_AF'] = 0.0
-    else: record.INFO['AMR_AF']    = None
-    if 'ASN_AF' in record.INFO:
-      if not record.INFO['ASN_AF']: record.INFO['ASN_AF'] = 0.0
-    else: record.INFO['ASN_AF']    = None
-    if 'AFR_AF' in record.INFO:
-      if not record.INFO['AFR_AF']: record.INFO['AFR_AF'] = 0.0
-    else: record.INFO['AFR_AF']    = None
-    if 'EUR_AF' in record.INFO:
-      if not record.INFO['EUR_AF']: record.INFO['EUR_AF'] = 0.0
-    else: record.INFO['EUR_AF']    = None
-    if 'AA' in record.INFO and record.INFO['AA']:
-      record.INFO['AA'] = record.INFO['AA'].upper()
-    else: record.INFO['AA']        = None
-    if 'AC' in record.INFO:
-      record.INFO['AC'] = record.INFO['AC'][0]
-    else: record.INFO['AC']        = None
-    # Ensure fields are present in record.INFO
-    if 'AN' not in record.INFO: record.INFO['AN']           = None
-    if 'AF' not in record.INFO: record.INFO['AF']           = None
-    if 'VT' not in record.INFO: record.INFO['VT']           = None
-    if 'SVTYPE' not in record.INFO: record.INFO['SVTYPE']   = None
-    if 'SVLEN' not in record.INFO: record.INFO['SVLEN']     = None
-    if 'AVGPOST' not in record.INFO: record.INFO['AVGPOST'] = None
-    if 'RSQ' not in record.INFO: record.INFO['RSQ']         = None
-    if 'ERATE' not in record.INFO: record.INFO['ERATE']     = None
-    if 'THETA' not in record.INFO: record.INFO['THETA']     = None
-    if 'LDAF' not in record.INFO: record.INFO['LDAF']       = None
-    # If allele frequency is read as a tuple, float the first value
-    if type(record.INFO['AF']) in [type((None,)),type([])]:
-      record.INFO['AF'] = float(record.INFO['AF'][0])
-    # Add attribute fields to INFO
-    record.INFO["ID"] = record.ID
-    record.INFO["CHROM"] = "chr%s"%record.CHROM
-    record.INFO["START"] = int(record.POS)
-    record.INFO["REF"] = record.REF
-    record.INFO["ALT"] = record.ALT[0] # only the most common
-    record.INFO["QUAL"] = record.QUAL
-    record.INFO["FILTER"] = str(record.FILTER)
+    
+    # Ensure that an end is specified, default to start+1
+      if "END" not in record.INFO:
+        record.INFO["END"] = int(record.POS) + 1
+
+      # Ensure that each record contains all fields
+      for header in info_headers:
+        if header not in record.INFO:
+          record.INFO[header] = None
+
+      # Process fields which may or may not be included in VEP output
+      if 'SNPSOURCE' in record.INFO and record.INFO['SNPSOURCE']:
+        record.INFO['SNPSOURCE'] = ';'.join(record.INFO['SNPSOURCE'])
+      else: record.INFO['SNPSOURCE'] = None
+
+      # Make any necessary population allele frequency corrections
+      freqs = ['AMR_AF','AFR_AF','EUR_AF','EAS_AF','SAS_AF','ASN_AF']
+      for freq in freqs:
+        if freq not in record.INFO: record.INFO[freq] = None
+        recordINFO[freq] = 0.0 if not record.INFO[freq] else record.INFO[freq]
+
+      # Ensure the ancestral allele is encoded properly
+      if 'AA' in record.INFO and record.INFO['AA']:
+        record.INFO['AA'] = record.INFO['AA'].upper()
+      else: 
+        record.INFO['AA'] = None
+
+      # Enforce biallelic assumption
+      # Record only the first alternate allele count
+      if 'AC' in record.INFO:
+        record.INFO['AC'] = record.INFO['AC'][0]
+      else: 
+        record.INFO['AC'] = None
+
+      # Ensure necessary fields are present in record.INFO
+      if 'AN'      not in record.INFO: record.INFO['AN']      = None
+      if 'AF'      not in record.INFO: record.INFO['AF']      = None
+      if 'VT'      not in record.INFO: record.INFO['VT']      = None
+      if 'SVTYPE'  not in record.INFO: record.INFO['SVTYPE']  = None
+      if 'SVLEN'   not in record.INFO: record.INFO['SVLEN']   = None
+      if 'AVGPOST' not in record.INFO: record.INFO['AVGPOST'] = None
+      if 'RSQ'     not in record.INFO: record.INFO['RSQ']     = None
+      if 'ERATE'   not in record.INFO: record.INFO['ERATE']   = None
+      if 'THETA'   not in record.INFO: record.INFO['THETA']   = None
+      if 'LDAF'    not in record.INFO: record.INFO['LDAF']    = None
+
+      # Allele frequency is sometimes reecorded as a tuple or list
+      # Extract the first (only) element and cast to float
+      if type(record.INFO['AF']) in [type((None,)),type([])]:
+        record.INFO['AF'] = float(record.INFO['AF'][0])
+
+      # Add attribute fields to INFO
+      record.INFO["ID"]     = record.ID
+      record.INFO["CHROM"]  = record.CHROM
+      record.INFO["START"]  = int(record.POS)
+      record.INFO["REF"]    = record.REF
+      record.INFO["ALT"]    = record.ALT[0] # Enforce biallelic assumption
+      record.INFO["QUAL"]   = record.QUAL
+      record.INFO["FILTER"] = str(record.FILTER)
+
+      # Determine and record the derived allele
+      if record.INFO["REF"] == record.INFO["AA"]:
+        record.INFO["DA"] = record.INFO["ALT"]
+      else:
+        record.INFO["DA"] = record.INFO["REF"]
+
     # Extract the consequences
     record.CSQ = self._parse_csq(csq_headers,record.INFO['CSQ'])
     # Add some "consequence" info to the variant info
@@ -147,7 +163,7 @@ class PDBMapData():
     """ Pipe VCF file through VEP and yield VEP rows """
     print "Initializing VCF generator."
     # Parse the VCF output from VEP
-    parser = vcf.Reader(self.load_vep(fname,'vcf'))
+    parser = vcf.Reader(self.load_vep(fname,'vcf'),prepend_chr=True)
     # Determine Info headers
     info_headers = parser.infos.keys()
     # Determine Consequence headers
@@ -156,7 +172,7 @@ class PDBMapData():
     for record in parser:
       nscount += 1
       # If consequence refers to a haplotype chromosome, ignore
-      if "chr"+record.CHROM not in ['chr1','chr2','chr3',
+      if record.CHROM not in ['chr1','chr2','chr3',
                         'chr4','chr5','chr6','chr7','chr8',
                         'chr9','chr10','chr11','chr12','chr13',
                         'chr14','chr15','chr16','chr17','chr18',
