@@ -73,70 +73,70 @@ class PDBMapData():
   def vep_record_parser(self,record,info_headers,csq_headers):
     
     # Ensure that an end is specified, default to start+1
-      if "END" not in record.INFO:
-        record.INFO["END"] = int(record.POS) + 1
+    if "END" not in record.INFO:
+      record.INFO["END"] = int(record.POS) + 1
 
-      # Ensure that each record contains all fields
-      for header in info_headers:
-        if header not in record.INFO:
-          record.INFO[header] = None
+    # Ensure that each record contains all fields
+    for header in info_headers:
+      if header not in record.INFO:
+        record.INFO[header] = None
 
-      # Process fields which may or may not be included in VEP output
-      if 'SNPSOURCE' in record.INFO and record.INFO['SNPSOURCE']:
-        record.INFO['SNPSOURCE'] = ';'.join(record.INFO['SNPSOURCE'])
-      else: record.INFO['SNPSOURCE'] = None
+    # Process fields which may or may not be included in VEP output
+    if 'SNPSOURCE' in record.INFO and record.INFO['SNPSOURCE']:
+      record.INFO['SNPSOURCE'] = ';'.join(record.INFO['SNPSOURCE'])
+    else: record.INFO['SNPSOURCE'] = None
 
-      # Make any necessary population allele frequency corrections
-      freqs = ['AMR_AF','AFR_AF','EUR_AF','EAS_AF','SAS_AF','ASN_AF']
-      for freq in freqs:
-        if freq not in record.INFO: record.INFO[freq] = None
-        recordINFO[freq] = 0.0 if not record.INFO[freq] else record.INFO[freq]
+    # Make any necessary population allele frequency corrections
+    freqs = ['AMR_AF','AFR_AF','EUR_AF','EAS_AF','SAS_AF','ASN_AF']
+    for freq in freqs:
+      if freq not in record.INFO: record.INFO[freq] = None
+      recordINFO[freq] = 0.0 if not record.INFO[freq] else record.INFO[freq]
 
-      # Ensure the ancestral allele is encoded properly
-      if 'AA' in record.INFO and record.INFO['AA']:
-        record.INFO['AA'] = record.INFO['AA'].upper()
-      else: 
-        record.INFO['AA'] = None
+    # Ensure the ancestral allele is encoded properly
+    if 'AA' in record.INFO and record.INFO['AA']:
+      record.INFO['AA'] = record.INFO['AA'].upper()
+    else: 
+      record.INFO['AA'] = None
 
-      # Enforce biallelic assumption
-      # Record only the first alternate allele count
-      if 'AC' in record.INFO:
-        record.INFO['AC'] = record.INFO['AC'][0]
-      else: 
-        record.INFO['AC'] = None
+    # Enforce biallelic assumption
+    # Record only the first alternate allele count
+    if 'AC' in record.INFO:
+      record.INFO['AC'] = record.INFO['AC'][0]
+    else: 
+      record.INFO['AC'] = None
 
-      # Ensure necessary fields are present in record.INFO
-      if 'AN'      not in record.INFO: record.INFO['AN']      = None
-      if 'AF'      not in record.INFO: record.INFO['AF']      = None
-      if 'VT'      not in record.INFO: record.INFO['VT']      = None
-      if 'SVTYPE'  not in record.INFO: record.INFO['SVTYPE']  = None
-      if 'SVLEN'   not in record.INFO: record.INFO['SVLEN']   = None
-      if 'AVGPOST' not in record.INFO: record.INFO['AVGPOST'] = None
-      if 'RSQ'     not in record.INFO: record.INFO['RSQ']     = None
-      if 'ERATE'   not in record.INFO: record.INFO['ERATE']   = None
-      if 'THETA'   not in record.INFO: record.INFO['THETA']   = None
-      if 'LDAF'    not in record.INFO: record.INFO['LDAF']    = None
+    # Ensure necessary fields are present in record.INFO
+    if 'AN'      not in record.INFO: record.INFO['AN']      = None
+    if 'AF'      not in record.INFO: record.INFO['AF']      = None
+    if 'VT'      not in record.INFO: record.INFO['VT']      = None
+    if 'SVTYPE'  not in record.INFO: record.INFO['SVTYPE']  = None
+    if 'SVLEN'   not in record.INFO: record.INFO['SVLEN']   = None
+    if 'AVGPOST' not in record.INFO: record.INFO['AVGPOST'] = None
+    if 'RSQ'     not in record.INFO: record.INFO['RSQ']     = None
+    if 'ERATE'   not in record.INFO: record.INFO['ERATE']   = None
+    if 'THETA'   not in record.INFO: record.INFO['THETA']   = None
+    if 'LDAF'    not in record.INFO: record.INFO['LDAF']    = None
 
-      # Allele frequency is sometimes reecorded as a tuple or list
-      # Extract the first (only) element and cast to float
-      if type(record.INFO['AF']) in [type((None,)),type([])]:
-        record.INFO['AF'] = float(record.INFO['AF'][0])
+    # Allele frequency is sometimes reecorded as a tuple or list
+    # Extract the first (only) element and cast to float
+    if type(record.INFO['AF']) in [type((None,)),type([])]:
+      record.INFO['AF'] = float(record.INFO['AF'][0])
 
-      # Add attribute fields to INFO
-      record.INFO["ID"]     = record.ID
-      record.INFO["CHROM"]  = record.CHROM
-      record.INFO["START"]  = int(record.POS)
-      record.INFO["REF"]    = record.REF
-      record.INFO["ALT"]    = record.ALT[0] # Enforce biallelic assumption
-      record.INFO["QUAL"]   = record.QUAL
-      record.INFO["FILTER"] = str(record.FILTER)
+    # Add attribute fields to INFO
+    record.INFO["ID"]     = record.ID
+    record.INFO["CHROM"]  = record.CHROM
+    record.INFO["START"]  = int(record.POS)
+    record.INFO["REF"]    = record.REF
+    record.INFO["ALT"]    = record.ALT[0] # Enforce biallelic assumption
+    record.INFO["QUAL"]   = record.QUAL
+    record.INFO["FILTER"] = str(record.FILTER)
 
-      # Determine and record the derived allele
-      if record.INFO["REF"] == record.INFO["AA"]:
-        record.INFO["DA"] = record.INFO["ALT"]
-      else:
-        record.INFO["DA"] = record.INFO["REF"]
-
+    # Determine and record the derived allele
+    if record.INFO["REF"] == record.INFO["AA"]:
+      record.INFO["DA"] = record.INFO["ALT"]
+    else:
+      record.INFO["DA"] = record.INFO["REF"]
+    
     # Extract the consequences
     record.CSQ = self._parse_csq(csq_headers,record.INFO['CSQ'])
     # Add some "consequence" info to the variant info

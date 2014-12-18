@@ -31,6 +31,11 @@ class PDBMapVisualize():
     print "Visualizing structure %s.%s"%(pdbid,biounit)
     pdbid = pdbid.lower()
     res  = self.io.load_structure(pdbid,biounit,raw=True)
+    # Reduce to variable residues
+    for key in res:
+      if key != 'issnp':
+        res[key] = [r for i,r in enumerate(res[key]) if res['issnp'][i]]
+    del res['issnp']
     if not res:
       msg = "WARNING (PDBMapVisualize) No variants for %s, biounit %d\n"%(pdbid,biounit)
       sys.stderr.write(msg)
@@ -44,6 +49,11 @@ class PDBMapVisualize():
       if anno not in res:
         # Join with the user-supplied annotations
         res = self.io.load_structure(pdbid,biounit,useranno=True,raw=True)
+        # Reduce to variable residues
+        for key in res:
+          if key != 'issnp':
+            res[key] = [r for i,r in enumerate(res[key]) if res['issnp'][i]]
+        del res['issnp']
         break
 
     # Correct submodel ID for undivided structures

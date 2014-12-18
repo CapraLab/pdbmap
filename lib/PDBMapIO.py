@@ -699,68 +699,68 @@ class PDBMapIO(PDBIO):
     self._close()
 
 
-  def load_structure(structid,biounit=0,useranno=False,raw=False):
-  query = PDBMapIO.structure_query
-  if useranno:
-    supp_select = ",z.* "
-    supp_table  = "INNER JOIN pdbmap_supp.%s AS z ON z.chr=d.chr "%self.dlabel
-    supp_table += "AND z.start=d.start AND z.end=d.end AND z.name=d.name "
-  else:
-    supp_select = ''
-    supp_table  = ''
-  query = query%(supp_select,supp_table) # Insert useranno text
-  q = secure_query(query,qvars=(self.dlabel,self.slabel,
-                  structid,biounit),cursorclass='DictCursor')
-  # Return raw result dictionary if specified
-  if raw:
-    res = {}
+  def load_structure(self,structid,biounit=0,useranno=False,raw=False):
+    query = PDBMapIO.structure_query
+    if useranno:
+      supp_select = ",z.* "
+      supp_table  = "LEFT JOIN pdbmap_supp.%s AS z ON z.chr=g.chr "%self.dlabel
+      supp_table += "AND z.start=g.start AND z.end=g.end AND z.name=g.name "
+    else:
+      supp_select = ''
+      supp_table  = ''
+    query = query%(supp_select,supp_table) # Insert useranno text
+    q = self.secure_query(query,qvars=(self.dlabel,self.slabel,
+                    structid,biounit),cursorclass='DictCursor')
+    # Return raw result dictionary if specified
+    if raw:
+      res = {}
+      for row in q:
+        if not res:
+          res = dict([(key,[val]) for key,val in row.iteritems()])
+        else:
+          for key,val in row.iteritems():
+            res[key].append(val)
+      return res
+    # Construct and return as a Bio.PDB.Structure
+    s = None
     for row in q:
-      if not res:
-        res = dict([(key,[val]) for key,val in row.iteritems()])
-      else:
-        for key,val in row.iteritems():
-          res[key].append(val)
-    return res
-  # Construct and return as a Bio.PDB.Structure
-  s = None
-  for row in q:
-    if not s:
-        s = Bio.PDB.Structure.Structure(row['structid'])
-        s.biounit    = row['biounit']
-        s.resolution = row['resolution'] if row['resolution'] else None
-        s.mpqs       = row['mpqs'] if row['mpqs'] else None
-        s.type       = 'Model' if row[‘mpqs’] else 'Structure'
-        s.method     = row['method']
-        s.snpmapper  = {}
-    m = row['model']
-    if m not in s: s.add(Bio.PDB.Model.Model(m))
-    m = s[m]
-    c = row['chain']
-    if c not in m: m.add(Bio.PDB.Chain.Chain(c))
-    c = m[c]
-    c.unp         = row['unp']
-    c.transcript  = row['enst']
-    c.gene        = row['ensg']
-    c.perc_identity = row['perc_identity']
-    c.hybrid  = row['hybrid']
-    r = (' ',row['seqid'], ' ')
-    c.add(Bio.PDB.Residue.Residue(r,row['rescode'],' '))
-    r = c[r]
-    r.seqid = row['seqid']
-    r.coords = (row['x'],row['y'],row['z'])
-    r.pfam   = (row['pfamid'],row['pfam_domain'],row['pfam_desc'],row['pfam_evalue'])
-    r.ss     = row['ss']
-    r.angles = (row['phi'],row['psi'],row['tco'],row['kappa'],row['alpha'])
-    if c.unp not in s.snpmapper:
-        s.snpmapper[c.unp] = np.array([[None for j in range(19)] for i in range(r.seqid)])
-    if not np.any(s.snpmapper[c.unp][r.seqid-1]):
-        snp  = [row['issnp'],row['snpid'],row['chr'],row['start'],row['end'],row['hgnc_gene'],row['ens_gene']]
-        snp += [row['anc_allele'],row['ref_allele'],row['alt_allele']]
-        snp += [row['maf'],row['amr_af'],row['asn_af'],row['eur_af'],row['afr_af']]
-        snp += [row['ref_codon'],row['alt_codon'],row['vep_ref_aa'],row['vep_alt_aa']]
-        s.snpmapper[c.unp][r.seqid-1] = snp
-    r.snp = s.snpmapper[c.unp][r.seqid-1]
-  return s
+      if not s:
+        s = Bio.PDB.Structure.Structure(row['structid'])
+        s.biounit  = row['biounit']
+        s.resolution = row['resolution'] if row['resolution'] else None
+        s.mpqs  = row['mpqs'] if row['mpqs'] else None
+        s.type       = 'model' if row['mpqs'] else 'structure'
+        s.method  = row['method']
+        s.snpmapper  = {}
+      m = row['model']
+      if m not in s: s.add(Bio.PDB.Model.Model(m))
+      m = s[m]
+      c = row['chain']
+      if c not in m: m.add(Bio.PDB.Chain.Chain(c))
+      c = m[c]
+      c.unp  = row['unp']
+      c.transcript  = row['enst']
+      c.gene  = row['ensg']
+      c.perc_identity = row['perc_identity']
+      c.hybrid  = row['hybrid']
+      r = (' ',row['seqid'], ' ')
+      c.add(Bio.PDB.Residue.Residue(r,row['rescode'],' '))
+      r = c[r]
+      r.seqid = row['seqid']
+      r.coords = (row['x'],row['y'],row['z'])
+      r.pfam  = (row['pfamid'],row['pfam_domain'],row['pfam_desc'],row['pfam_evalue'])
+      r.ss  = row['ss']
+      r.angles = (row['phi'],row['psi'],row['tco'],row['kappa'],row['alpha'])
+      if c.unp not in s.snpmapper:
+        s.snpmapper[c.unp] = np.array([[None for j in range(19)] for i in range(r.seqid)])
+      if not np.any(s.snpmapper[c.unp][r.seqid-1]):
+        snp  = [row['issnp'],row['snpid'],row['chr'],row['start'],row['end'],row['hgnc_gene'],row['ens_gene']]
+        snp += [row['anc_allele'],row['ref_allele'],row['alt_allele']]
+        snp += [row['maf'],row['amr_af'],row['asn_af'],row['eur_af'],row['afr_af']]
+        snp += [row['ref_codon'],row['alt_codon'],row['vep_ref_aa'],row['vep_alt_aa']]
+        s.snpmapper[c.unp][r.seqid-1] = snp
+      r.snp = s.snpmapper[c.unp][r.seqid-1]
+    return s
 
 
   def load_structure_DEPRECATED(self,pdbid,biounit=0,useranno=False):
@@ -933,7 +933,7 @@ class PDBMapIO(PDBIO):
     return
 
   # Query definitions
-
+ 
   # Queries all biological assemblies and models with the given structid
   structure_query = """SELECT
   /*SLABEL*/a.label as slabel,
@@ -951,7 +951,7 @@ class PDBMapIO(PDBIO):
   /*VARIANT*/g.name as snpid,g.chr,g.start,g.end,g.hgnc_gene,g.ens_gene,g.aa as anc_allele,g.ref_allele,g.alt_allele,g.maf,g.amr_af,g.asn_af,g.eur_af,g.afr_af,
   /*CONSEQUENCE*/f.gc_id,f.transcript as vep_trans,f.protein as vep_prot,f.protein_pos as vep_prot_pos,f.ref_codon,f.alt_codon,f.ref_amino_acid as vep_ref_aa,f.alt_amino_acid as vep_alt_aa,
   /*CONSEQUENCE*/f.consequence,f.polyphen,f.sift,f.biotype
-  /*USERANNO*/%s.*
+  /*USERANNO*/%s
   FROM Residue as a
   LEFT JOIN Chain as b
   ON a.label=b.label AND a.structid=b.structid AND a.biounit=b.biounit AND a.model=b.model AND a.chain=b.chain
