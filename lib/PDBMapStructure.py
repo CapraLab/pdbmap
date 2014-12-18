@@ -15,7 +15,8 @@
 #=============================================================================#
 
 # See main check for cmd line parsing
-import sys,os,csv
+import sys,os,csv,copy
+import numpy as np
 from Bio.PDB.Structure import Structure
 from lib.PDBMapTranscript import PDBMapTranscript
 from lib.PDBMapAlignment import PDBMapAlignment
@@ -95,6 +96,52 @@ class PDBMapStructure(Structure):
       self.get_transcripts()
     else:
       return self.alignments  
+
+  def permute(self,nperm=1000):
+    """ Generator: permutes SNP assignments within the structure """
+    # Record the original state of SNPMapper
+    ts = copy.deepcopy(self.structure.snpmapper)
+    # Resolve the SNPMapper to an alias
+    sm = self.structure.snpmapper
+    unps = sm.keys()
+    # Chains may not cover full length of protein sequence
+    # Only permute protein sequence present in the structure
+    pr = {} # protein range
+    for m in self.structure:
+      for c in m:
+        seqs = [r.seqid for r in c]
+        minseq = np.min(seqs)
+        maxseq = np.max(seqs)
+        unp = c.unp
+        if unp not in pr:
+          pr[unp] = [minseq,maxseq]
+        elif pr[unp][0]>minseq:
+          pr[unp][0] = minseq
+        elif pr[unp][1]<maxseq:
+          pr[c.unp][1] = maxseq
+    try:
+      for i in range(nperm):
+        for unp in unps:
+          # Shuffle between min/max observed residues
+          np.random.shuffle(sm[unp][pr[unp][0]:pr[unp][1]])
+        # Yield this structure object with each permutation
+        yield self
+    except: 
+      raise Exception('Structure must be initialized with SNP assignments.')
+    finally:
+      # Return the SNPMapper to its original state
+      self.structure.snpmapper = ts
+      for m in self.structure:
+        for c in m:
+          for r in c:
+            r.snp = self.snpmapper[c.unp][r.seqid-1]
+
+  def snps(self):
+    for m in self.structure:
+      for c in m:
+        for r in c:
+          if r.snp[0]:
+            yield (c.id,r.seqid,r.snp[1])
 
 # Main check
 if __name__== "__main__":

@@ -277,9 +277,7 @@ class PDBMap():
       res   = io.secure_query(query,(struct_label,entity,),cursorclass='Cursor')
       biounits = [r[0] for r in res]
     elif entity_type == 'model' and not biounits:
-      query = "SELECT DISTINCT biounit FROM Chain WHERE label=%s AND structid=%s"
-      res   = io.secure_query(query,(struct_label,entity,),cursorclass='Cursor')
-      biounits = [r[0] for r in res]
+      biounits = [-1]
     eps,mins = False,False
     if 'pop' in anno_list:
       idx = anno_list.index('pop')
@@ -297,12 +295,9 @@ class PDBMap():
         msg = "ERROR (PDBMap) Cannot run other annotations with DBSCAN"
         raise Exception(msg)
     try:
-      if entity_type == 'structure':
+      if entity_type in ['structure','model']:
         for biounit in biounits:
           v.visualize_structure(entity,biounit,anno_list,eps,mins,spectrum_range,colors=colors)
-      elif entity_type == 'model':
-        for biounit in biounits:
-          v.visualize_model(entity,biounit,anno_list,eps,mins,spectrum_range,colors=colors)
       elif entity_type == 'unp':
         v.visualize_unp(entity,anno_list,eps,mins,spectrum_range,colors=colors)
       elif entity_type == 'all':

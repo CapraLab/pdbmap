@@ -17,6 +17,8 @@ import sys,os,csv,collections,gzip,time,random
 import subprocess as sp
 from Bio.PDB.PDBParser import PDBParser
 from Bio.PDB.PDBIO import PDBIO
+import Bio.PDB
+import numpy as np
 from PDBMapStructure import PDBMapStructure
 from PDBMapModel import PDBMapModel
 from PDBMapProtein import PDBMapProtein
@@ -700,6 +702,7 @@ class PDBMapIO(PDBIO):
 
 
   def load_structure(self,structid,biounit=0,useranno=False,raw=False):
+    biounit = 0 if biounit < 0 else biounit
     query = PDBMapIO.structure_query
     if useranno:
       supp_select = ",z.* "
@@ -760,54 +763,7 @@ class PDBMapIO(PDBIO):
         snp += [row['ref_codon'],row['alt_codon'],row['vep_ref_aa'],row['vep_alt_aa']]
         s.snpmapper[c.unp][r.seqid-1] = snp
       r.snp = s.snpmapper[c.unp][r.seqid-1]
-    return s
-
-
-  def load_structure_DEPRECATED(self,pdbid,biounit=0,useranno=False):
-    """ Loads the structure from the PDBMap database """
-    query = PDBMapIO.structure_query
-    if useranno:
-      supp_select = ",z.* "
-      supp_table  = "\nINNER JOIN pdbmap_supp.%s AS z ON z.chr=d.chr "%self.dlabel
-      supp_table += "AND z.start=d.start AND z.end=d.end AND z.name=d.name "
-    else:
-      supp_select = ''
-      supp_table  = ''
-    query = query%(supp_select,supp_table) # insert additional query statements
-    q = self.secure_query(query,qvars=(self.slabel,self.slabel,self.dlabel,
-                                        self.dlabel,self.dlabel,self.slabel,
-                                        pdbid,biounit),cursorclass='DictCursor')
-    res = {}
-    for row in q:
-      if not res:
-        res = dict([(key,[val]) for key,val in row.iteritems()])
-      else:
-        for key,val in row.iteritems():
-          res[key].append(val)
-    return res
-
-  def load_model_DEPRECATED(self,modelid,useranno=False):
-    """ Loads the structure from the PDBMap database """
-    query = PDBMapIO.model_query # now identical to structure query
-    if useranno:
-      supp_select = ",z.* "
-      supp_table  = "\nINNER JOIN pdbmap_supp.%s AS z ON z.chr=d.chr "%self.dlabel
-      supp_table += "AND z.start=d.start AND z.end=d.end AND z.name=d.name "
-    else:
-      supp_select = ''
-      supp_table  = ''
-    query = query%(supp_select,supp_table) # insert additional query statements
-    q = self.secure_query(query,qvars=(self.slabel,self.slabel,self.dlabel,
-                                        self.dlabel,self.dlabel,self.slabel,
-                                        modelid,0),cursorclass='DictCursor')
-    res = {}
-    for row in q:
-      if not res:
-        res = dict([(key,[val]) for key,val in row.iteritems()])
-      else:
-        for key,val in row.iteritems():
-          res[key].append(val)
-    return res
+    return PDBMapStructure(s)
 
   def load_unp(self,unpid):
     """ Identifies all associated structures, then pulls those structures. """
@@ -980,83 +936,6 @@ class PDBMapIO(PDBIO):
   AND a.structid=%%s AND a.biounit=%%s
   ORDER BY b.unp,a.seqid DESC;
   """
-
-  full_annotation_query_DEPRECATED = """SELECT
-    /*LABELS*/a.label,d.label,
-    /*VARIANT*/a.name,a.chr,a.start,a.end,b.gc_id,
-    /*CONSEQUENCE*/b.hgnc_gene as gene,b.transcript as vep_trans,b.protein as vep_prot,b.protein_pos as vep_prot_pos,b.ref_amino_acid as vep_ref_aa,b.alt_amino_acid as vep_alt_aa,b.consequence,
-    /*ALIGN*/h.chain_seqid as aln_chain_seqid,h.trans_seqid as aln_trans_seqid,j.perc_identity,
-    /*TRANS*/i.gene as ens_gene,i.transcript as ens_trans,i.protein as ens_prot,i.seqid as ens_prot_seqid,i.rescode as ens_prot_aa,
-    /*RESIDUE*/d.seqid as pdb_seqid,d.rescode as pdb_aa,
-    /*CHAIN*/e.biounit,e.model,e.chain as pdb_chain,e.unp as pdb_unp,
-    /*STRUCTURE*/f.pdbid,f.method,f.resolution,
-    /*MODEL*/g.modelid,g.method,g.mpqs
-    FROM GenomicData AS a
-    INNER JOIN GenomicConsequence AS b
-    ON a.label=b.label AND a.chr=b.chr AND a.start=b.start AND a.end=b.end AND a.name=b.name
-    INNER JOIN GenomicIntersection AS c
-    ON b.label=c.dlabel AND b.gc_id=c.gc_id
-    INNER JOIN Residue AS d
-    ON c.slabel=d.label AND c.structid=d.structid AND c.chain=d.chain AND c.seqid=d.seqid
-    INNER JOIN Chain as e
-    ON d.label=e.label AND d.structid=e.structid AND d.biounit=e.biounit AND d.model=e.model AND d.chain=e.chain
-    LEFT JOIN Structure as f
-    ON e.label=f.label AND e.structid=f.pdbid
-    LEFT JOIN Model as g
-    ON e.label=g.label AND e.structid=g.modelid
-    INNER JOIN Alignment as h USE INDEX(PRIMARY)
-    ON d.label=h.label AND d.structid=h.structid AND d.chain=h.chain AND d.seqid=h.chain_seqid AND h.transcript=b.transcript
-    INNER JOIN Transcript as i USE INDEX(PRIMARY)
-    ON h.label=i.label AND h.transcript=i.transcript AND h.trans_seqid=i.seqid
-    INNER JOIN AlignmentScore as j
-    ON h.label=j.label AND h.structid=j.structid AND h.chain=j.chain AND h.transcript=j.transcript
-    WHERE b.consequence LIKE '%%%%missense_variant%%%%'
-    AND a.structid=%%s 
-    AND a.label=%%s
-    AND b.label=%%s
-    AND c.dlabel=%%s AND c.slabel=%%s
-    AND d.label=%%s
-    AND e.label=%%s
-    AND h.label=%%s
-    AND i.label=%%s
-    AND j.label=%%s
-    # Limit to biological assemblies for x-ray crystallography
-    # Include all NMR and Models
-    AND (b.method LIKE '%nmr%' OR NOT ISNULL(g.modelid) OR a.biounit>0)
-    ORDER BY d.structid,d.biounit,d.chain,d.seqid;
-    # Do not specify structure/model labels. One will be NULL in each row.
-    # Structure/model labels will still match the chain labels, which are specified.
-    """
-  structure_query_DEPRECATED = """SELECT
-    g.model,g.chain,a.seqid,a.x,a.y,a.z,d.*,c.*%s
-    FROM Residue as a
-    INNER JOIN GenomicIntersection as b
-    ON a.label=b.slabel AND a.structid=b.structid AND a.chain=b.chain AND a.seqid=b.seqid
-    INNER JOIN GenomicConsequence as c
-    ON b.gc_id=c.gc_id
-    INNER JOIN GenomicData as d
-    ON c.label=d.label AND c.chr=d.chr AND c.start=d.start AND c.end=d.end AND c.name=d.name
-    INNER JOIN Chain as g
-    ON a.label=g.label AND a.structid=g.structid AND a.biounit=g.biounit AND a.model=g.model AND a.chain=g.chain%s
-    WHERE c.consequence LIKE '%%%%missense_variant%%%%' 
-    AND a.label=%%s AND b.slabel=%%s AND b.dlabel=%%s AND c.label=%%s 
-    AND d.label=%%s AND g.label=%%s  
-    AND a.structid=%%s AND a.biounit=%%s;"""
-  model_query_DEPRECATED = """SELECT
-    g.model,a.seqid,a.x,a.y,a.z,d.*,c.*%s
-    FROM Residue as a
-    INNER JOIN GenomicIntersection as b
-    ON a.label=b.slabel AND a.structid=b.structid AND a.chain=b.chain AND a.seqid=b.seqid
-    INNER JOIN GenomicConsequence as c
-    ON b.gc_id=c.gc_id
-    INNER JOIN GenomicData as d
-    ON c.label=d.label AND c.chr=d.chr AND c.start=d.start AND c.end=d.end AND c.name=d.name
-    INNER JOIN Chain as g
-    ON a.label=g.label AND a.structid=g.structid AND a.biounit=g.biounit AND a.model=g.model AND a.chain=g.chain%s
-    WHERE c.consequence LIKE '%%%%missense_variant%%%%' 
-    AND a.label=%%s AND b.slabel=%%s AND b.dlabel=%%s AND c.label=%%s 
-    AND d.label=%%s AND g.label=%%s  
-    AND a.structid=%%s AND a.biounit=%%s;"""
 
   # Queries all structures and models associated with a given UniProt ID
   unp_query = """SELECT DISTINCT c.structid FROM 

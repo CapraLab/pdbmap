@@ -26,18 +26,20 @@ class PDBMapVisualize():
     self.pdb_dir = pdb_dir
     self.modbase_dir = modbase_dir
 
-  def visualize_structure(self,pdbid,biounit=0,anno_list=['maf'],eps=None,mins=None,spectrum_range=[],group=None,colors=[]):
+  def visualize_structure(self,structid,biounit=0,anno_list=['maf'],eps=None,mins=None,spectrum_range=[],group=None,colors=[],permute=False):
     """ Visualize the annotated dataset within a structure """
-    print "Visualizing structure %s.%s"%(pdbid,biounit)
-    pdbid = pdbid.lower()
-    res  = self.io.load_structure(pdbid,biounit,raw=True)
+    modelflag = 1 if biounit<0 else 0
+    biounit = 0 if biounit<0 else biounit
+    print "Visualizing %s.%s"%(structid,biounit)
+    structid = structid.lower()
+    res  = self.io.load_structure(structid,biounit,raw=True)
     # Reduce to variable residues
     for key in res:
       if key != 'issnp':
         res[key] = [r for i,r in enumerate(res[key]) if res['issnp'][i]]
     del res['issnp']
     if not res:
-      msg = "WARNING (PDBMapVisualize) No variants for %s, biounit %d\n"%(pdbid,biounit)
+      msg = "WARNING (PDBMapVisualize) No variants for %s, biounit %d\n"%(structid,biounit)
       sys.stderr.write(msg)
       return
 
@@ -48,7 +50,7 @@ class PDBMapVisualize():
       # If any specified annotation isn't in the default return
       if anno not in res:
         # Join with the user-supplied annotations
-        res = self.io.load_structure(pdbid,biounit,useranno=True,raw=True)
+        res = self.io.load_structure(structid,biounit,useranno=True,raw=True)
         # Reduce to variable residues
         for key in res:
           if key != 'issnp':
@@ -95,7 +97,7 @@ class PDBMapVisualize():
     cols = ['model','seqid','chain']
     cols.extend(anno_list)
     timestamp = str(time.strftime("%Y%m%d-%H"))
-    params = {'structid':pdbid,'biounit':biounit,'annos':'-'.join(anno_list)}
+    params = {'structid':structid,'biounit':biounit,'annos':'-'.join(anno_list)}
     res_dir = 'results/pdbmap_%s_%s_%s'
     if group:
       res_dir = res_dir%(self.io.dlabel,group,timestamp)
@@ -138,118 +140,14 @@ class PDBMapVisualize():
       minval,maxval = (minval,maxval) if not spectrum_range else spectrum_range[a]
       colors = None if not colors else colors[a]
       # Locate the asymmetric unit or biological assembly
-      if biounit < 1:
-        struct_loc = "%s/structures/all/pdb/pdb%s.ent.gz"%(self.pdb_dir,pdbid)
+      if modelflag:
+        struct_loc = "%s/models/model/%s.pdb.gz"%(self.modbase_dir,structid.upper())
+      elif biounit == 0:
+        struct_loc = "%s/structures/all/pdb/pdb%s.ent.gz"%(self.pdb_dir,structid)
       else:
-        struct_loc = "%s/biounit/coordinates/all/%s.pdb%d.gz"%(self.pdb_dir,pdbid,biounit)
-      params = {'structid':pdbid,'biounit':biounit,'anno':anno,'tempf':tempf,'colors':colors,
+        struct_loc = "%s/biounit/coordinates/all/%s.pdb%d.gz"%(self.pdb_dir,structid,biounit)
+      params = {'structid':structid,'biounit':biounit,'anno':anno,'tempf':tempf,'colors':colors,
                 'minval':minval,'maxval':maxval,'resis':out,'struct_loc':struct_loc}
-      self.visualize(params,group=group)
-
-  def visualize_model(self,modelid,biounit=0,anno_list=['maf'],eps=None,mins=None,spectrum_range=[],group=None,colors=[]):
-    """ Visualize the annotated dataset within a model """
-    print "Visualizing model %s.%s"%(modelid,biounit)
-    res  = self.io.load_model(modelid)
-    if not res:
-      msg = "WARNING (PDBMapVisualize) No variants for %s, biounit %d\n"%(modelid,biounit)
-      sys.stderr.write(msg)
-      return
-    for anno in anno_list:
-      # If any specified annotation isn't in the default return
-      if anno not in res:
-        # Join with the user-supplied annotations
-        res  = self.io.load_model(modelid,useranno=True)
-        break
-    if not res:
-      msg = "ERROR (PDBMapVisualize) %s contains no variant mappings"%modelid
-      sys.stderr.write(msg)
-      return
-
-    # Correct submodel ID for undivided structures
-    maxm = len(set(res['model']))
-    if maxm < 2:
-      res['model'] = [0 for m in res['model']]
-
-    # If DBSCAN Eps specified
-    if eps and mins:
-      import numpy as np
-      from sklearn.cluster import DBSCAN
-      from scipy.spatial.distance import pdist,squareform
-      cols = ['model','seqid','chain']
-      location = np.array([list(coord) for coord in zip(res['x'],res['y'],res['z'])])
-      seen = set()
-      seen_add = seen.add
-      newres = dict((k,[]) for k in res.keys())
-      for i in range(len(res['x'])):
-        coord = (res['x'][i],res['y'][i],res['z'][i])
-        if not (coord in seen or seen_add(coord)):
-          for key in res:
-            newres[key].append(res[key][i])
-      res = newres
-      location = np.array([list(coord) for coord in zip(res['x'],res['y'],res['z'])])
-      distance = squareform(pdist(location,'euclidean'))
-      clusters = DBSCAN(eps=eps,min_samples=mins,metric='precomputed').fit(distance).labels_
-      noise    = int(min(clusters) >= 0)
-      clusters = [c+1 for c in clusters]
-      res['clusters_%d_%d'%(eps,mins)] = clusters
-      cls =  ['grey','red','blue','green','orange','yellow']
-      cls += ['brown','purple','black','white','pink','magenta']
-      cls += ['sienna','firebrick','khaki','turquoise']
-      cls += ['cyan','slate','chartreuse']
-      cls *= len(set(clusters)) / len(cls) + 1
-      colors.append(cls[noise:len(set(clusters))+noise])
-      anno_list.append('clusters_%d_%d'%(eps,mins))
-
-    # Output all annotations to results file
-    cols = ['model','seqid']
-    cols.extend(anno_list)
-    timestamp = str(time.strftime("%Y%m%d-%H"))
-    params = {'structid':modelid,'biounit':biounit}
-    res_dir = 'results/pdbmap_%s_%s_%s'
-    if group:
-      res_dir = res_dir%(self.io.dlabel,group,timestamp)
-    else:
-      res_dir = res_dir%(self.io.dlabel,params['structid'],timestamp)
-    params['res_dir'] = res_dir
-    if not os.path.exists(res_dir):
-      os.system('mkdir -p %(res_dir)s'%params)
-    with open("%(res_dir)s/%(structid)s_biounit%(biounit)d_vars_annotations.txt"%params,'wb') as fout:
-      writer = csv.writer(fout,delimiter='\t')
-      writer.writerow(cols)
-      out = [res[col] for col in cols]    # Extract columns as rows
-      out  = [list(i) for i in zip(*out)] # Transpose back to columns
-      for row in out:
-        writer.writerow(row)
-
-    # Visualize individual annotations
-    for a,anno in enumerate(anno_list):
-      if anno not in res:
-        msg = "ERROR (PDBMapVisualize) Unknown feature %s\n"%anno
-        sys.stderr.write(msg)
-        continue # Move to next annotation
-      cols = ['model','seqid',anno]
-      out  = [res[col] for col in cols if res[anno]]   # Extract columns as rows
-      out  = [list(i) for i in zip(*out)] # Transpose back to columns
-      tempf = "temp/%d.TEMP"%multidigit_rand(10)
-      # Write the mappings to a temp file
-      minval,maxval = 999,-999
-      with open(tempf,'w') as fout:
-        fout.write("#%s\n"%'\t'.join(cols))
-        fout.write("attribute: %s\n"%anno)
-        fout.write("match mode: 1-to-1\n")
-        fout.write("recipient: residues\n")
-        for row in out:
-          # #0.model:resi.chain value [value ...]
-          fout.write("\t#0.%d:%d\t%0.6f\n"%(tuple(row)))
-          if row[-1] and float(row[-1]) < minval: minval=float(row[-1])
-          if row[-1] and float(row[-1]) > maxval: maxval=float(row[-1])
-      minval,maxval = (minval,maxval) if not spectrum_range else spectrum_range[a]
-      colors = None if not colors else colors[a]
-      if minval==999 or maxval==-999:
-        continue # All values are NULL, ignore annotation
-      params = {'structid':modelid,'biounit':biounit,'anno':anno,'tempf':tempf,
-                'minval':minval,'maxval':maxval,'resis':out,'colors':colors,
-                'struct_loc':"%s/models/model/%s.pdb.gz"%(self.modbase_dir,modelid)}
       self.visualize(params,group=group)
 
   def visualize_unp(self,unpid,anno_list=['maf'],eps=None,mins=None,spectrum_range=[],colors=[]):
