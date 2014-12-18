@@ -30,7 +30,7 @@ class PDBMapVisualize():
     """ Visualize the annotated dataset within a structure """
     print "Visualizing structure %s.%s"%(pdbid,biounit)
     pdbid = pdbid.lower()
-    res  = self.io.load_structure(pdbid,biounit)
+    res  = self.io.load_structure(pdbid,biounit,raw=True)
     if not res:
       msg = "WARNING (PDBMapVisualize) No variants for %s, biounit %d\n"%(pdbid,biounit)
       sys.stderr.write(msg)
@@ -43,7 +43,7 @@ class PDBMapVisualize():
       # If any specified annotation isn't in the default return
       if anno not in res:
         # Join with the user-supplied annotations
-        res = self.io.load_structure(pdbid,biounit,useranno=True)
+        res = self.io.load_structure(pdbid,biounit,useranno=True,raw=True)
         break
 
     # Correct submodel ID for undivided structures

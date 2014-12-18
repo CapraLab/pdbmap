@@ -698,7 +698,72 @@ class PDBMapIO(PDBIO):
     resetwarnings()
     self._close()
 
-  def load_structure(self,pdbid,biounit=0,useranno=False):
+
+  def load_structure(structid,biounit=0,useranno=False,raw=False):
+  query = PDBMapIO.structure_query
+  if useranno:
+    supp_select = ",z.* "
+    supp_table  = "INNER JOIN pdbmap_supp.%s AS z ON z.chr=d.chr "%self.dlabel
+    supp_table += "AND z.start=d.start AND z.end=d.end AND z.name=d.name "
+  else:
+    supp_select = ''
+    supp_table  = ''
+  query = query%(supp_select,supp_table) # Insert useranno text
+  q = secure_query(query,qvars=(self.dlabel,self.slabel,
+                  structid,biounit),cursorclass='DictCursor')
+  # Return raw result dictionary if specified
+  if raw:
+    res = {}
+    for row in q:
+      if not res:
+        res = dict([(key,[val]) for key,val in row.iteritems()])
+      else:
+        for key,val in row.iteritems():
+          res[key].append(val)
+    return res
+  # Construct and return as a Bio.PDB.Structure
+  s = None
+  for row in q:
+    if not s:
+        s = Bio.PDB.Structure.Structure(row['structid'])
+        s.biounit    = row['biounit']
+        s.resolution = row['resolution'] if row['resolution'] else None
+        s.mpqs       = row['mpqs'] if row['mpqs'] else None
+        s.type       = 'Model' if row[‘mpqs’] else 'Structure'
+        s.method     = row['method']
+        s.snpmapper  = {}
+    m = row['model']
+    if m not in s: s.add(Bio.PDB.Model.Model(m))
+    m = s[m]
+    c = row['chain']
+    if c not in m: m.add(Bio.PDB.Chain.Chain(c))
+    c = m[c]
+    c.unp         = row['unp']
+    c.transcript  = row['enst']
+    c.gene        = row['ensg']
+    c.perc_identity = row['perc_identity']
+    c.hybrid  = row['hybrid']
+    r = (' ',row['seqid'], ' ')
+    c.add(Bio.PDB.Residue.Residue(r,row['rescode'],' '))
+    r = c[r]
+    r.seqid = row['seqid']
+    r.coords = (row['x'],row['y'],row['z'])
+    r.pfam   = (row['pfamid'],row['pfam_domain'],row['pfam_desc'],row['pfam_evalue'])
+    r.ss     = row['ss']
+    r.angles = (row['phi'],row['psi'],row['tco'],row['kappa'],row['alpha'])
+    if c.unp not in s.snpmapper:
+        s.snpmapper[c.unp] = np.array([[None for j in range(19)] for i in range(r.seqid)])
+    if not np.any(s.snpmapper[c.unp][r.seqid-1]):
+        snp  = [row['issnp'],row['snpid'],row['chr'],row['start'],row['end'],row['hgnc_gene'],row['ens_gene']]
+        snp += [row['anc_allele'],row['ref_allele'],row['alt_allele']]
+        snp += [row['maf'],row['amr_af'],row['asn_af'],row['eur_af'],row['afr_af']]
+        snp += [row['ref_codon'],row['alt_codon'],row['vep_ref_aa'],row['vep_alt_aa']]
+        s.snpmapper[c.unp][r.seqid-1] = snp
+    r.snp = s.snpmapper[c.unp][r.seqid-1]
+  return s
+
+
+  def load_structure_DEPRECATED(self,pdbid,biounit=0,useranno=False):
     """ Loads the structure from the PDBMap database """
     query = PDBMapIO.structure_query
     if useranno:
@@ -721,7 +786,7 @@ class PDBMapIO(PDBIO):
           res[key].append(val)
     return res
 
-  def load_model(self,modelid,useranno=False):
+  def load_model_DEPRECATED(self,modelid,useranno=False):
     """ Loads the structure from the PDBMap database """
     query = PDBMapIO.model_query # now identical to structure query
     if useranno:
@@ -866,22 +931,57 @@ class PDBMapIO(PDBIO):
   def _close(self):
     self._c.close() # Close only the cursor
     return
-    # The connection will be closed when the PDBMapIO object is destructed
-    # try:
-    #   try: # If rows to fetch
-    #     self._c.fetchall() # burn all remaining rows
-    #   except: pass
-    #   try: # If any SS cursor
-    #     self._c.close() # close the cursor
-    #   except: pass
-    #   self._con.close()  # close the connection
-    # except MySQLdb.Error as e:
-    #   msg = "There was an error disconnecting from the database: %s\n"%e
-    #   sys.stderr.write(msg)
-    #   raise
 
   # Query definitions
-  full_annotation_query = """SELECT
+
+  # Queries all biological assemblies and models with the given structid
+  structure_query = """SELECT
+  /*SLABEL*/a.label as slabel,
+  /*ID*/a.structid,
+  /*METHOD*/IF(c.method IS NULL,d.method,c.method) as method,
+  /*STRUCTURE*/c.resolution,
+  /*MODEL*/d.mpqs,
+  /*CHAIN*/b.biounit,b.model,b.chain,b.unp,b.hybrid,
+  /*RESIDUE*/a.seqid,a.icode,a.rescode,a.ss,a.phi,a.psi,a.tco,a.kappa,a.alpha,a.x,a.y,a.z,
+  /*PFAM*/p.acc as pfamid,p.name as pfam_domain,p.description as pfam_desc,p.evalue as pfam_evalue,
+  /*ALIGN*/h.chain_seqid as aln_chain_seqid,h.trans_seqid as aln_trans_seqid,j.perc_identity,
+  /*TRANS*/i.transcript as enst,i.gene as ensg,i.protein as ens_prot,i.seqid as ens_prot_seqid,i.rescode as ens_prot_aa,
+  /*VARIANT*/IF(f.consequence LIKE '%%%%missense_variant%%%%',1,0) as issnp,
+  /*DLABEL*/g.label as dlabel,
+  /*VARIANT*/g.name as snpid,g.chr,g.start,g.end,g.hgnc_gene,g.ens_gene,g.aa as anc_allele,g.ref_allele,g.alt_allele,g.maf,g.amr_af,g.asn_af,g.eur_af,g.afr_af,
+  /*CONSEQUENCE*/f.gc_id,f.transcript as vep_trans,f.protein as vep_prot,f.protein_pos as vep_prot_pos,f.ref_codon,f.alt_codon,f.ref_amino_acid as vep_ref_aa,f.alt_amino_acid as vep_alt_aa,
+  /*CONSEQUENCE*/f.consequence,f.polyphen,f.sift,f.biotype
+  /*USERANNO*/%s.*
+  FROM Residue as a
+  LEFT JOIN Chain as b
+  ON a.label=b.label AND a.structid=b.structid AND a.biounit=b.biounit AND a.model=b.model AND a.chain=b.chain
+  LEFT JOIN Structure as c
+  ON b.label=c.label AND b.structid=c.pdbid
+  LEFT JOIN Model as d
+  ON b.label=d.label AND b.structid=d.modelid
+  LEFT JOIN GenomicIntersection as e
+  ON a.label=e.slabel AND a.structid=e.structid AND a.chain=e.chain AND a.seqid=e.seqid AND e.dlabel=%%s
+  LEFT JOIN GenomicConsequence as f
+  ON e.dlabel=f.label AND e.gc_id=f.gc_id
+  LEFT JOIN GenomicData as g
+  ON f.label=g.label AND f.chr=g.chr AND f.start=g.start AND f.end=g.end AND f.name=g.name
+  LEFT JOIN Alignment as h USE INDEX(PRIMARY)
+  ON a.label=h.label AND a.structid=h.structid AND a.chain=h.chain AND a.seqid=h.chain_seqid #AND f.transcript=h.transcript
+  LEFT JOIN Transcript as i USE INDEX(PRIMARY)
+  ON h.label=i.label AND h.transcript=i.transcript AND h.trans_seqid=i.seqid
+  LEFT JOIN AlignmentScore as j
+  ON h.label=j.label AND h.structid=j.structid AND h.chain=j.chain AND h.transcript=j.transcript
+  LEFT JOIN pfam as p
+  ON a.structid=p.pdbid AND a.chain=p.chain AND a.seqid BETWEEN p.seqstart AND p.seqend
+  /*USERANNO*/%s
+  WHERE a.label=%%s
+  AND (f.transcript IS NULL OR f.transcript=h.transcript)
+  AND (c.method LIKE '%%%%nmr%%%%' OR b.biounit>0 OR NOT ISNULL(d.modelid))
+  AND a.structid=%%s AND a.biounit=%%s
+  ORDER BY b.unp,a.seqid DESC;
+  """
+
+  full_annotation_query_DEPRECATED = """SELECT
     /*LABELS*/a.label,d.label,
     /*VARIANT*/a.name,a.chr,a.start,a.end,b.gc_id,
     /*CONSEQUENCE*/b.hgnc_gene as gene,b.transcript as vep_trans,b.protein as vep_prot,b.protein_pos as vep_prot_pos,b.ref_amino_acid as vep_ref_aa,b.alt_amino_acid as vep_alt_aa,b.consequence,
@@ -927,7 +1027,7 @@ class PDBMapIO(PDBIO):
     # Do not specify structure/model labels. One will be NULL in each row.
     # Structure/model labels will still match the chain labels, which are specified.
     """
-  structure_query = """SELECT
+  structure_query_DEPRECATED = """SELECT
     g.model,g.chain,a.seqid,a.x,a.y,a.z,d.*,c.*%s
     FROM Residue as a
     INNER JOIN GenomicIntersection as b
@@ -942,7 +1042,7 @@ class PDBMapIO(PDBIO):
     AND a.label=%%s AND b.slabel=%%s AND b.dlabel=%%s AND c.label=%%s 
     AND d.label=%%s AND g.label=%%s  
     AND a.structid=%%s AND a.biounit=%%s;"""
-  model_query = """SELECT
+  model_query_DEPRECATED = """SELECT
     g.model,a.seqid,a.x,a.y,a.z,d.*,c.*%s
     FROM Residue as a
     INNER JOIN GenomicIntersection as b
@@ -957,6 +1057,8 @@ class PDBMapIO(PDBIO):
     AND a.label=%%s AND b.slabel=%%s AND b.dlabel=%%s AND c.label=%%s 
     AND d.label=%%s AND g.label=%%s  
     AND a.structid=%%s AND a.biounit=%%s;"""
+
+  # Queries all structures and models associated with a given UniProt ID
   unp_query = """SELECT DISTINCT c.structid FROM 
     GenomicIntersection as a
     INNER JOIN GenomicConsequence as b
