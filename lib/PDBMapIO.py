@@ -700,8 +700,8 @@ class PDBMapIO(PDBIO):
     resetwarnings()
     self._close()
 
-
   def load_structure(self,structid,biounit=0,useranno=False,raw=False):
+    """ Reconstructs annotated PDBMapStructure from the database """
     biounit = 0 if biounit < 0 else biounit
     query = PDBMapIO.structure_query
     if useranno:
