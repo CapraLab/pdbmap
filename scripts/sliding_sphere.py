@@ -110,7 +110,7 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
     stats = sliding_sphere(residues,nbrs,radius,verbose)
     spheres = [residues[i] + stat for i,stat in enumerate(stats)]
     # Calculate the significance of each sphere
-    extremes = np.array([np.sum(sphere[-38:] > perm_spheres[:,i,-38:],axis=0) for i,sphere in enumerate(spheres)]) 
+    extremes = np.array([np.sum(sphere[-38:] <= perm_spheres[:,i,-38:],axis=0) for i,sphere in enumerate(spheres)]) 
     pvals = extremes / float(PERMUTATIONS)
     spheres = np.concatenate((spheres,pvals),axis=1)
     with open('../results/sliding_sphere_%d/sliding_sphere_p%s.txt'%(radius,ppidx),'wb') as fout:
