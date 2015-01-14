@@ -100,7 +100,7 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
     perm_spheres = np.array(perm_spheres)
     perm_shape   = perm_spheres.shape
     flatten      = (perm_shape[0]*perm_shape[1],perm_shape[2])
-    with open('../results/sliding_sphere_%d/sliding_sphere_perm_p%s.txt'%(radius,ppidx),'wb') as pfout:
+    with open('../results/sliding_sphere_%d/split/perm/bystruct/sliding_sphere_perm_%s.txt'%(radius,structid),'ab') as pfout:
       pfout.write("%s\n"%'\t'.join(header[:-38])) # no pvalue fields
       np.savetxt(pfout,perm_spheres.reshape(flatten),fmt='%s',delimiter='\t')
     # Calculate sliding sphere over observed SNP assignments
@@ -113,7 +113,7 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
     extremes = np.array([np.sum(sphere[-38:] <= perm_spheres[:,i,-38:],axis=0) for i,sphere in enumerate(spheres)]) 
     pvals = extremes / float(PERMUTATIONS)
     spheres = np.concatenate((spheres,pvals),axis=1)
-    with open('../results/sliding_sphere_%d/sliding_sphere_p%s.txt'%(radius,ppidx),'wb') as fout:
+    with open('../results/sliding_sphere_%d/split/obs/bystruct/sliding_sphere_%s.txt'%(radius,structid),'ab') as fout:
       fout.write("%s\n"%'\t'.join(header))
       np.savetxt(fout,spheres,fmt='%s',delimiter='\t')
     if verbose:
@@ -292,7 +292,8 @@ if __name__ == '__main__':
     ppart,ppidx,radius = -1,structid,radius
   else:
     ppart,ppidx,structid,radius = 0,0,None,15
-  os.system('mkdir -p ../results/sliding_sphere_%d'%radius)
+  os.system('mkdir -p ../results/sliding_sphere_%d/split/obs/bystruct'%radius)
+  os.system('mkdir -p ../results/sliding_sphere_%d/split/perm/bystruct'%radius)
   main(ppart,ppidx,structid=structid,radius=radius)
 
 
