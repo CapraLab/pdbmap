@@ -77,6 +77,12 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
 
   # Process each structure separately to reduce space complexity
   for typ,structid,biounit in structs:
+    if not os.path.exists('../results/sliding_sphere_%d/split/obs/bystruct/sliding_sphere_%s-%s.txt'%(radius,structid,biounit)):
+      with open('../results/sliding_sphere_%d/split/obs/bystruct/sliding_sphere_%s-%s.txt'%(radius,structid,biounit),'wb')as fout:
+        fout.write("%s\n"%'\t'.join(header))
+    if not os.path.exists('../results/sliding_sphere_%d/split/perm/bystruct/sliding_sphere_perm_%s-%s.txt'%(radius,structid,biounit)):
+      with open('../results/sliding_sphere_%d/split/perm/bystruct/sliding_sphere_perm_%s-%s.txt'%(radius,structid,biounit),'wb')as fout:
+        fout.write("%s\n"%'\t'.join(header[:-38])) # no pvalue fields
     if verbose:
       print "%s.%s"%(structid,biounit)
     residues,nbrs = load_structure(structid,biounit,verbose)
@@ -100,8 +106,7 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
     perm_spheres = np.array(perm_spheres)
     perm_shape   = perm_spheres.shape
     flatten      = (perm_shape[0]*perm_shape[1],perm_shape[2])
-    with open('../results/sliding_sphere_%d/split/perm/bystruct/sliding_sphere_perm_%s.txt'%(radius,structid),'ab') as pfout:
-      pfout.write("%s\n"%'\t'.join(header[:-38])) # no pvalue fields
+    with open('../results/sliding_sphere_%d/split/perm/bystruct/sliding_sphere_perm_%s-%s.txt'%(radius,structid,biounit),'ab') as pfout:
       np.savetxt(pfout,perm_spheres.reshape(flatten),fmt='%s',delimiter='\t')
     # Calculate sliding sphere over observed SNP assignments
     if verbose:
@@ -113,8 +118,7 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
     extremes = np.array([np.sum(sphere[-38:] <= perm_spheres[:,i,-38:],axis=0) for i,sphere in enumerate(spheres)]) 
     pvals = extremes / float(PERMUTATIONS)
     spheres = np.concatenate((spheres,pvals),axis=1)
-    with open('../results/sliding_sphere_%d/split/obs/bystruct/sliding_sphere_%s.txt'%(radius,structid),'ab') as fout:
-      fout.write("%s\n"%'\t'.join(header))
+    with open('../results/sliding_sphere_%d/split/obs/bystruct/sliding_sphere_%s-%s.txt'%(radius,structid,biounit),'ab') as fout:
       np.savetxt(fout,spheres,fmt='%s',delimiter='\t')
     if verbose:
       print "100%% (%2.2fs)"%(time.time()-t0)
@@ -291,7 +295,7 @@ if __name__ == '__main__':
     radius   = int(sys.argv[2])
     ppart,ppidx,radius = -1,structid,radius
   else:
-    ppart,ppidx,structid,radius = 0,0,None,15
+    ppart,ppidx,structid,radius = 0,0,None,10
   os.system('mkdir -p ../results/sliding_sphere_%d/split/obs/bystruct'%radius)
   os.system('mkdir -p ../results/sliding_sphere_%d/split/perm/bystruct'%radius)
   main(ppart,ppidx,structid=structid,radius=radius)
