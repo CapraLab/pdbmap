@@ -12,7 +12,7 @@
 #=============================================================================#
 
 # See main check for cmd line parsing
-import sys,os,csv,time,math
+import sys,os,csv,time,math,platform
 # from pymol import cmd
 max_dist = -999 # Used by show_density and dist
 
@@ -106,7 +106,7 @@ class PDBMapVisualize():
     params['res_dir'] = res_dir
     if not os.path.exists(res_dir):
       os.system('mkdir -p %(res_dir)s'%params)
-    with open("%(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(annos)s.txt"%params,'wb') as fout:
+    with open("%(res_dir)s/%(structid)s_biounit%(biounit)s_vars_%(annos)s.txt"%params,'wb') as fout:
       writer = csv.writer(fout,delimiter='\t')
       writer.writerow(cols)
       out = [res[col] for col in cols]    # Extract columns as rows
@@ -145,7 +145,7 @@ class PDBMapVisualize():
       elif biounit == 0:
         struct_loc = "%s/structures/all/pdb/pdb%s.ent.gz"%(self.pdb_dir,structid)
       else:
-        struct_loc = "%s/biounit/coordinates/all/%s.pdb%d.gz"%(self.pdb_dir,structid,biounit)
+        struct_loc = "%s/biounit/coordinates/all/%s.pdb%s.gz"%(self.pdb_dir,structid,biounit)
       params = {'structid':structid,'biounit':biounit,'anno':anno,'tempf':tempf,'colors':colors,
                 'minval':minval,'maxval':maxval,'resis':out,'struct_loc':struct_loc}
       self.visualize(params,group=group)
@@ -216,6 +216,9 @@ class PDBMapVisualize():
     keys   = ['structid','biounit','anno','tempf','minval','maxval','struct_loc','res_dir','colors']
     script = '"lib/PDBMapVisualize.py %s"'%' '.join([str(params[key]) for key in keys])
     cmd    = "TEMP=$PYTHONPATH; unset PYTHONPATH; chimera --nogui --silent --script %s; export PYTHONPATH=$TEMP"%script
+    # Allow Mac OSX to use the GUI window
+    if platform.system() == 'Darwin':
+      cmd  = "TEMP=$PYTHONPATH; unset PYTHONPATH; chimera --silent --script %s; export PYTHONPATH=$TEMP"%script
     try:
       status = os.system(cmd)
       if status:
@@ -398,7 +401,7 @@ if __name__ == '__main__':
   replyobj.status("Chimera: Visualizing %(structid)s_biounit%(biounit)d_vars_%(anno)s"%params)
   # Assign the annotation to relevant residues
   rc("open %(struct_loc)s"%params)
-  rc("defattr %(tempf)s"%params)
+  rc("defattr %(tempf)s raiseTool false"%params)
   # Initial colors
   rc("background solid white")
   #rc("set bgTransparency")
@@ -446,6 +449,8 @@ if __name__ == '__main__':
   # remove the structure, leaving only the variants
   rc("bonddisplay off")
   rc("copy file %(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(anno)s.png width 800 height 800 units points dpi 72"%params)
+  rc("close all")
+  rc("stop now")
   # Export the movie 
   #FIXME: terrible quality on these videos
   # rc("movie record; turn y 3 120; wait 120; movie stop")

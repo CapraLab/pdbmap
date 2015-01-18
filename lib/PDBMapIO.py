@@ -345,7 +345,7 @@ class PDBMapIO(PDBIO):
     if label:
       self._c.execute(query,(pdbid,label))
     else:
-      self._c.execute(query,pdbid)
+      self._c.execute(query,(pdbid,))
     res = True if self._c.fetchone() else False
     self._close()
     return res
@@ -362,7 +362,7 @@ class PDBMapIO(PDBIO):
     if label:
       self._c.execute(query,(modelid,label))
     else:
-      self._c.execute(query,modelid)
+      self._c.execute(query,(modelid,))
     res = True if self._c.fetchone() else False
     self._close()
     return res
@@ -379,7 +379,7 @@ class PDBMapIO(PDBIO):
     if label:
       self._c.execute(query,(unpid,label))
     else:
-      self._c.execute(query,unpid)
+      self._c.execute(query,(unpid,))
     res = True if self._c.fetchone() else False
     self._close()
     return res
