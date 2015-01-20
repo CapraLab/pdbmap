@@ -1,0 +1,11 @@
+#!/bin/sh
+# PBS Parameters
+#PBS -M mike.sivley@vanderbilt.edu
+#PBS -m bae
+#PBS -N split_by_struct
+#PBS -l nodes=1:ppn=1
+#PBS -l mem=5000mb
+#PBS -l walltime=1:00:00:00
+
+cd /projects/Bush_eQTL/sivleyrm/projects/pdbmap/results/sliding_sphere_10/split/perm
+awk -F"\t" -v OFS="\t" '{fout="bystruct/"$11".txt"; if (fout!=ofout) close(ofout); ofout=fout; print >> fout;}' sliding_sphere_perm_p${PBS_ARRAYID}.txt
