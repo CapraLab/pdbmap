@@ -19,7 +19,7 @@ filterwarnings('ignore', category = MySQLdb.Warning)
 
 def connect(retry=True):
   try:
-    con = MySQLdb.connect(host='gwar-dev',user='mike',passwd='cheezburger',
+    con = MySQLdb.connect(host='gwar-dev.mc.vanderbilt.edu',user='mike',passwd='cheezburger',
                           db='pdbmap_v10',cursorclass=MySQLdb.cursors.Cursor)
     return con
   except MySQLdb.Error as e:
