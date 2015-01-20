@@ -122,6 +122,9 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
       np.savetxt(fout,spheres,fmt='%s',delimiter='\t')
     if verbose:
       print "100%% (%2.2fs)"%(time.time()-t0)
+    # gzip the completed output files
+    os.system('gzip %s'%'../results/sliding_sphere_%d/split/obs/bystruct/sliding_sphere_%s-%s.txt'%(radius,structid,biounit))
+    os.system('gzip %s'%'../results/sliding_sphere_%d/split/perm/bystruct/sliding_sphere_perm_%s-%s.txt'%(radius,structid,biounit))
   # end main
 
 def sliding_sphere(residues,nbrs,radius,verbose=False):
