@@ -77,11 +77,13 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
 
   # Process each structure separately to reduce space complexity
   for typ,structid,biounit in structs:
-    if not os.path.exists('../results/sliding_sphere_%d/split/obs/bystruct/sliding_sphere_%s-%s.txt'%(radius,structid,biounit)):
-      with open('../results/sliding_sphere_%d/split/obs/bystruct/sliding_sphere_%s-%s.txt'%(radius,structid,biounit),'wb')as fout:
+    obs_file = '../results/sliding_sphere_%d/split/obs/bystruct/sliding_sphere_%s-%s.txt'%(radius,structid,biounit)
+    perm_file = '../results/sliding_sphere_%d/split/perm/bystruct/sliding_sphere_perm_%s-%s.txt'%(radius,structid,biounit)
+    if not os.path.exists(obs_file):
+      with open(obs_file,'wb')as fout:
         fout.write("%s\n"%'\t'.join(header))
-    if not os.path.exists('../results/sliding_sphere_%d/split/perm/bystruct/sliding_sphere_perm_%s-%s.txt'%(radius,structid,biounit)):
-      with open('../results/sliding_sphere_%d/split/perm/bystruct/sliding_sphere_perm_%s-%s.txt'%(radius,structid,biounit),'wb')as fout:
+    if not os.path.exists(perm_file):
+      with open(perm_file,'wb')as fout:
         fout.write("%s\n"%'\t'.join(header[:-38])) # no pvalue fields
     if verbose:
       print "%s.%s"%(structid,biounit)
@@ -106,7 +108,7 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
     perm_spheres = np.array(perm_spheres)
     perm_shape   = perm_spheres.shape
     flatten      = (perm_shape[0]*perm_shape[1],perm_shape[2])
-    with open('../results/sliding_sphere_%d/split/perm/bystruct/sliding_sphere_perm_%s-%s.txt'%(radius,structid,biounit),'ab') as pfout:
+    with open(perm_file,'ab') as pfout:
       np.savetxt(pfout,perm_spheres.reshape(flatten),fmt='%s',delimiter='\t')
     # Calculate sliding sphere over observed SNP assignments
     if verbose:
@@ -118,13 +120,13 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
     extremes = np.array([np.sum(sphere[-38:] <= perm_spheres[:,i,-38:],axis=0) for i,sphere in enumerate(spheres)]) 
     pvals = extremes / float(PERMUTATIONS)
     spheres = np.concatenate((spheres,pvals),axis=1)
-    with open('../results/sliding_sphere_%d/split/obs/bystruct/sliding_sphere_%s-%s.txt'%(radius,structid,biounit),'ab') as fout:
+    with open(obs_file,'ab') as fout:
       np.savetxt(fout,spheres,fmt='%s',delimiter='\t')
     if verbose:
       print "100%% (%2.2fs)"%(time.time()-t0)
     # gzip the completed output files
-    os.system('gzip %s'%'../results/sliding_sphere_%d/split/obs/bystruct/sliding_sphere_%s-%s.txt'%(radius,structid,biounit))
-    os.system('gzip %s'%'../results/sliding_sphere_%d/split/perm/bystruct/sliding_sphere_perm_%s-%s.txt'%(radius,structid,biounit))
+    os.system('gzip --fast %s'%obs_file)
+    os.system('gzip --best %s'%perm_file)
   # end main
 
 def sliding_sphere(residues,nbrs,radius,verbose=False):
