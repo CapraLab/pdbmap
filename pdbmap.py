@@ -279,10 +279,17 @@ class PDBMap():
     elif entity_type == 'model' and not biounits:
       biounits = [-1]
     eps,mins = False,False
-    if 'pop' in anno_list:
-      idx = anno_list.index('pop')
+    if 'popdaf' in anno_list:
+      idx = anno_list.index('popdaf')
       anno_list  = anno_list[0:idx]+anno_list[idx+1:]
-      anno_list += ['amr_af','asn_af','afr_af','eur_af']
+      anno_list += ['daf','amr_daf','asn_daf','afr_daf','eur_daf']
+      sr = spectrum_range[idx]
+      spectrum_range = spectrum_range[0:idx]+spectrum_range[idx+1:]
+      spectrum_range += [sr for i in range(4)]
+    if 'popmaf' in anno_list:
+      idx = anno_list.index('popmaf')
+      anno_list  = anno_list[0:idx]+anno_list[idx+1:]
+      anno_list += ['maf','amr_af','asn_af','afr_af','eur_af']
       sr = spectrum_range[idx]
       spectrum_range = spectrum_range[0:idx]+spectrum_range[idx+1:]
       spectrum_range += [sr for i in range(4)]

@@ -167,7 +167,7 @@ def cumdaf(dafs):
 def daf(residues):
   # Compute the DAF for each residue, for each population.
   # Replace NaN values with 0 allele frequency
-  return [[r[i] if r[8]==r[9] else 1-r[i] for i in range(3,7)] for r in residues if r[1]]
+  return [[r[i] if not r[8] or r[8]==r[9] else 1-r[i] for i in range(3,7)] for r in residues if r[1]]
 
 def ddaf(dafs,weighted=False):
   # Compute deltaDAF for all (AMR-ASN, AMR-EUR, AMR-AFR, ASN-EUR, ASN-AFR, EUR-AFR)

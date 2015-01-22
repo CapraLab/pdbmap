@@ -124,9 +124,9 @@ class PDBMapVisualize():
       out  = [res[col] for col in cols if res[anno]] # Extract columns as rows
       out  = [list(i) for i in zip(*out)]            # Transpose back to columns
       minval,maxval = (999,-999)
-      tempf = "temp/%d.TEMP"%multidigit_rand(10)
+      attrf = "%(res_dir)s/%(structid)s_biounit%(biounit)s_vars_%%s.attr"%params%anno
       # Write the mappings to a temp file
-      with open(tempf,'w') as fout:
+      with open(attrf,'w') as fout:
         fout.write("#%s\n"%'\t'.join(cols))
         fout.write("attribute: %s\n"%anno)
         fout.write("match mode: 1-to-1\n")
@@ -146,7 +146,7 @@ class PDBMapVisualize():
         struct_loc = "%s/structures/all/pdb/pdb%s.ent.gz"%(self.pdb_dir,structid)
       else:
         struct_loc = "%s/biounit/coordinates/all/%s.pdb%s.gz"%(self.pdb_dir,structid,biounit)
-      params = {'structid':structid,'biounit':biounit,'anno':anno,'tempf':tempf,'colors':colors,
+      params = {'structid':structid,'biounit':biounit,'anno':anno,'attrf':attrf,'colors':colors,
                 'minval':minval,'maxval':maxval,'resis':out,'struct_loc':struct_loc}
       self.visualize(params,group=group)
 
@@ -213,7 +213,7 @@ class PDBMapVisualize():
     params['minval'] = "%0.6f"%params['minval']
     params['maxval'] = "%0.6f"%params['maxval']
     params['colors'] = '-' if not params['colors'] else ','.join(params['colors'])
-    keys   = ['structid','biounit','anno','tempf','minval','maxval','struct_loc','res_dir','colors']
+    keys   = ['structid','biounit','anno','attrf','minval','maxval','struct_loc','res_dir','colors']
     script = '"lib/PDBMapVisualize.py %s"'%' '.join([str(params[key]) for key in keys])
     cmd    = "TEMP=$PYTHONPATH; unset PYTHONPATH; chimera --nogui --silent --script %s; export PYTHONPATH=$TEMP"%script
     # Allow Mac OSX to use the GUI window
@@ -225,8 +225,6 @@ class PDBMapVisualize():
         raise Exception("Chimera process return non-zero exit status.")
     except Exception as e:
       raise
-    finally:
-      os.system('rm -f %s'%params['tempf']) # clean up temp file
 
   # Executed in PyMol
   @classmethod
@@ -384,7 +382,7 @@ if __name__ == '__main__':
   from chimera import replyobj
   # args = [sys.argv.split(' ')]
   args = sys.argv
-  params = {'structid':args[1],'biounit':int(args[2]),'anno':args[3],'tempf':args[4],
+  params = {'structid':args[1],'biounit':int(args[2]),'anno':args[3],'attrf':args[4],
             'minval':float(args[5]),'maxval':float(args[6]),'struct_loc':args[7],
             'res_dir':args[8],'colors':args[9],'resis':[]}
   if params['colors'] != '-':
@@ -392,7 +390,7 @@ if __name__ == '__main__':
   else:
     params['colors'] = None
   # Read the residues back into memory
-  with open(params['tempf']) as fin:
+  with open(params['attrf']) as fin:
     for line in fin:
       if line.startswith('\t'):
         params['resis'].append(line.strip().split('\t'))
@@ -401,7 +399,7 @@ if __name__ == '__main__':
   replyobj.status("Chimera: Visualizing %(structid)s_biounit%(biounit)d_vars_%(anno)s"%params)
   # Assign the annotation to relevant residues
   rc("open %(struct_loc)s"%params)
-  rc("defattr %(tempf)s raiseTool false"%params)
+  rc("defattr %(attrf)s raiseTool false"%params)
   # Initial colors
   rc("background solid white")
   #rc("set bgTransparency")
