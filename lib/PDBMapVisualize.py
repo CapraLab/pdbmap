@@ -43,6 +43,12 @@ class PDBMapVisualize():
       sys.stderr.write(msg)
       return
 
+    # Convert MAF values into DAF values
+    for anno in anno_list:
+      if anno in ['daf','amr_daf','asn_daf','eur_daf','afr_daf']:
+        maf = 'maf' if anno == 'daf' else anno.replace('daf','af')
+        res[anno] = [res[maf][i] if not res['anc_allele'][i] or res['anc_allele'][i]==res['ref_allele'][i] else 1.-res[maf][i] for i in range(len(res[maf]))]
+
     # Ensure any user-supplied annotations are properly formatted
     anno_list = [a.replace('.','_') for a in anno_list]
     anno_list = [a.replace(' ','_') for a in anno_list]
@@ -50,13 +56,13 @@ class PDBMapVisualize():
       # If any specified annotation isn't in the default return
       if anno not in res:
         # Join with the user-supplied annotations
-        res = self.io.load_structure(structid,biounit,useranno=True,raw=True)
-        # Reduce to variable residues
-        for key in res:
-          if key != 'issnp':
-            res[key] = [r for i,r in enumerate(res[key]) if res['issnp'][i]]
-        del res['issnp']
-        break
+        nres = self.io.load_structure(structid,biounit,useranno=True,raw=True)
+        # Reduce to variable residues and add column to the structure
+        for key in nres:
+          if key in anno_list and anno not in res:
+            res[key] = [r for i,r in enumerate(nres[key]) if nres['issnp'][i]]
+        del nres
+        break # all missing annotations filled when the first is found missing
 
     # Correct submodel ID for undivided structures
     maxm = len(set(res['model']))
@@ -441,7 +447,7 @@ if __name__ == '__main__':
   # rc("align p1")
   # rc("~define")
   # Export the scene
-  rc("save %(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(anno)s.py"%params)
+  rc("save %(res_dir)s/%(structid)s_biounit%(biounit)d_%(anno)s.py"%params)
   # Export the image
   rc("copy file %(res_dir)s/%(structid)s_biounit%(biounit)d_struct_%(anno)s.png width 800 height 800 units points dpi 72"%params)
   # remove the structure, leaving only the variants
