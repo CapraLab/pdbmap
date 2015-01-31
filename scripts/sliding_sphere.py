@@ -122,10 +122,10 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
     # flatten = (summary.shape[0],summary.shape[1]*summary.shape[2])
     # with gzip.open(perm_file,'wb') as fout:
     #   np.save(fout,summary)
-    perm_spheres = np.array(perm_spheres)[:500,:,:]
-    perm_shape   = perm_spheres.shape
+    perm_spheres = np.array(perm_spheres)
+    perm_shape   = perm_spheres[:500,:,:].shape
     flatten      = (perm_shape[0]*perm_shape[1],perm_shape[2])
-    np.savetxt(perm_file,perm_spheres.reshape(flatten),fmt='%s',delimiter='\t',header='\t'.join(header[:-68]))
+    np.savetxt(perm_file,perm_spheres[:500,:,:].reshape(flatten),fmt='%s',delimiter='\t',header='\t'.join(header[:-68]))
 
     # Calculate sliding sphere over observed SNP assignments
     if verbose:
