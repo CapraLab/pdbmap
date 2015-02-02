@@ -115,7 +115,7 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
       perm_spheres.append(pspheres)
     if verbose:
       print " (%2.2fs)"%(time.time()-t0) # Report permutation testing completion.
-    perm_spheres = np.array(perm_spheres)
+    # perm_spheres = np.array(perm_spheres)
     # Flatten the permutation test results and write to file
     # Sample 500 of the 1000 permutations for plotting, order is already randomized
     # summary = summarize(perm_spheres[:,:,18:])
@@ -138,7 +138,7 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
     perm_means    = np.array([np.mean(perm_spheres[:,i,-68:],axis=0) for i in range(len(spheres))])
     perm_diffs    = np.array([np.abs(perm_spheres[:,i,-68:]-perm_means[i,:]) for i in range(len(spheres))])
     obs_diffs     = np.array([np.abs(spheres[i,-68:]-perm_means[i,:]) for i in range(len(spheres))])
-    perm_extremes = np.array([np.sum(obs_diffs[i] <= perm_diffs[:,i,:],axis=0) for i,sphere in enumerate(spheres)])
+    perm_extremes = np.array([np.sum(obs_diffs[i,:] <= perm_diffs[i,:,:],axis=0) for i,sphere in enumerate(spheres)])
     pvals = (perm_extremes+1) / float(PERMUTATIONS)
 
     # extremes = np.array([np.sum(sphere[-68:] <= perm_spheres[:,i,-68:],axis=0) for i,sphere in enumerate(spheres)]) 
