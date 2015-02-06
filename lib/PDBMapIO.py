@@ -400,7 +400,7 @@ class PDBMapIO(PDBIO):
     if label:
       self._c.execute(query,(gene,label))
     else:
-      self._c.execute(query,gene)
+      self._c.execute(query,(gene,))
     res = self._c.fetchone()
     self._close()
     if res:

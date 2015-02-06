@@ -3,7 +3,7 @@
 # Implementation of the sliding sphere analysis for variant localization 
 # and population differentiation.
 
-PERMUTATIONS = 1000
+PERMUTATIONS = 999
 
 import numpy as np
 np.set_printoptions(threshold='nan')
@@ -58,32 +58,35 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
     else:
       structs = structs[ppidx*psize:(ppidx+1)*psize]
 
-  header  = ['isvar','issnp','name','amr_af','asn_af','eur_af','afr_af']
-  header += ['aa','ref_allele','alt_allele','structid','chain','unp','seqid','x','y','z']
-  header += ['rescount','amr_count','asn_count','eur_count','afr_count']
-  header += ['amr_cdaf','asn_cdaf','eur_cdaf','afr_cdaf']
-  header += ['amr_asn_sumddaf','amr_eur_sumddaf','amr_afr_sumddaf','asn_eur_sumddaf','asn_afr_sumddaf','eur_afr_sumddaf']
-  header += ['amr_asn_meanddaf','amr_eur_meanddaf','amr_afr_meanddaf','asn_eur_meanddaf','asn_afr_meanddaf','eur_afr_meanddaf']
-  header += ['amr_asn_medianddaf','amr_eur_medianddaf','amr_afr_medianddaf','asn_eur_medianddaf','asn_afr_medianddaf','eur_afr_medianddaf']
-  header += ['amr_asn_minddaf','amr_eur_minddaf','amr_afr_minddaf','asn_eur_minddaf','asn_afr_minddaf','eur_afr_minddaf']
-  header += ['amr_asn_maxddaf','amr_eur_maxddaf','amr_afr_maxddaf','asn_eur_maxddaf','asn_afr_maxddaf','eur_afr_maxddaf']
-  header += ['amr_asn_abssumddaf','amr_eur_abssumddaf','amr_afr_abssumddaf','asn_eur_abssumddaf','asn_afr_abssumddaf','eur_afr_abssumddaf']
-  header += ['amr_asn_absmeanddaf','amr_eur_absmeanddaf','amr_afr_absmeanddaf','asn_eur_absmeanddaf','asn_afr_absmeanddaf','eur_afr_absmeanddaf']
-  header += ['amr_asn_absmedianddaf','amr_eur_absmedianddaf','amr_afr_absmedianddaf','asn_eur_absmedianddaf','asn_afr_absmedianddaf','eur_afr_absmedianddaf']
-  header += ['amr_asn_absminddaf','amr_eur_absminddaf','amr_afr_absminddaf','asn_eur_absminddaf','asn_afr_absminddaf','eur_afr_absminddaf']
-  header += ['amr_asn_absmaxddaf','amr_eur_absmaxddaf','amr_afr_absmaxddaf','asn_eur_absmaxddaf','asn_afr_absmaxddaf','eur_afr_absmaxddaf']
-  header += ['amr_count_pval','asn_count_pval','eur_count_pval','afr_count_pval']
-  header += ['amr_cdaf_pval','asn_cdaf_pval','eur_cdaf_pval','afr_cdaf_pval']
-  header += ['amr_asn_sumddaf_pval','amr_eur_sumddaf_pval','amr_afr_sumddaf_pval','asn_eur_sumddaf_pval','asn_afr_sumddaf_pval','eur_afr_sumddaf_pval']
-  header += ['amr_asn_meanddaf_pval','amr_eur_meanddaf_pval','amr_afr_meanddaf_pval','asn_eur_meanddaf_pval','asn_afr_meanddaf_pval','eur_afr_meanddaf_pval']
-  header += ['amr_asn_medianddaf_pval','amr_eur_medianddaf_pval','amr_afr_medianddaf_pval','asn_eur_medianddaf_pval','asn_afr_medianddaf_pval','eur_afr_medianddaf_pval']
-  header += ['amr_asn_minddaf_pval','amr_eur_minddaf_pval','amr_afr_minddaf_pval','asn_eur_minddaf_pval','asn_afr_minddaf_pval','eur_afr_minddaf_pval']
-  header += ['amr_asn_maxddaf_pval','amr_eur_maxddaf_pval','amr_afr_maxddaf_pval','asn_eur_maxddaf_pval','asn_afr_maxddaf_pval','eur_afr_maxddaf_pval']
-  header += ['amr_asn_abssumddaf_pval','amr_abseur_sumddaf_abspval','amr_afr_abssumddaf_pval','asn_abseur_sumddaf_abspval','asn_afr_abssumddaf_pval','eur_absafr_sumddaf_abspval']
-  header += ['amr_asn_absmeanddaf_pval','amr_abseur_meanddaf_abspval','amr_afr_absmeanddaf_pval','asn_abseur_meanddaf_abspval','asn_afr_absmeanddaf_pval','eur_absafr_meanddaf_abspval']
-  header += ['amr_asn_absmedianddaf_pval','amr_abseur_medianddaf_abspval','amr_afr_absmedianddaf_pval','asn_abseur_medianddaf_abspval','asn_afr_absmedianddaf_pval','eur_absafr_medianddaf_abspval']
-  header += ['amr_asn_absminddaf_pval','amr_abseur_minddaf_abspval','amr_afr_absminddaf_pval','asn_abseur_minddaf_abspval','asn_afr_absminddaf_pval','eur_absafr_minddaf_abspval']
-  header += ['amr_asn_absmaxddaf_pval','amr_abseur_maxddaf_abspval','amr_afr_absmaxddaf_pval','asn_abseur_maxddaf_abspval','asn_afr_absmaxddaf_pval','eur_absafr_maxddaf_abspval']
+  # Read the sliding_sphere header from file
+  with open('sphere_header.txt','rb') as fin:
+    header = [l.strip() for l in fin]
+  # header  = ['isvar','issnp','name','amr_af','asn_af','eur_af','afr_af']
+  # header += ['aa','ref_allele','alt_allele','structid','chain','unp','seqid','x','y','z']
+  # header += ['rescount','amr_count','asn_count','eur_count','afr_count']
+  # header += ['amr_cdaf','asn_cdaf','eur_cdaf','afr_cdaf']
+  # header += ['amr_asn_sumddaf','amr_eur_sumddaf','amr_afr_sumddaf','asn_eur_sumddaf','asn_afr_sumddaf','eur_afr_sumddaf']
+  # header += ['amr_asn_meanddaf','amr_eur_meanddaf','amr_afr_meanddaf','asn_eur_meanddaf','asn_afr_meanddaf','eur_afr_meanddaf']
+  # header += ['amr_asn_medianddaf','amr_eur_medianddaf','amr_afr_medianddaf','asn_eur_medianddaf','asn_afr_medianddaf','eur_afr_medianddaf']
+  # header += ['amr_asn_minddaf','amr_eur_minddaf','amr_afr_minddaf','asn_eur_minddaf','asn_afr_minddaf','eur_afr_minddaf']
+  # header += ['amr_asn_maxddaf','amr_eur_maxddaf','amr_afr_maxddaf','asn_eur_maxddaf','asn_afr_maxddaf','eur_afr_maxddaf']
+  # header += ['amr_asn_abssumddaf','amr_eur_abssumddaf','amr_afr_abssumddaf','asn_eur_abssumddaf','asn_afr_abssumddaf','eur_afr_abssumddaf']
+  # header += ['amr_asn_absmeanddaf','amr_eur_absmeanddaf','amr_afr_absmeanddaf','asn_eur_absmeanddaf','asn_afr_absmeanddaf','eur_afr_absmeanddaf']
+  # header += ['amr_asn_absmedianddaf','amr_eur_absmedianddaf','amr_afr_absmedianddaf','asn_eur_absmedianddaf','asn_afr_absmedianddaf','eur_afr_absmedianddaf']
+  # header += ['amr_asn_absminddaf','amr_eur_absminddaf','amr_afr_absminddaf','asn_eur_absminddaf','asn_afr_absminddaf','eur_afr_absminddaf']
+  # header += ['amr_asn_absmaxddaf','amr_eur_absmaxddaf','amr_afr_absmaxddaf','asn_eur_absmaxddaf','asn_afr_absmaxddaf','eur_afr_absmaxddaf']
+  # header += ['amr_count_pval','asn_count_pval','eur_count_pval','afr_count_pval']
+  # header += ['amr_cdaf_pval','asn_cdaf_pval','eur_cdaf_pval','afr_cdaf_pval']
+  # header += ['amr_asn_sumddaf_pval','amr_eur_sumddaf_pval','amr_afr_sumddaf_pval','asn_eur_sumddaf_pval','asn_afr_sumddaf_pval','eur_afr_sumddaf_pval']
+  # header += ['amr_asn_meanddaf_pval','amr_eur_meanddaf_pval','amr_afr_meanddaf_pval','asn_eur_meanddaf_pval','asn_afr_meanddaf_pval','eur_afr_meanddaf_pval']
+  # header += ['amr_asn_medianddaf_pval','amr_eur_medianddaf_pval','amr_afr_medianddaf_pval','asn_eur_medianddaf_pval','asn_afr_medianddaf_pval','eur_afr_medianddaf_pval']
+  # header += ['amr_asn_minddaf_pval','amr_eur_minddaf_pval','amr_afr_minddaf_pval','asn_eur_minddaf_pval','asn_afr_minddaf_pval','eur_afr_minddaf_pval']
+  # header += ['amr_asn_maxddaf_pval','amr_eur_maxddaf_pval','amr_afr_maxddaf_pval','asn_eur_maxddaf_pval','asn_afr_maxddaf_pval','eur_afr_maxddaf_pval']
+  # header += ['amr_asn_abssumddaf_pval','amr_abseur_sumddaf_abspval','amr_afr_abssumddaf_pval','asn_abseur_sumddaf_abspval','asn_afr_abssumddaf_pval','eur_absafr_sumddaf_abspval']
+  # header += ['amr_asn_absmeanddaf_pval','amr_abseur_meanddaf_abspval','amr_afr_absmeanddaf_pval','asn_abseur_meanddaf_abspval','asn_afr_absmeanddaf_pval','eur_absafr_meanddaf_abspval']
+  # header += ['amr_asn_absmedianddaf_pval','amr_abseur_medianddaf_abspval','amr_afr_absmedianddaf_pval','asn_abseur_medianddaf_abspval','asn_afr_absmedianddaf_pval','eur_absafr_medianddaf_abspval']
+  # header += ['amr_asn_absminddaf_pval','amr_abseur_minddaf_abspval','amr_afr_absminddaf_pval','asn_abseur_minddaf_abspval','asn_afr_absminddaf_pval','eur_absafr_minddaf_abspval']
+  # header += ['amr_asn_absmaxddaf_pval','amr_abseur_maxddaf_abspval','amr_afr_absmaxddaf_pval','asn_abseur_maxddaf_abspval','asn_afr_absmaxddaf_pval','eur_absafr_maxddaf_abspval']
 
 
   def summarize(mat):
@@ -125,7 +128,7 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
     perm_spheres = np.array(perm_spheres)
     perm_shape   = perm_spheres[:500,:,:].shape
     flatten      = (perm_shape[0]*perm_shape[1],perm_shape[2])
-    np.savetxt(perm_file,perm_spheres[:500,:,:].reshape(flatten),fmt='%s',delimiter='\t',header='\t'.join(header[:-68]))
+    np.savetxt(perm_file,perm_spheres[:500,:,:].reshape(flatten),fmt='%s',delimiter='\t',comments='',header='\t'.join(header[:-68]))
 
     # Calculate sliding sphere over observed SNP assignments
     if verbose:
@@ -139,7 +142,7 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
     perm_diffs    = np.array([np.abs(perm_spheres[:,i,-68:]-perm_means[i,:]) for i in range(len(spheres))])
     obs_diffs     = np.array([np.abs(spheres[i,-68:]-perm_means[i,:]) for i in range(len(spheres))])
     perm_extremes = np.array([np.sum(obs_diffs[i,:] <= perm_diffs[i,:,:],axis=0) for i,sphere in enumerate(spheres)])
-    pvals = (perm_extremes+1) / float(PERMUTATIONS)
+    pvals = (perm_extremes+1) / float(PERMUTATIONS+1)
 
     # extremes = np.array([np.sum(sphere[-68:] <= perm_spheres[:,i,-68:],axis=0) for i,sphere in enumerate(spheres)]) 
     # pvals = extremes / float(PERMUTATIONS)
