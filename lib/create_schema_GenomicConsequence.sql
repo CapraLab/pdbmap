@@ -23,8 +23,10 @@ sift DOUBLE,     # Score only
 biotype VARCHAR(100), # of transcript
 domains TEXT, # formatted list as string
 gc_id MEDIUMINT NOT NULL AUTO_INCREMENT, # Unique, direct-reference key
+gd_id MEDIUMINT, # GenomicData direct-reference key
 PRIMARY KEY(label,transcript,chr,start,end),
-KEY(label,gc_id),
+KEY(gc_id),
+KEY(gd_id),
 KEY(label,chr,start,end),
 KEY(label,consequence),
 KEY(label,protein),

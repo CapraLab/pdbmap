@@ -18,7 +18,13 @@ psi DOUBLE,
 tco DOUBLE,
 kappa DOUBLE,
 alpha DOUBLE,
+res_id MEDIUMINT NOT NULL AUTO_INCREMENT, # Unique, direct-reference key
+ch_id MEDIUMINT, # Chain direct-reference key
+al_id MEDIUMINT, # Alignment direct-reference key
 PRIMARY KEY(label,structid,biounit,model,chain,seqid,icode),
+KEY(res_id),
+KEY(al_id),
+KEY(ch_id),
 KEY(label,structid,biounit,x,y,z),
 KEY(label,x,y,z),
 KEY(label,ss),

@@ -31,7 +31,9 @@ sas_af DOUBLE, # Allele Frequency: South Asian
 ens_gene VARCHAR(50), # Ensembl Gene identifier
 hgnc_gene VARCHAR(50), # HGNC Gene identifier
 snpsource VARCHAR(50), # Low coverage or Exome?
+gd_id MEDIUMINT NOT NULL AUTO_INCREMENT, # Unique, direct-reference key
 PRIMARY KEY(label,name,chr,start,end),
+KEY(gd_id),
 KEY(label,chr,start,end),
 KEY(label,maf),
 KEY(label,amr_af),
