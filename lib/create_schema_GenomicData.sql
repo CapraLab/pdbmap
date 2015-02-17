@@ -24,10 +24,10 @@ da VARCHAR(50), # Derived Allele
 maf DOUBLE,     # Allele Frequency: Global (AC/AN)
 amr_af DOUBLE,  # Allele Frequency: American
 asn_af DOUBLE, # Allele Frequency: Asian
-afr_af DOUBLE, # Allele Frequency: African
-eur_af DOUBLE, # Allele Frequency: European
 eas_af DOUBLE, # Allele Frequency: East Asian
 sas_af DOUBLE, # Allele Frequency: South Asian
+afr_af DOUBLE, # Allele Frequency: African
+eur_af DOUBLE, # Allele Frequency: European
 ens_gene VARCHAR(50), # Ensembl Gene identifier
 hgnc_gene VARCHAR(50), # HGNC Gene identifier
 snpsource VARCHAR(50), # Low coverage or Exome?

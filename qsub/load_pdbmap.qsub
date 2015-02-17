@@ -20,5 +20,4 @@
 #PBS -N PDBMap_Build_Pipeline
 #=============================================================================#
 
-cd /projects/Bush_eQTL/sivleyrm/projects/pdbmap;
-./pdbmap.py -c config/v10.config --ppart=${PART} --ppidx=${PBS_ARRAYID} --slabel=uniprot-pdb load_unp >> temp/pdbmap-v10.out 2>> temp/pdbmap-v10.err
+./pdbmap.py -c config/v11.config --ppart=${PART} --ppidx=${PBS_ARRAYID} --slabel=uniprot-pdb load_unp >> temp/pdbmap-v10.out 2>> temp/pdbmap-v10.err
