@@ -44,7 +44,7 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
     structs += [('u',structid,1)] # Manually specified structid
   else:
     # Load the list of biological assemblies
-    with open('../temp/pdbmap_v10_1kg_biounits.txt','rb') as fin:
+    with open('../temp/pdbmap_v10_1kg3_biounits.txt','rb') as fin:
       fin.readline() # burn header
       structs += [['s']+row.strip().split('\t') for row in fin.readlines()]
 
@@ -73,7 +73,7 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
   # Process each structure separately to reduce space complexity
   for typ,structid,biounit in structs:
     obs_file = '../results/sliding_sphere_%d/split/obs/bystruct/sliding_sphere_%s-%s.txt.gz'%(radius,structid,biounit)
-    perm_file = '../results/sliding_sphere_%d/split/perm/bystruct/sliding_sphere_perm_%s-%s.txt.gz'%(radius,structid,biounit)
+    perm_file = '../results/sliding_sphere_%d/split/perm/bystruct/sliding_sphere_perm_%s-%s.npz'%(radius,structid,biounit)
     if verbose:
       print "%s.%s"%(structid,biounit)
 
@@ -97,9 +97,15 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
 
     # Run the sliding sphere analysis over the permutation values
     perm_spheres = np.array(perm_spheres)
-    perm_shape   = perm_spheres.shape
-    flatten      = (perm_shape[0]*perm_shape[1],perm_shape[2])
-    np.savetxt(perm_file,perm_spheres.reshape(flatten),fmt='%s',delimiter='\t',comments='',header='\t'.join(header[:-68]))
+    perm_stats   = np.percentile(perm_spheres,[5,25,50,75,95],axis=0)
+    np.savez_compressed(perm_file,perm_stats)
+    # To load this file, use syntax:
+    # with np.load('fname') as npzfile:
+    #   x = npzfile.items()[0][1]
+
+    # perm_shape   = perm_spheres.shape
+    # flatten      = (perm_shape[0]*perm_shape[1],perm_shape[2])
+    # np.savetxt(perm_file,perm_spheres.reshape(flatten),fmt='%s',delimiter='\t',comments='',header='\t'.join(header[:-60]))
 
     # Calculate sliding sphere over observed SNP assignments
     if verbose:
@@ -129,7 +135,7 @@ def sphere(r,residues,nbrs,radius):
   sphere   = isolate_sphere(r,residues,radius,nbrs3D)
   scounts  = sphere_count(sphere) # Variant counts (by pop)
   sdaf     = daf(sphere)     # Calculate DAF
-  scdaf    = cumdaf(sdaf)  # Cumulative frequency (by pop)
+  scdaf    = cumdaf(sdaf)    # Cumulative frequency (by pop)
   sddaf    = ddaf(sdaf)      # Calculate deltaDAF
   sddafroi = ddaf_roi(sddaf) # Sphere deltaDAF statistics
   # Repeat analysis with comparable sequence windows
@@ -183,9 +189,9 @@ def daf(residues):
   return [[r[i] if (not r[8]) or r[8]==r[9] else 1-r[i] for i in range(3,8)] for r in residues if r[1]]
 
 def ddaf(dafs,weighted=False):
-  # Compute deltaDAF for all population combinations
+  # Compute deltaDAF for all population combinations, don't use SNPs not observed in the pair
   # (AMR-EAS, AMR-SAS, AMR-EUR, AMR-AFR, EAS-SAS, EAS-EUR, EAS-AFR, SAS-EUR, SAS-AFR, EUR-AFR)
-  return [[r[i]-r[j] for i in range(5) for j in range(i+1,5)] for r in dafs]
+  return [[r[i]-r[j] for i in range(5) for j in range(i+1,5)] for r in dafs if r[i]>0 or r[j]>0]
 
 def ddaf_roi(ddafs):
   if not ddafs:
@@ -271,7 +277,7 @@ def permute_snps(residues,permutations=1000):
 def load_structure(structid,biounit,radius,verbose=False):
   # Load the structure with 1000 Genomes Phase III population allele frequencies
   q  = "SELECT !ISNULL(c.gc_id) as isvar,(b.slabel='uniprot-pdb' "
-  q += "and b.dlabel='1kg' and c.label='1kg' AND c.consequence LIKE "
+  q += "and b.dlabel='1kg3' and c.label='1kg3' AND c.consequence LIKE "
   q += "'%%missense_variant%%') as issnp,d.name,d.amr_af,d.eas_af,d.sas_af,d.eur_af,d.afr_af,"
   q += "d.aa,d.ref_allele,d.alt_allele,e.structid,e.chain,e.unp,a.seqid, "
   q += "a.x,a.y,a.z FROM Residue as a "

@@ -571,16 +571,19 @@ class PDBMapIO(PDBIO):
     for i,record in enumerate(dstream):
       # Upload all but the consequences to GenomicData
       record.INFO['LABEL'] = dname
-      query  = "INSERT IGNORE INTO GenomicData VALUES (%(LABEL)s,"
-      query += "%(CHROM)s,%(START)s,%(END)s,%(ID)s,%(EXISTING)s,%(VT)s,%(SVTYPE)s,"
-      query += "%(REF)s,%(ALT)s,%(SVLEN)s,%(QUAL)s,%(AVGPOST)s,%(RSQ)s,"
+      query  = "INSERT IGNORE INTO GenomicData "
+      query += "(label,chr,start,end,name,variation,vtype,svtype,ref_allele,alt_allele,"
+      query += "svlen,quality,avgpost,rsq,erate,theta,ldaf,ac,an,aa,da,maf,amr_af,asn_af,"
+      query += "eas_af,sas_af,afr_af,eur_af,ens_gene,hgnc_gene,snpsource,format,genotypes) "
+      query += "VALUES (%(LABEL)s,%(CHROM)s,%(START)s,%(END)s,%(ID)s,%(EXISTING)s,%(VT)s,"
+      query += "%(SVTYPE)s,%(REF)s,%(ALT)s,%(SVLEN)s,%(QUAL)s,%(AVGPOST)s,%(RSQ)s,"
       query += "%(ERATE)s,%(THETA)s,%(LDAF)s,%(AC)s,%(AN)s,%(AA)s,%(DA)s,"
       query += "%(AF)s,%(AMR_AF)s,%(ASN_AF)s,%(EAS_AF)s,%(SAS_AF)s,%(AFR_AF)s,%(EUR_AF)s,"
-      query += "%(GENE)s,%(HGNC)s,%(SNPSOURCE)s)"
+      query += "%(GENE)s,%(HGNC)s,%(SNPSOURCE)s,%(FORMAT)s,%(GT)s)"
       try: self._c.execute(query,record.INFO)
       except:
         msg = self._c._last_executed.replace('\n',';')
-        sys.stderr.write("WARNING (PDBMapIO) MySQL query failed: %s"%msg)
+        sys.stderr.write("WARNING (PDBMapIO) MySQL query failed: %s\n"%msg)
       # Upload each consequence to GenomicConsequence
       query  = "INSERT IGNORE INTO GenomicConsequence "
       query += "(label,chr,start,end,name,transcript,protein,canonical,allele,"

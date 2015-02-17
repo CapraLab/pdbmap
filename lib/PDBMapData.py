@@ -30,7 +30,7 @@ class PDBMapData():
       raise Exception(msg)
     # Check for a dbconn file
     registry = "%s/dbconn.conf"%os.path.dirname(vep)
-    cache    = "/dors/capra_lab/data/vep/homo_sapiens/74/Homo_sapiens.GRCh37.74.dna.primary_assembly.fa.gz"
+    cache    = "/dors/capra_lab/data/vep/"
     # cache    = os.path.expanduser(cache) # replace ~ with explicit home directory
     if not os.path.exists(cache):
       msg = "WARNING (PDBMapData) No cache exists. Using network connection.\n"
@@ -87,23 +87,28 @@ class PDBMapData():
     else: record.INFO['SNPSOURCE'] = None
 
     # Make any necessary population allele frequency corrections
+    # Enforce biallelic assumption
     freqs = ['AMR_AF','AFR_AF','EUR_AF','EAS_AF','SAS_AF','ASN_AF']
     for freq in freqs:
-      if freq not in record.INFO: record.INFO[freq] = None
-      recordINFO[freq] = 0.0 if not record.INFO[freq] else record.INFO[freq]
+      if freq not in record.INFO: record.INFO[freq] = None # Ensure all fields present
+      record.INFO[freq] = 0.0 if not record.INFO[freq] else record.INFO[freq]
+      if type(record.INFO[freq]) in [type((None,)),type([])]:
+        record.INFO[freq] = float(record.INFO[freq][0])
 
     # Ensure the ancestral allele is encoded properly
     if 'AA' in record.INFO and record.INFO['AA']:
-      record.INFO['AA'] = record.INFO['AA'].upper()
+      # Format: AA|REF|ALT|INDELTYPE
+      record.INFO['AA'] = record.INFO['AA'].split('|')[0].upper()
     else: 
       record.INFO['AA'] = None
 
+    # Extract the format and genotypes at this site
+    record.INFO['FORMAT'] = record.FORMAT
+    record.INFO['GT'] = ','.join([s['GT'] for s in record.samples])
+
     # Enforce biallelic assumption
     # Record only the first alternate allele count
-    if 'AC' in record.INFO:
-      record.INFO['AC'] = record.INFO['AC'][0]
-    else: 
-      record.INFO['AC'] = None
+    record.INFO['AC'] = record.INFO['AC'][0] if 'AC' in record.INFO else None
 
     # Ensure necessary fields are present in record.INFO
     if 'AN'      not in record.INFO: record.INFO['AN']      = None
@@ -118,6 +123,7 @@ class PDBMapData():
     if 'LDAF'    not in record.INFO: record.INFO['LDAF']    = None
 
     # Allele frequency is sometimes reecorded as a tuple or list
+    # Enforce biallelic assumption
     # Extract the first (only) element and cast to float
     if type(record.INFO['AF']) in [type((None,)),type([])]:
       record.INFO['AF'] = float(record.INFO['AF'][0])
@@ -131,11 +137,12 @@ class PDBMapData():
     record.INFO["QUAL"]   = record.QUAL
     record.INFO["FILTER"] = str(record.FILTER)
 
-    # Determine and record the derived allele
-    if record.INFO["REF"] == record.INFO["AA"]:
-      record.INFO["DA"] = record.INFO["ALT"]
-    else:
+    # Infer the derived allele from the ancestral
+    # If ancestral not specified, assume minor allele is derived
+    if record.INFO["ALT"] == record.INFO["AA"]:
       record.INFO["DA"] = record.INFO["REF"]
+    else:
+      record.INFO["DA"] = record.INFO["ALT"]      
     
     # Extract the consequences
     record.CSQ = self._parse_csq(csq_headers,record.INFO['CSQ'])
