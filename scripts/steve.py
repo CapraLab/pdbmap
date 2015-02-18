@@ -1,4 +1,4 @@
-#!/usr/bin/python2.7
+#!/usr/bin/env python2.7
 #
 # Project        : PDBMap
 # Filename       : steve.py
@@ -40,7 +40,7 @@ filterwarnings('ignore', category = MySQLdb.Warning)
 
 # Hard code database credentials and connect for intermediate tables
 def connect(cc=MySQLdb.cursors.Cursor):
-  return MySQLdb.connect(host='gwar-dev',user='mike',
+  return MySQLdb.connect(host='10.109.20.218',user='mike',
                   passwd='cheezburger',db='pdbmap_v10',
                   cursorclass=cc)
 
@@ -74,7 +74,7 @@ for chrom in chroms:
   q  = "SELECT DISTINCT name,chr,start,end FROM GenomicConsequence as a "
   q += "INNER JOIN GenomicIntersection as b "
   q += "ON a.gc_id=b.gc_id " # only include mapped missense SNPs
-  q += "WHERE chr='chr%s' AND start=end-1 AND label='1kg' "%chrom
+  q += "WHERE chr='chr%s' AND start=end-1 AND label='1kg3' "%chrom
   q += "AND a.consequence LIKE '%missense_variant%' "
   q += "ORDER BY chr,start,end;"
   c  = con.cursor() # open cursor
@@ -127,61 +127,19 @@ print "Done."
 
 print "Calculating nearest structural neighbors..."
 
-# structs = []
-# con = connect() # open connection
-# # Query list of all (and only) PDB biological assemblies in PDBMap
-# # Query from Chain for biounit, join with Structure to exclude Models
-# # Join with GenomicIntersection to only include structures containing 
-# # variants from this dataset
-# q  = "SELECT DISTINCT a.structid,a.biounit FROM Chain as a "
-# q += "INNER JOIN Structure as b "
-# q += "ON a.label=b.label AND a.structid=b.pdbid "
-# q += "INNER JOIN GenomicIntersection as c "
-# q += "ON a.label=c.slabel AND a.structid=c.structid AND a.chain=c.chain "
-# q += "INNER JOIN GenomicConsequence as d "
-# q += "ON c.dlabel=d.label AND c.gc_id=d.gc_id "
-# q += "WHERE a.label='uniprot-pdb' AND b.label='uniprot-pdb' "
-# q += "AND c.slabel='uniprot-pdb' AND c.dlabel='1kg' "
-# q += "AND d.label='1kg' AND d.start=d.end-1 "
-# q += "AND d.consequence LIKE '%missense_variant%' "
-# q += "AND (b.method LIKE '%nmr%' OR a.biounit>0) "
-# q += "ORDER BY a.structid,a.biounit"
-# c = con.cursor() # open cursor
-# c.execute(q)
-# structs.extend([r for r in c])
 ## Process all PDB-curated biological assemblies
-with open('../temp/pdbmap_v10_1kg_biounits.txt','rb') as fin:
+with open('../temp/pdbmap_v10_1kg3_biounits.txt','rb') as fin:
   fin.readline() # burn header
   structs = [row.strip().split('\t') for row in fin.readlines()]
 num_biounits = len(structs)
 print "Number of biological assemblies: %d"%num_biounits
-# c.close() # close cursor
-# Query list of all ModBase predicted models in PDBMap
-# (ModBase recommended quality score threshold)
-# Join with GenomicIntersection to only include models containing 
-# variants from this dataset
-# q  = "SELECT DISTINCT a.structid,a.biounit FROM Chain as a "
-# q += "INNER JOIN Model as b "
-# q += "ON a.label=b.label AND a.structid=b.modelid "
-# q += "INNER JOIN GenomicIntersection as c "
-# q += "ON a.label=c.slabel AND a.structid=c.structid AND a.chain=c.chain "
-# q += "INNER JOIN GenomicConsequencef as d "
-# q += "ON c.dlabel=d.label AND c.gc_id=d.gc_id "
-# q += "WHERE a.label='uniprot-pdb' AND b.label='uniprot-pdb' "
-# q += "AND c.slabel='uniprot-pdb' AND c.dlabel='1kg' "
-# q += "AND d.label='1kg' AND d.start=d.end-1 "
-# q += "AND d.consequence LIKE '%missense_variant%' "
-# q += "ORDER BY a.structid,a.biounit"
-# c = con.cursor() # open cursor
-# c.execute(q)
-# structs.extend([r for r in c])
+
 ## Process all ModBase models
-with open('../temp/pdbmap_v10_1kg_models.txt','rb') as fin:
+with open('../temp/pdbmap_v10_1kg3_models.txt','rb') as fin:
   fin.readline() # burn header
   structs += [row.strip().split('\t') for row in fin.readlines()]
 num_models = len(structs)-num_biounits
 print "Number of ModBase models: %d"%num_models
-# c.close() # close cursor
 
 singletons = set([])
 singleton  = 0
@@ -198,7 +156,7 @@ for structid,biounit in structs:
   q += "INNER JOIN GenomicConsequence as c "
   q += "ON b.dlabel=c.label AND b.gc_id=c.gc_id "
   q += "WHERE a.label='uniprot-pdb' AND b.slabel='uniprot-pdb' "
-  q += "AND b.dlabel='1kg' AND c.label='1kg' "
+  q += "AND b.dlabel='1kg3' AND c.label='1kg3' "
   q += "AND c.consequence LIKE '%missense_variant%' "
   q += "AND a.structid='%s' "%structid
   q += "AND a.biounit=%s "%int(biounit) # Consider each biological assembly
@@ -300,9 +258,6 @@ print "Number of empty structures/models: %d"%empty
 print "Number of structures with dup aa:  %d"%all_dup
 print "Number of variants without SNN:    %d"%unmapped
 print "Number of structural singletons:   %d"%singleton
-# print "Sending structural singletons to stderr..."
-# for s in singletons:
-#   sys.stderr.write("%s\n"%s)
 
 ###################################
 ## Calculate the STEVE Statistic ##
@@ -341,7 +296,7 @@ print "Done."
 #####################################
 
 timestamp = str(time.strftime("%Y%m%d-%H"))
-res_dir   = 'results/pdbmap-v9_steve_%s'%timestamp
+res_dir   = '../results/pdbmap-1kg3_v10_steve_%s'%timestamp
 os.system('mkdir -p %s'%res_dir)
 # Write the GNN and SNN for each variant to file
 with open('%s/nearest_neighbors.txt'%res_dir,'wb') as fout:
@@ -362,6 +317,9 @@ with open('%s/nearest_neighbors.txt'%res_dir,'wb') as fout:
     row  = [var]+list(nns[0])+list(nns[1])+list(nns[2])
     row += list(nns[3])+list(nns[4])+list(nns[5])+list(nns[6])
     writer.writerow(row)
+
+# Call steve_extend.py to complete the distance annotations
+os.system('./steve_extend.py %s/nearest_neighbors.txt'%res_dir)
 
 # Element 0: VAR genomic tuple (name,chr,start,end)
 # Element 1: GNN genomic tuple (dist,variant,chr,start,end)

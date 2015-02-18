@@ -1,17 +1,17 @@
-#!/usr/bin/python2.7
+#!/usr/bin/env python2.7
 #PBS -M mike.sivley@vanderbilt.edu
 #PBS -m bae
 #PBS -l nodes=vision.mc.vanderbilt.edu
 #PBS -l mem=10000mb
 #PBS -l walltime=5:00:00:00
 import sys,os,csv,MySQLdb,math
-os.chdir('/projects/Bush_eQTL/sivleyrm/projects/pdbmap/scripts')
 
 # Adds GD to SNN and SD to GNN to the provided STEVE results file
-# Uses gwar-dev pdbmap_v9
-steve_finname = '../results/pdbmap-v9_steve_20140616-13/nearest_neighbors.txt'
+# Uses gwar-dev pdbmap_v10
+steve_finname = sys.argv[0]
+# steve_finname = '../results/pdbmap-v10_steve_20140616-13/nearest_neighbors.txt'
 steve_foutname = "%s.extended.txt"%'.'.join(steve_finname.split('.')[:-1])
-con = MySQLdb.connect(host='gwar-dev.mc.vanderbilt.edu',user='mike',passwd='cheezburger',db='pdbmap_v9')
+con = MySQLdb.connect(host='10.109.20.218',user='mike',passwd='cheezburger',db='pdbmap_v10')
 c = con.cursor()
 fout = open(steve_foutname,'wb')
 writer = csv.writer(fout,delimiter='\t')

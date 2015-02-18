@@ -104,7 +104,7 @@ class PDBMapData():
 
     # Extract the format and genotypes at this site
     record.INFO['FORMAT'] = record.FORMAT
-    record.INFO['GT'] = ','.join([s['GT'] for s in record.samples])
+    record.INFO['GT'] = ','.join([str(s['GT']) for s in record.samples])
 
     # Enforce biallelic assumption
     # Record only the first alternate allele count

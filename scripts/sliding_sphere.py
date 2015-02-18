@@ -19,7 +19,7 @@ filterwarnings('ignore', category = MySQLdb.Warning)
 
 def connect(retry=True):
   try:
-    con = MySQLdb.connect(host='gwar-dev.mc.vanderbilt.edu',user='mike',passwd='cheezburger',
+    con = MySQLdb.connect(host='10.109.20.218',user='mike',passwd='cheezburger',
                           db='pdbmap_v10',cursorclass=MySQLdb.cursors.Cursor)
     return con
   except MySQLdb.Error as e:
@@ -79,6 +79,14 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
 
     # Load the structure
     residues,nbrs3D,nbrs1D = load_structure(structid,biounit,radius,verbose)
+
+    # Load the 1000 Genomes Phase III sample-population assignments
+    # Sample order shared between panel file and genoptypes field,
+    # so only the population list is loaded; order must not be altered
+    with open('/dors/capralab/data/1kg/vcf/integrated_call_samples_v3.20130502.ALL.panel','rb') as fin:
+      fin.readline() # burn the header
+      reader = csv.reader(fin,delimiter='\t')
+      spop   = [r[2] for r in reader]
 
     # Run the sliding sphere analysis over permutated SNP-residue assignments
     perm_spheres = []
@@ -279,7 +287,7 @@ def load_structure(structid,biounit,radius,verbose=False):
   q  = "SELECT !ISNULL(c.gc_id) as isvar,(b.slabel='uniprot-pdb' "
   q += "and b.dlabel='1kg3' and c.label='1kg3' AND c.consequence LIKE "
   q += "'%%missense_variant%%') as issnp,d.name,d.amr_af,d.eas_af,d.sas_af,d.eur_af,d.afr_af,"
-  q += "d.aa,d.ref_allele,d.alt_allele,e.structid,e.chain,e.unp,a.seqid, "
+  q += "d.aa,d.ref_allele,d.alt_allele,e.structid,e.chain,e.unp,a.seqid,d.genotypes, "
   q += "a.x,a.y,a.z FROM Residue as a "
   q += "INNER JOIN Chain as e ON a.label=e.label AND a.structid=e.structid "
   q += "AND a.biounit=e.biounit AND a.model=e.model AND a.chain=e.chain "
