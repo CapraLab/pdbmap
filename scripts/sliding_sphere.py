@@ -3,7 +3,7 @@
 # Implementation of the sliding sphere analysis for variant localization 
 # and population differentiation.
 
-PERMUTATIONS = 2
+PERMUTATIONS = 999
 
 from profilehooks import profile
 import numpy as np
@@ -63,6 +63,8 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
     else:
       structs = structs[ppidx*psize:(ppidx+1)*psize]
 
+  num_structs = len(structs) # to calculate % complete
+
   # Read the sliding_sphere header from file
   with open('sphere_header.txt','rb') as fin:
     header = [l.strip() for l in fin]
@@ -76,7 +78,8 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
     return summary.swapaxes(0,1).swapaxes(1,2)
 
   # Process each structure separately to reduce space complexity
-  for typ,structid,biounit in structs:
+  pt0 = time.time() # process start time
+  for k,(typ,structid,biounit) in enumerate(structs):
     obs_file = '../results/sliding_sphere_%d/split/obs/bystruct/sliding_sphere_%s-%s.txt.gz'%(radius,structid,biounit)
     perm_file = '../results/sliding_sphere_%d/split/perm/bystruct/sliding_sphere_perm_%s-%s.npz'%(radius,structid,biounit)
     if verbose:
@@ -147,7 +150,13 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
 
     if verbose:
       print "100%% (%2.2fs)"%(time.time()-t0)
+
+    # Report percentage complete
+    sys.stdout.write("\rProcessing %d structures...%d%%"%(num_structs,100*float(k+1)/num_structs))
+    sys.stdout.flush() 
   # end main
+  print " (%2.2fs)"%(time.time()-pt0) # Report process completion.
+
 
 def sliding_sphere(residues,nbrs,radius,verbose=False):
   """ Calculates population-specific variant distributions 
@@ -186,22 +195,11 @@ def isolate_window(center,residues,nbrs=None):
   model,chain,seqid,icode = (center[11],center[12],center[14],center[15])
   # Reduce residues to only this chain
   residues = [r for r in residues if r[11]==model and r[12]==chain]
+  # Query sequence kNN, k=>corresponding sphere
   nbs = nbrs[(model,chain)][(seqid,icode)]
   # Prune missing neighbors (infinite distances, k>N)
   nbs = [j for i,j in enumerate(nbs[1]) if np.isfinite(nbs[0][i])]
-  nbs.sort()
-  try:
-    window = [residues[i] for i in nbs]
-  except:
-    print '\nException details:'
-    print "Center idx: %d"%residues.index(center)
-    print "Model: %s; Chain: %s; Residue #%d; iCode: %s"%(model,chain,seqid,icode)
-    print 'neighbor indices in chain:',nbs
-    print '# of residues in chain:',len(residues)
-    print "walk through:"
-    for i in nbs:
-      print 'idx: %d; model: %s; chain: %s; residue: %d; icode: %s'%(i,residues[i][11],residues[i][12],residues[i][14],residues[i][15])
-    raise
+  window = [residues[i] for i in nbs]
   return window
 
 def sphere_count(residues):
