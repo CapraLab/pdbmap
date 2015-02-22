@@ -3,8 +3,9 @@
 # Implementation of the sliding sphere analysis for variant localization 
 # and population differentiation.
 
-PERMUTATIONS = 999
+PERMUTATIONS = 2
 
+from profilehooks import profile
 import numpy as np
 np.set_printoptions(threshold='nan')
 from scipy.spatial import KDTree
@@ -15,6 +16,9 @@ random.seed(5)
 np.seterr(all='ignore')
 import MySQLdb, MySQLdb.cursors
 from warnings import filterwarnings,resetwarnings
+filterwarnings('ignore', category = RuntimeWarning)
+np.nanmean([]) # get this initial warning out of the way
+resetwarnings()
 filterwarnings('ignore', category = MySQLdb.Warning)
 
 def connect(retry=True):
@@ -36,6 +40,7 @@ def connect(retry=True):
       raise
 con = connect()
 
+# @profile 
 def main(ppart=0,ppidx=0,structid=None,radius=15):
 
   # Load the structure lists
@@ -83,10 +88,10 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
     # Load the 1000 Genomes Phase III sample-population assignments
     # Sample order shared between panel file and genoptypes field,
     # so only the population list is loaded; order must not be altered
-    with open('/dors/capralab/data/1kg/vcf/integrated_call_samples_v3.20130502.ALL.panel','rb') as fin:
-      fin.readline() # burn the header
-      reader = csv.reader(fin,delimiter='\t')
-      spop   = [r[2] for r in reader]
+    # with open('/dors/capra_lab/data/1kg/vcf/integrated_call_samples_v3.20130502.ALL.panel','rb') as fin:
+    #   fin.readline() # burn the header
+    #   reader = csv.reader(fin,delimiter='\t')
+    #   spop   = [r[2] for r in reader]
 
     # Run the sliding sphere analysis over permutated SNP-residue assignments
     perm_spheres = []
@@ -97,7 +102,7 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
         sys.stdout.write("\r  Permutation testing...%d%%"%(100*float(i+1)/PERMUTATIONS))
         sys.stdout.flush()
       # Calculate sliding sphere over permuted SNP assignments
-      stats = sliding_sphere(perm_residues,nbrs,radius,verbose)
+      stats = sliding_sphere(perm_residues,(nbrs3D,nbrs1D),radius,verbose)
       pspheres = [perm_residues[j] + stat for j,stat in enumerate(stats)]
       perm_spheres.append(pspheres)
     if verbose:
@@ -105,8 +110,10 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
 
     # Run the sliding sphere analysis over the permutation values
     perm_spheres = np.array(perm_spheres)
-    perm_stats   = np.percentile(perm_spheres,[5,25,50,75,95],axis=0)
-    np.savez_compressed(perm_file,perm_stats)
+    # print 'info:',perm_spheres[0,:,:-60].shape
+    # print 'stats:',np.percentile(perm_spheres[:,:,-60:],[5,25,50,75,95],axis=0).shape
+    # perm_stats   = np.concatenate((perm_spheres[0,:,:-60],np.percentile(perm_spheres[:,:,-60:],[5,25,50,75,95],axis=0)),axis=1)
+    np.savez_compressed(perm_file,perm_spheres)
     # To load this file, use syntax:
     # with np.load('fname') as npzfile:
     #   x = npzfile.items()[0][1]
@@ -121,11 +128,19 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
       t0 = time.time()
 
     # Run the sliding sphere analysis on the observed values
-    stats = sliding_sphere(residues,nbrs,radius,verbose)
+    stats = sliding_sphere(residues,(nbrs3D,nbrs1D),radius,verbose)
     spheres = np.array([residues[i] + stat for i,stat in enumerate(stats)])
 
+    # Total descriptors:   19
+    # Total measurements: 102
+    # Total p-values:     102
+    # -----------------------
+    # Total descriptors:   19
+    # Total numeric:      204
+    # Total columns:      223
+
     # Calculate the empirical p-value of each measurement for each sphere
-    extremes = np.array([np.sum(sphere[-60:] <= perm_spheres[:,i,-60:],axis=0) for i,sphere in enumerate(spheres)]) 
+    perm_extremes = np.array([np.sum(sphere[-102:] <= perm_spheres[:,i,-102:],axis=0) for i,sphere in enumerate(spheres)]) 
     pvals = (perm_extremes+1) / float(PERMUTATIONS+1)
     spheres = np.concatenate((spheres,pvals),axis=1)
     np.savetxt(obs_file,spheres,header='\t'.join(header),fmt='%s',delimiter='\t',comments='')
@@ -140,42 +155,58 @@ def sliding_sphere(residues,nbrs,radius,verbose=False):
   return [sphere(r,residues,nbrs,radius) for r in residues]
 
 def sphere(r,residues,nbrs,radius):
+  nbrs3D,nbrs1D = nbrs
   sphere   = isolate_sphere(r,residues,radius,nbrs3D)
-  scounts  = sphere_count(sphere) # Variant counts (by pop)
+  scounts  = sphere_count(sphere) # Residue and variant counts (by pop)
   sdaf     = daf(sphere)     # Calculate DAF
   scdaf    = cumdaf(sdaf)    # Cumulative frequency (by pop)
   sddaf    = ddaf(sdaf)      # Calculate deltaDAF
   sddafroi = ddaf_roi(sddaf) # Sphere deltaDAF statistics
   # Repeat analysis with comparable sequence windows
   window   = isolate_window(r,residues,nbrs1D)
-  wcounts  = sphere_count(window) # Variant counts (by pop)
+  wcounts  = sphere_count(window)[1:] # Variant counts only (by pop)
   wdaf     = daf(window)     # Calculate DAF
   wcdaf    = cumdaf(wdaf)  # Cumulative frequency (by pop)
   wddaf    = ddaf(wdaf)      # Calculate deltaDAF
   wddafroi = ddaf_roi(wddaf) # Sphere deltaDAF statistics
   # Returns:
-  #  1 residue count + 17 population SNP counts (sphere)
+  #  1 residue count + 16 population SNP counts (sphere)
   #  5 cumulative SNP deltaDAF                  (sphere)
   #  30 deltaDAF measurements                   (sphere)
-  #  1 residue count + 17 population SNP counts (window)
+  #  16 population SNP counts                   (window)
   #  5 cumulative SNP deltaDAF                  (window)
   #  30 deltaDAF measurements                   (window)
   return scounts+scdaf+sddafroi+wcounts+wcdaf+wddafroi
 
-def distance(coord1,coord2):
-  x1,y1,z1 = coord1
-  x2,y2,z2 = coord2
-  return math.sqrt((x2-x1)**2+(y2-y1)**2+(z2-z1)**2)
-
 def isolate_sphere(center,residues,radius,nbrs=None):
-  center = (center[12],center[14])
+  center = (center[11],center[12],center[14],center[15])
   return [residues[i] for i in nbrs[center]]
 
 def isolate_window(center,residues,nbrs=None):
-  chain,seqid = (center[12],center[14])
-  return [residues[i] for i in nbrs[chain][seqid]]
+  model,chain,seqid,icode = (center[11],center[12],center[14],center[15])
+  # Reduce residues to only this chain
+  residues = [r for r in residues if r[11]==model and r[12]==chain]
+  nbs = nbrs[(model,chain)][(seqid,icode)]
+  # Prune missing neighbors (infinite distances, k>N)
+  nbs = [j for i,j in enumerate(nbs[1]) if np.isfinite(nbs[0][i])]
+  nbs.sort()
+  try:
+    window = [residues[i] for i in nbs]
+  except:
+    print '\nException details:'
+    print "Center idx: %d"%residues.index(center)
+    print "Model: %s; Chain: %s; Residue #%d; iCode: %s"%(model,chain,seqid,icode)
+    print 'neighbor indices in chain:',nbs
+    print '# of residues in chain:',len(residues)
+    print "walk through:"
+    for i in nbs:
+      print 'idx: %d; model: %s; chain: %s; residue: %d; icode: %s'%(i,residues[i][11],residues[i][12],residues[i][14],residues[i][15])
+    raise
+  return window
 
 def sphere_count(residues):
+  # Count Residues observed within the sphere
+  numres = len(residues)
   # Count SNPs observed in any population
   allsnp = len([r for r in residues if r[1]>0])
   # Count SNPs with freq >0 in each population
@@ -184,7 +215,7 @@ def sphere_count(residues):
   shrsnp = [len([r for r in residues if r[1]>0 and (r[i]>0 or r[j]>0)]) for i in range(3,8) for j in range(i+1,8)]
   # Returns 1 total residue count, 1 total SNP count, 5 pop-SNP counts and 10 pop-union-SNP counts
   # Total return vector length => 17
-  return [len(residues)]+allsnp+numsnp+shrsnp
+  return [numres,allsnp]+numsnp+shrsnp
 
 def cumdaf(dafs):
   if not dafs: return [0,0,0,0,0]
@@ -194,45 +225,39 @@ def cumdaf(dafs):
 def daf(residues):
   # Compute the DAF for each residue, for each population.
   # Replace NaN values with 0 allele frequency
-  return [[r[i] if (not r[8]) or r[8]==r[9] else 1-r[i] for i in range(3,8)] for r in residues if r[1]]
+  # r[i]: AF; r[8]: derived allele; r[9]: reference allele; r[10]: alternate allele
+  return [[r[i] if (not r[8]) or r[8]==r[10] else 1-r[i] for i in range(3,8)] for r in residues if r[1]]
 
 def ddaf(dafs,weighted=False):
   # Compute deltaDAF for all population combinations, don't use SNPs not observed in the pair
   # (AMR-EAS, AMR-SAS, AMR-EUR, AMR-AFR, EAS-SAS, EAS-EUR, EAS-AFR, SAS-EUR, SAS-AFR, EUR-AFR)
-  return [[r[i]-r[j] for i in range(5) for j in range(i+1,5)] for r in dafs if r[i]>0 or r[j]>0]
+  # test = np.array([[r[i]-r[j] if r[i]>0 or r[j]>0 else np.nan for r in dafs] for i in range(5) for j in range(i+1,5)])
+  # if np.any(np.isnan(test)):
+  #   print 'DAFs'
+  #   print dafs
+  #   print 'By-Pop'
+  #   print test.shape
+  #   print np.array(np.nanmean(np.ma.masked_where(test<0,test),axis=1)).shape
+  #   print np.array(np.nanmean(np.ma.masked_where(test>0,test),axis=1)).shape
+  #   print np.nanmean(np.abs(test),axis=1).shape
+  #   print '--'
+  #   print np.array([[r[i]-r[j] for i in range(5) for j in range(i+1,5)] for r in dafs]).shape
+  return np.array([[r[i]-r[j] if r[i]>0 or r[j]>0 else np.nan for r in dafs] for i in range(5) for j in range(i+1,5)]).transpose()
+  # return np.array([[r[i]-r[j] for i in range(5) for j in range(i+1,5)] for r in dafs])
 
 def ddaf_roi(ddafs):
-  if not ddafs:
+  # Sphere isn't empty and isn't full of NaN
+  if not np.any(ddafs) or np.all(np.isnan(ddafs)):
     # Null values for 10 pop combos (i) and 3 metrics (j)
     return [0 for i in range(10) for j in range(3)] # 0 for each population pair
-
   # Calculate pop1 mean deltaDAF
-  meanDDAF1 = np.array(np.mean(np.ma.masked_where(ddafs<0,ddafs),axis=0))
+  meanDDAF1 = np.array(np.mean(np.ma.masked_where((ddafs<0) | (np.isnan(ddafs)),ddafs),axis=0))
   # Calculate pop2 mean deltaDAF
-  meanDDAF2 = np.array(np.mean(np.ma.masked_where(ddafs<0,-ddafs),axis=0))
+  meanDDAF2 = np.array(np.mean(np.ma.masked_where((ddafs<0) | (np.isnan(ddafs)),-ddafs),axis=0))
   # Calculate pop1+pop2 mean magnitude deltaDAF
-  meanDDAFM = np.mean(np.abs(ddafs),axis=0)
+  meanDDAFM = np.array(np.mean(np.abs(np.ma.masked_where(np.isnan(ddafs),ddafs)),axis=0))
   # Construct and flatten the return matrix; 10 population combinations, 3 measurements
   return np.column_stack((meanDDAF1,meanDDAF2,meanDDAFM)).reshape(30,).tolist()
-
-def fishers_roi(varcnt,totcnt,verbose=False):
-  fisher = []
-  pops = ['AMR','ASN','EUR','AFR']
-  for i in range(4):
-    for j in range(i+1,4):
-      f_obs = [varcnt[i],varcnt[j]]
-      if f_obs[0]<2 and f_obs[1] < 2: # Do not test if 0/0 or 0/1
-        fisher.append([np.nan,np.nan]) # Mark as NA
-        continue
-      f_exp = [totcnt[i]-varcnt[i],totcnt[j]-varcnt[j]]
-      cont  = np.concatenate((f_obs,f_exp)).reshape(2,2)
-      fisher.append(list(fisher_exact(cont)))
-      if verbose and fisher[-1][1] < 0.05:
-        print pops[i],'+',pops[j]
-        print cont
-        print 'Fishers Exact-Test:',fisher[-1]
-        print '\n'
-  return [l for f in fisher for l in f]
 
 def permute_snps(residues,permutations=1000):
   locseen = set() # Track unique locations
@@ -284,16 +309,15 @@ def permute_snps(residues,permutations=1000):
 
 def load_structure(structid,biounit,radius,verbose=False):
   # Load the structure with 1000 Genomes Phase III population allele frequencies
-  q  = "SELECT !ISNULL(c.gc_id) as isvar,(b.slabel='uniprot-pdb' "
-  q += "and b.dlabel='1kg3' and c.label='1kg3' AND c.consequence LIKE "
-  q += "'%%missense_variant%%') as issnp,d.name,d.amr_af,d.eas_af,d.sas_af,d.eur_af,d.afr_af,"
-  q += "d.aa,d.ref_allele,d.alt_allele,e.structid,e.chain,e.unp,a.seqid,d.genotypes, "
+  q  = "SELECT !ISNULL(c.gc_id) as isvar,c.consequence LIKE '%%missense_variant%%' as issnp,"
+  q += "d.name,d.amr_af,d.eas_af,d.sas_af,d.eur_af,d.afr_af,"
+  q += "d.da,d.ref_allele,d.alt_allele,e.model,e.chain,e.unp,a.seqid,a.icode, "
   q += "a.x,a.y,a.z FROM Residue as a "
   q += "INNER JOIN Chain as e ON a.label=e.label AND a.structid=e.structid "
   q += "AND a.biounit=e.biounit AND a.model=e.model AND a.chain=e.chain "
   q += "LEFT JOIN GenomicIntersection as b "
   q += "ON a.label=b.slabel AND a.structid=b.structid "
-  q += "AND a.chain=b.chain AND a.seqid=b.seqid "
+  q += "AND a.chain=b.chain AND a.seqid=b.seqid AND b.dlabel='1kg3' "
   q += "LEFT JOIN GenomicConsequence as c "
   q += "ON b.dlabel=c.label AND b.gc_id=c.gc_id "
   q += "LEFT JOIN GenomicData as d "
@@ -302,7 +326,7 @@ def load_structure(structid,biounit,radius,verbose=False):
   q += "WHERE a.label='uniprot-pdb' "
   q += "AND a.structid='%s' AND a.biounit=%s "%(structid,biounit)
   # Place all variants at the beginning of the results
-  q += "ORDER BY issnp DESC, seqid ASC"
+  q += "ORDER BY model ASC, chain ASC, seqid ASC, icode ASC"
   global con
   c = con.cursor() # open cursor
   c.execute(q)
@@ -311,23 +335,34 @@ def load_structure(structid,biounit,radius,verbose=False):
   # Build a 3D Tree for structure neighbor-search
   if verbose:
     print "  Constructing sphere matrix via KDTree...",
-    sys.stdout.flush()
     t0 = time.time()
   kdt  = KDTree(np.array([r[-3:] for r in res]))
   if verbose:
     print "100%% (%2.2fs)"%(time.time()-t0)
-  print '  Determining structural neighbors within %d Angstroms for all residues...'%radius,
-  nbrs3D = dict(((r[12],r[14]),kdt.query_ball_point(r[-3:],radius)) for r in res)
+    print '  Determining structural neighbors within %d Angstroms for all residues...'%radius,
+    t0 = time.time()
+  nbrs3D = dict(((r[11],r[12],r[14],r[15]),kdt.query_ball_point(r[-3:],radius)) for r in res)
   if verbose:
     print "100%% (%2.2fs)"%(time.time()-t0)
+    print '  Determining comparable sequence neighbors all residues...',
+    t0 = time.time()
   # Build a 1D Tree for sequence neighbor-search
   nbrs1D = {}
-  # Restrict neighbors to the same chain
-  for chain in set([r[12] for r in res]):
+  # Restrict neighbors to the same model and chain
+  for model,chain in set([(r[11],r[12]) for r in res]):
     # Build the 1D Tree with sequence index
-    kdt  = KDTree(np.array([r[14] for r in res if r[12]==chain]))
+    cres = np.array([r[14]+(ord(r[15])/100.) for r in res if r[11]==model and r[12]==chain])
+    cres = cres.reshape(len(cres),1)
+    kdt  = KDTree(cres)
+    # Redefine cres to a subset of residues, full-information
+    cres = np.array([r for r in res if r[11]==model and r[12]==chain])
     # Identify k nearest sequence neighbors, where k is the number of residues within 10A
-    nbrs1D[chain] = dict(((r[12],r[14]),kdt.query(r[14],len(nbrs3D[(r[12],r[14])]))) for r in res if r[12]==chain)
+    nbrs1D[(model,chain)] = dict(((r[14],r[15]), # seqid,icode
+                              kdt.query((r[14]+(ord(r[15])/100.),), # center
+                              len(nbrs3D[(r[11],r[12],r[14],r[15])]))) # k, select indices
+                              for r in cres) # for all residues in this model+chain
+  if verbose:
+    print "100%% (%2.2fs)"%(time.time()-t0)
   return res,nbrs3D,nbrs1D
 
 if __name__ == '__main__':
