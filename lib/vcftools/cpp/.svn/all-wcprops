@@ -1,0 +1,245 @@
+K 25
+svn:wc:ra_dav:version-url
+V 39
+/p/vcftools/code/!svn/ver/996/trunk/cpp
+END
+bcf_file.h
+K 25
+svn:wc:ra_dav:version-url
+V 50
+/p/vcftools/code/!svn/ver/940/trunk/cpp/bcf_file.h
+END
+entry_getters.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/p/vcftools/code/!svn/ver/983/trunk/cpp/entry_getters.cpp
+END
+vcf_entry.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/p/vcftools/code/!svn/ver/982/trunk/cpp/vcf_entry.cpp
+END
+vcftools.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 52
+/p/vcftools/code/!svn/ver/982/trunk/cpp/vcftools.cpp
+END
+output_log.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 54
+/p/vcftools/code/!svn/ver/982/trunk/cpp/output_log.cpp
+END
+variant_file.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 56
+/p/vcftools/code/!svn/ver/967/trunk/cpp/variant_file.cpp
+END
+parameters.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 54
+/p/vcftools/code/!svn/ver/987/trunk/cpp/parameters.cpp
+END
+khash.h
+K 25
+svn:wc:ra_dav:version-url
+V 47
+/p/vcftools/code/!svn/ver/881/trunk/cpp/khash.h
+END
+entry.h
+K 25
+svn:wc:ra_dav:version-url
+V 47
+/p/vcftools/code/!svn/ver/988/trunk/cpp/entry.h
+END
+entry_setters.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/p/vcftools/code/!svn/ver/940/trunk/cpp/entry_setters.cpp
+END
+bcf_entry.h
+K 25
+svn:wc:ra_dav:version-url
+V 51
+/p/vcftools/code/!svn/ver/940/trunk/cpp/bcf_entry.h
+END
+vcf_file.h
+K 25
+svn:wc:ra_dav:version-url
+V 50
+/p/vcftools/code/!svn/ver/940/trunk/cpp/vcf_file.h
+END
+variant_file_output.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 63
+/p/vcftools/code/!svn/ver/996/trunk/cpp/variant_file_output.cpp
+END
+bcf_entry_setters.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 61
+/p/vcftools/code/!svn/ver/940/trunk/cpp/bcf_entry_setters.cpp
+END
+gamma.h
+K 25
+svn:wc:ra_dav:version-url
+V 47
+/p/vcftools/code/!svn/ver/881/trunk/cpp/gamma.h
+END
+header.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 50
+/p/vcftools/code/!svn/ver/940/trunk/cpp/header.cpp
+END
+bcf_file.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 52
+/p/vcftools/code/!svn/ver/940/trunk/cpp/bcf_file.cpp
+END
+variant_file_filters.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 64
+/p/vcftools/code/!svn/ver/940/trunk/cpp/variant_file_filters.cpp
+END
+Makefile
+K 25
+svn:wc:ra_dav:version-url
+V 48
+/p/vcftools/code/!svn/ver/940/trunk/cpp/Makefile
+END
+dgeev.h
+K 25
+svn:wc:ra_dav:version-url
+V 47
+/p/vcftools/code/!svn/ver/881/trunk/cpp/dgeev.h
+END
+knetfile.c
+K 25
+svn:wc:ra_dav:version-url
+V 50
+/p/vcftools/code/!svn/ver/881/trunk/cpp/knetfile.c
+END
+entry.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 49
+/p/vcftools/code/!svn/ver/959/trunk/cpp/entry.cpp
+END
+vcf_entry.h
+K 25
+svn:wc:ra_dav:version-url
+V 51
+/p/vcftools/code/!svn/ver/940/trunk/cpp/vcf_entry.h
+END
+vcftools.h
+K 25
+svn:wc:ra_dav:version-url
+V 50
+/p/vcftools/code/!svn/ver/881/trunk/cpp/vcftools.h
+END
+output_log.h
+K 25
+svn:wc:ra_dav:version-url
+V 52
+/p/vcftools/code/!svn/ver/940/trunk/cpp/output_log.h
+END
+knetfile.h
+K 25
+svn:wc:ra_dav:version-url
+V 50
+/p/vcftools/code/!svn/ver/881/trunk/cpp/knetfile.h
+END
+variant_file.h
+K 25
+svn:wc:ra_dav:version-url
+V 54
+/p/vcftools/code/!svn/ver/982/trunk/cpp/variant_file.h
+END
+parameters.h
+K 25
+svn:wc:ra_dav:version-url
+V 52
+/p/vcftools/code/!svn/ver/985/trunk/cpp/parameters.h
+END
+vcf_entry_setters.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 61
+/p/vcftools/code/!svn/ver/940/trunk/cpp/vcf_entry_setters.cpp
+END
+variant_file_format_convert.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 71
+/p/vcftools/code/!svn/ver/990/trunk/cpp/variant_file_format_convert.cpp
+END
+bcf_entry.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/p/vcftools/code/!svn/ver/940/trunk/cpp/bcf_entry.cpp
+END
+vcf_file.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 52
+/p/vcftools/code/!svn/ver/993/trunk/cpp/vcf_file.cpp
+END
+vcftools.1
+K 25
+svn:wc:ra_dav:version-url
+V 50
+/p/vcftools/code/!svn/ver/996/trunk/cpp/vcftools.1
+END
+gamma.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 49
+/p/vcftools/code/!svn/ver/881/trunk/cpp/gamma.cpp
+END
+bgzf.c
+K 25
+svn:wc:ra_dav:version-url
+V 46
+/p/vcftools/code/!svn/ver/881/trunk/cpp/bgzf.c
+END
+entry_filters.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/p/vcftools/code/!svn/ver/988/trunk/cpp/entry_filters.cpp
+END
+dgeev.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 49
+/p/vcftools/code/!svn/ver/881/trunk/cpp/dgeev.cpp
+END
+variant_file_diff.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 61
+/p/vcftools/code/!svn/ver/994/trunk/cpp/variant_file_diff.cpp
+END
+header.h
+K 25
+svn:wc:ra_dav:version-url
+V 48
+/p/vcftools/code/!svn/ver/940/trunk/cpp/header.h
+END
+bgzf.h
+K 25
+svn:wc:ra_dav:version-url
+V 46
+/p/vcftools/code/!svn/ver/881/trunk/cpp/bgzf.h
+END

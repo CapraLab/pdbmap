@@ -79,81 +79,95 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
 
   # Process each structure separately to reduce space complexity
   pt0 = time.time() # process start time
+  sys.stdout.write("\rProcessing %d structures..."%num_structs)
+  sys.stdout.flush()
   for k,(typ,structid,biounit) in enumerate(structs):
-    obs_file = '../results/sliding_sphere_%d/split/obs/bystruct/sliding_sphere_%s-%s.txt.gz'%(radius,structid,biounit)
-    perm_file = '../results/sliding_sphere_%d/split/perm/bystruct/sliding_sphere_perm_%s-%s.npz'%(radius,structid,biounit)
-    if verbose:
-      print "%s.%s"%(structid,biounit)
-
-    # Load the structure
-    residues,nbrs3D,nbrs1D = load_structure(structid,biounit,radius,verbose)
-
-    # Load the 1000 Genomes Phase III sample-population assignments
-    # Sample order shared between panel file and genoptypes field,
-    # so only the population list is loaded; order must not be altered
-    # with open('/dors/capra_lab/data/1kg/vcf/integrated_call_samples_v3.20130502.ALL.panel','rb') as fin:
-    #   fin.readline() # burn the header
-    #   reader = csv.reader(fin,delimiter='\t')
-    #   spop   = [r[2] for r in reader]
-
-    # Run the sliding sphere analysis over permutated SNP-residue assignments
-    perm_spheres = []
-    if verbose:
-      t0 = time.time() # Time the permutation test
-    for i,perm_residues in enumerate(permute_snps(residues,PERMUTATIONS)):
+    try:
+      obs_file = '../results/sliding_sphere_%d/split/obs/bystruct/sliding_sphere_%s-%s.txt.gz'%(radius,structid,biounit)
+      perm_file = '../results/sliding_sphere_%d/split/perm/bystruct/sliding_sphere_perm_%s-%s.npz'%(radius,structid,biounit)
       if verbose:
-        sys.stdout.write("\r  Permutation testing...%d%%"%(100*float(i+1)/PERMUTATIONS))
-        sys.stdout.flush()
-      # Calculate sliding sphere over permuted SNP assignments
-      stats = sliding_sphere(perm_residues,(nbrs3D,nbrs1D),radius,verbose)
-      pspheres = [perm_residues[j] + stat for j,stat in enumerate(stats)]
-      perm_spheres.append(pspheres)
-    if verbose:
-      print " (%2.2fs)"%(time.time()-t0) # Report permutation testing completion.
+        print "%s.%s"%(structid,biounit)
 
-    # Run the sliding sphere analysis over the permutation values
-    perm_spheres = np.array(perm_spheres)
-    # print 'info:',perm_spheres[0,:,:-60].shape
-    # print 'stats:',np.percentile(perm_spheres[:,:,-60:],[5,25,50,75,95],axis=0).shape
-    # perm_stats   = np.concatenate((perm_spheres[0,:,:-60],np.percentile(perm_spheres[:,:,-60:],[5,25,50,75,95],axis=0)),axis=1)
-    np.savez_compressed(perm_file,perm_spheres)
-    # To load this file, use syntax:
-    # with np.load('fname') as npzfile:
-    #   x = npzfile.items()[0][1]
+      if os.path.exists(obs_file) and os.path.exists(perm_file):
+        continue # skip if this biological asssembly has been processed
 
-    # perm_shape   = perm_spheres.shape
-    # flatten      = (perm_shape[0]*perm_shape[1],perm_shape[2])
-    # np.savetxt(perm_file,perm_spheres.reshape(flatten),fmt='%s',delimiter='\t',comments='',header='\t'.join(header[:-60]))
+      # Load the structure
+      residues,nbrs3D,nbrs1D = load_structure(structid,biounit,radius,verbose)
 
-    # Calculate sliding sphere over observed SNP assignments
-    if verbose:
-      print "  Testing observed...",
-      t0 = time.time()
+      # Load the 1000 Genomes Phase III sample-population assignments
+      # Sample order shared between panel file and genoptypes field,
+      # so only the population list is loaded; order must not be altered
+      # with open('/dors/capra_lab/data/1kg/vcf/integrated_call_samples_v3.20130502.ALL.panel','rb') as fin:
+      #   fin.readline() # burn the header
+      #   reader = csv.reader(fin,delimiter='\t')
+      #   spop   = [r[2] for r in reader]
 
-    # Run the sliding sphere analysis on the observed values
-    stats = sliding_sphere(residues,(nbrs3D,nbrs1D),radius,verbose)
-    spheres = np.array([residues[i] + stat for i,stat in enumerate(stats)])
+      # Run the sliding sphere analysis over permutated SNP-residue assignments
+      perm_spheres = []
+      if verbose:
+        t0 = time.time() # Time the permutation test
+      for i,perm_residues in enumerate(permute_snps(residues,PERMUTATIONS)):
+        if verbose:
+          sys.stdout.write("\r  Permutation testing...%d%%"%(100*float(i+1)/PERMUTATIONS))
+          sys.stdout.flush()
+        # Calculate sliding sphere over permuted SNP assignments
+        stats = sliding_sphere(perm_residues,(nbrs3D,nbrs1D),radius,verbose)
+        pspheres = [perm_residues[j] + stat for j,stat in enumerate(stats)]
+        perm_spheres.append(pspheres)
+      if verbose:
+        print " (%2.2fs)"%(time.time()-t0) # Report permutation testing completion.
 
-    # Total descriptors:   19
-    # Total measurements: 102
-    # Total p-values:     102
-    # -----------------------
-    # Total descriptors:   19
-    # Total numeric:      204
-    # Total columns:      223
+      # Run the sliding sphere analysis over the permutation values
+      perm_spheres = np.array(perm_spheres)
+      # print 'info:',perm_spheres[0,:,:-60].shape
+      # print 'stats:',np.percentile(perm_spheres[:,:,-60:],[5,25,50,75,95],axis=0).shape
+      # perm_stats   = np.concatenate((perm_spheres[0,:,:-60],np.percentile(perm_spheres[:,:,-60:],[5,25,50,75,95],axis=0)),axis=1)
+      np.savez_compressed(perm_file,perm_spheres)
+      # To load this file, use syntax:
+      # with np.load('fname') as npzfile:
+      #   x = npzfile.items()[0][1]
 
-    # Calculate the empirical p-value of each measurement for each sphere
-    perm_extremes = np.array([np.sum(sphere[-102:] <= perm_spheres[:,i,-102:],axis=0) for i,sphere in enumerate(spheres)]) 
-    pvals = (perm_extremes+1) / float(PERMUTATIONS+1)
-    spheres = np.concatenate((spheres,pvals),axis=1)
-    np.savetxt(obs_file,spheres,header='\t'.join(header),fmt='%s',delimiter='\t',comments='')
+      # perm_shape   = perm_spheres.shape
+      # flatten      = (perm_shape[0]*perm_shape[1],perm_shape[2])
+      # np.savetxt(perm_file,perm_spheres.reshape(flatten),fmt='%s',delimiter='\t',comments='',header='\t'.join(header[:-60]))
 
-    if verbose:
-      print "100%% (%2.2fs)"%(time.time()-t0)
+      # Calculate sliding sphere over observed SNP assignments
+      if verbose:
+        print "  Testing observed...",
+        t0 = time.time()
 
-    # Report percentage complete
-    sys.stdout.write("\rProcessing %d structures...%d%%"%(num_structs,100*float(k+1)/num_structs))
-    sys.stdout.flush() 
+      # Run the sliding sphere analysis on the observed values
+      stats = sliding_sphere(residues,(nbrs3D,nbrs1D),radius,verbose)
+      spheres = np.array([residues[i] + stat for i,stat in enumerate(stats)])
+
+      # Total descriptors:   19
+      # Total measurements: 102
+      # Total p-values:     102
+      # -----------------------
+      # Total descriptors:   19
+      # Total numeric:      204
+      # Total columns:      223
+
+      # Calculate the empirical p-value of each measurement for each sphere
+      perm_extremes = np.array([np.sum(sphere[-102:] <= perm_spheres[:,i,-102:],axis=0) for i,sphere in enumerate(spheres)]) 
+      pvals = (perm_extremes+1) / float(PERMUTATIONS+1)
+      spheres = np.concatenate((spheres,pvals),axis=1)
+      np.savetxt(obs_file,spheres,header='\t'.join(header),fmt='%s',delimiter='\t',comments='')
+
+      if verbose:
+        print "100%% (%2.2fs)"%(time.time()-t0)
+
+      # Report percentage complete
+      sys.stdout.write("\rProcessing %d structures...%d%%"%(num_structs,100*float(k+1)/num_structs))
+      sys.stdout.flush()
+    except Exception as e:
+      # Cleanup any files that were created
+      if os.path.exists(obs_file):
+        os.remove(obs_file)
+      if os.path.exists(perm_file):
+        os.remove(perm_file)
+      # Report the error, but continue to the next biological assembly
+      sys.stderr.write("Exception occurred for biological assembly %s.%s: %s. Skipping.\n"%(structid,biounit,str(e).replace('\n','; ')))
   # end main
   print " (%2.2fs)"%(time.time()-pt0) # Report process completion.
 
@@ -229,19 +243,7 @@ def daf(residues):
 def ddaf(dafs,weighted=False):
   # Compute deltaDAF for all population combinations, don't use SNPs not observed in the pair
   # (AMR-EAS, AMR-SAS, AMR-EUR, AMR-AFR, EAS-SAS, EAS-EUR, EAS-AFR, SAS-EUR, SAS-AFR, EUR-AFR)
-  # test = np.array([[r[i]-r[j] if r[i]>0 or r[j]>0 else np.nan for r in dafs] for i in range(5) for j in range(i+1,5)])
-  # if np.any(np.isnan(test)):
-  #   print 'DAFs'
-  #   print dafs
-  #   print 'By-Pop'
-  #   print test.shape
-  #   print np.array(np.nanmean(np.ma.masked_where(test<0,test),axis=1)).shape
-  #   print np.array(np.nanmean(np.ma.masked_where(test>0,test),axis=1)).shape
-  #   print np.nanmean(np.abs(test),axis=1).shape
-  #   print '--'
-  #   print np.array([[r[i]-r[j] for i in range(5) for j in range(i+1,5)] for r in dafs]).shape
   return np.array([[r[i]-r[j] if r[i]>0 or r[j]>0 else np.nan for r in dafs] for i in range(5) for j in range(i+1,5)]).transpose()
-  # return np.array([[r[i]-r[j] for i in range(5) for j in range(i+1,5)] for r in dafs])
 
 def ddaf_roi(ddafs):
   # Sphere isn't empty and isn't full of NaN
@@ -249,11 +251,21 @@ def ddaf_roi(ddafs):
     # Null values for 10 pop combos (i) and 3 metrics (j)
     return [0 for i in range(10) for j in range(3)] # 0 for each population pair
   # Calculate pop1 mean deltaDAF
-  meanDDAF1 = np.array(np.mean(np.ma.masked_where((ddafs<0) | (np.isnan(ddafs)),ddafs),axis=0))
+  y = np.copy(ddafs)
+  y[np.isnan(y)] = -1 # temporary logical replacement (needs to be negative)
+  y[y<0] = -0.000000001
+  meanDDAF1 = y.sum(0)/((y>=0).sum(0))
+  meanDDAF1[np.isinf(meanDDAF1)] = 0
   # Calculate pop2 mean deltaDAF
-  meanDDAF2 = np.array(np.mean(np.ma.masked_where((ddafs<0) | (np.isnan(ddafs)),-ddafs),axis=0))
+  y = np.copy(-ddafs)
+  y[np.isnan(y)] = -1
+  y[y<0] = -0.000000001
+  meanDDAF2 = y.sum(0)/((y>=0).sum(0))
   # Calculate pop1+pop2 mean magnitude deltaDAF
-  meanDDAFM = np.array(np.mean(np.abs(np.ma.masked_where(np.isnan(ddafs),ddafs)),axis=0))
+  y = np.abs(np.copy(ddafs))
+  invalid = np.isnan(y)
+  y[invalid] = 0
+  meanDDAFM = y.sum(0)/((~invalid).sum(0))
   # Construct and flatten the return matrix; 10 population combinations, 3 measurements
   return np.column_stack((meanDDAF1,meanDDAF2,meanDDAFM)).reshape(30,).tolist()
 
@@ -327,7 +339,15 @@ def load_structure(structid,biounit,radius,verbose=False):
   q += "ORDER BY model ASC, chain ASC, seqid ASC, icode ASC"
   global con
   c = con.cursor() # open cursor
-  c.execute(q)
+  try:
+    c.execute(q)
+  except:
+    os.system('ping 10.109.20.218')
+    os.system('traceroute 10.109.20.218')
+    # Print some summary info about the connection
+    # Then try again. If it fails again, let it
+    c = con.cursor()
+    c.execute(q)
   res = [list(r) for r in c]
   c.close()
   # Build a 3D Tree for structure neighbor-search
@@ -359,6 +379,10 @@ def load_structure(structid,biounit,radius,verbose=False):
                               kdt.query((r[14]+(ord(r[15])/100.),), # center
                               len(nbrs3D[(r[11],r[12],r[14],r[15])]))) # k, select indices
                               for r in cres) # for all residues in this model+chain
+    # Correct list structure for model/chains of one element
+    for (seqid,icode),nbs in nbrs1D[(model,chain)].iteritems():
+      if not isinstance(nbs[0],list):
+        nbrs1D[(model,chain)][(seqid,icode)] = [list(e) for e in nbs]
   if verbose:
     print "100%% (%2.2fs)"%(time.time()-t0)
   return res,nbrs3D,nbrs1D

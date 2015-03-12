@@ -270,7 +270,7 @@ class PDBMapData():
       fname = "%sVEPPREP.txt"%fname.replace('.','_')
     return fname,id_type
 
-  def load_vep(self,fname,intype='vcf'):
+  def load_vep(self,fname,intype='vcf',outfile=None):
     """ Yield VEP rows """
     print "Initializing VEP generator."
     cmd = [f for f in self.vep_cmd]
@@ -285,8 +285,14 @@ class PDBMapData():
     try:
       # Call VEP and capture stdout in realtime
       p = sp.Popen(cmd,stdout=sp.PIPE)
+      if outfile:
+        fout = open(outfile,'wb')
       for line in iter(p.stdout.readline,b''):
+        if outfile:
+          fout.write(line)
         yield line
+      if outfile:
+        fout.close()
     except KeyboardInterrupt:
       msg = "ERROR (PDBMapData) Keyboard interrupt. Canceling VEP...\n"
       sys.stderr.write(msg)

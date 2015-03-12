@@ -1,0 +1,191 @@
+K 25
+svn:wc:ra_dav:version-url
+V 40
+/p/vcftools/code/!svn/ver/975/trunk/perl
+END
+vcf-subset
+K 25
+svn:wc:ra_dav:version-url
+V 51
+/p/vcftools/code/!svn/ver/881/trunk/perl/vcf-subset
+END
+vcf-query
+K 25
+svn:wc:ra_dav:version-url
+V 50
+/p/vcftools/code/!svn/ver/975/trunk/perl/vcf-query
+END
+FaSlice.pm
+K 25
+svn:wc:ra_dav:version-url
+V 51
+/p/vcftools/code/!svn/ver/920/trunk/perl/FaSlice.pm
+END
+test.t
+K 25
+svn:wc:ra_dav:version-url
+V 47
+/p/vcftools/code/!svn/ver/950/trunk/perl/test.t
+END
+vcf-convert
+K 25
+svn:wc:ra_dav:version-url
+V 52
+/p/vcftools/code/!svn/ver/920/trunk/perl/vcf-convert
+END
+fill-fs
+K 25
+svn:wc:ra_dav:version-url
+V 48
+/p/vcftools/code/!svn/ver/928/trunk/perl/fill-fs
+END
+vcf-isec
+K 25
+svn:wc:ra_dav:version-url
+V 49
+/p/vcftools/code/!svn/ver/881/trunk/perl/vcf-isec
+END
+vcf-fix-ploidy
+K 25
+svn:wc:ra_dav:version-url
+V 55
+/p/vcftools/code/!svn/ver/881/trunk/perl/vcf-fix-ploidy
+END
+vcf-sort
+K 25
+svn:wc:ra_dav:version-url
+V 49
+/p/vcftools/code/!svn/ver/946/trunk/perl/vcf-sort
+END
+vcf-indel-stats
+K 25
+svn:wc:ra_dav:version-url
+V 56
+/p/vcftools/code/!svn/ver/881/trunk/perl/vcf-indel-stats
+END
+fill-an-ac
+K 25
+svn:wc:ra_dav:version-url
+V 51
+/p/vcftools/code/!svn/ver/881/trunk/perl/fill-an-ac
+END
+fill-aa
+K 25
+svn:wc:ra_dav:version-url
+V 48
+/p/vcftools/code/!svn/ver/881/trunk/perl/fill-aa
+END
+vcf-contrast
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/p/vcftools/code/!svn/ver/881/trunk/perl/vcf-contrast
+END
+vcf-stats
+K 25
+svn:wc:ra_dav:version-url
+V 50
+/p/vcftools/code/!svn/ver/881/trunk/perl/vcf-stats
+END
+Makefile
+K 25
+svn:wc:ra_dav:version-url
+V 49
+/p/vcftools/code/!svn/ver/881/trunk/perl/Makefile
+END
+fill-ref-md5
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/p/vcftools/code/!svn/ver/881/trunk/perl/fill-ref-md5
+END
+vcf-concat
+K 25
+svn:wc:ra_dav:version-url
+V 51
+/p/vcftools/code/!svn/ver/881/trunk/perl/vcf-concat
+END
+vcf-fix-newlines
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/p/vcftools/code/!svn/ver/881/trunk/perl/vcf-fix-newlines
+END
+vcf-annotate
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/p/vcftools/code/!svn/ver/881/trunk/perl/vcf-annotate
+END
+ChangeLog
+K 25
+svn:wc:ra_dav:version-url
+V 50
+/p/vcftools/code/!svn/ver/881/trunk/perl/ChangeLog
+END
+Vcf.pm
+K 25
+svn:wc:ra_dav:version-url
+V 47
+/p/vcftools/code/!svn/ver/953/trunk/perl/Vcf.pm
+END
+vcf-consensus
+K 25
+svn:wc:ra_dav:version-url
+V 54
+/p/vcftools/code/!svn/ver/952/trunk/perl/vcf-consensus
+END
+vcf-validator
+K 25
+svn:wc:ra_dav:version-url
+V 54
+/p/vcftools/code/!svn/ver/881/trunk/perl/vcf-validator
+END
+vcf-to-tab
+K 25
+svn:wc:ra_dav:version-url
+V 51
+/p/vcftools/code/!svn/ver/975/trunk/perl/vcf-to-tab
+END
+tab-to-vcf
+K 25
+svn:wc:ra_dav:version-url
+V 51
+/p/vcftools/code/!svn/ver/881/trunk/perl/tab-to-vcf
+END
+vcf-compare
+K 25
+svn:wc:ra_dav:version-url
+V 52
+/p/vcftools/code/!svn/ver/921/trunk/perl/vcf-compare
+END
+vcf-shuffle-cols
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/p/vcftools/code/!svn/ver/881/trunk/perl/vcf-shuffle-cols
+END
+VcfStats.pm
+K 25
+svn:wc:ra_dav:version-url
+V 52
+/p/vcftools/code/!svn/ver/881/trunk/perl/VcfStats.pm
+END
+vcf-merge
+K 25
+svn:wc:ra_dav:version-url
+V 50
+/p/vcftools/code/!svn/ver/914/trunk/perl/vcf-merge
+END
+vcf-tstv
+K 25
+svn:wc:ra_dav:version-url
+V 49
+/p/vcftools/code/!svn/ver/881/trunk/perl/vcf-tstv
+END
+vcf-phased-join
+K 25
+svn:wc:ra_dav:version-url
+V 56
+/p/vcftools/code/!svn/ver/911/trunk/perl/vcf-phased-join
+END

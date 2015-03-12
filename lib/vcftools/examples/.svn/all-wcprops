@@ -1,0 +1,287 @@
+K 25
+svn:wc:ra_dav:version-url
+V 44
+/p/vcftools/code/!svn/ver/899/trunk/examples
+END
+perl-api-1.pl
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/p/vcftools/code/!svn/ver/881/trunk/examples/perl-api-1.pl
+END
+fix-ploidy.samples
+K 25
+svn:wc:ra_dav:version-url
+V 63
+/p/vcftools/code/!svn/ver/881/trunk/examples/fix-ploidy.samples
+END
+annotate.txt
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/p/vcftools/code/!svn/ver/881/trunk/examples/annotate.txt
+END
+cmp-test-a-3.3.vcf
+K 25
+svn:wc:ra_dav:version-url
+V 63
+/p/vcftools/code/!svn/ver/881/trunk/examples/cmp-test-a-3.3.vcf
+END
+query-test.out
+K 25
+svn:wc:ra_dav:version-url
+V 59
+/p/vcftools/code/!svn/ver/881/trunk/examples/query-test.out
+END
+subset.indels.out
+K 25
+svn:wc:ra_dav:version-url
+V 62
+/p/vcftools/code/!svn/ver/881/trunk/examples/subset.indels.out
+END
+cmp-test-b-3.3.vcf
+K 25
+svn:wc:ra_dav:version-url
+V 63
+/p/vcftools/code/!svn/ver/881/trunk/examples/cmp-test-b-3.3.vcf
+END
+fix-ploidy.out
+K 25
+svn:wc:ra_dav:version-url
+V 59
+/p/vcftools/code/!svn/ver/881/trunk/examples/fix-ploidy.out
+END
+indel-stats.out
+K 25
+svn:wc:ra_dav:version-url
+V 60
+/p/vcftools/code/!svn/ver/881/trunk/examples/indel-stats.out
+END
+consensus.vcf
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/p/vcftools/code/!svn/ver/881/trunk/examples/consensus.vcf
+END
+merge-test.vcf.out
+K 25
+svn:wc:ra_dav:version-url
+V 63
+/p/vcftools/code/!svn/ver/899/trunk/examples/merge-test.vcf.out
+END
+isec-n2-test.vcf.out
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/p/vcftools/code/!svn/ver/881/trunk/examples/isec-n2-test.vcf.out
+END
+annotate2.out
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/p/vcftools/code/!svn/ver/881/trunk/examples/annotate2.out
+END
+invalid-4.0.vcf
+K 25
+svn:wc:ra_dav:version-url
+V 60
+/p/vcftools/code/!svn/ver/881/trunk/examples/invalid-4.0.vcf
+END
+annotate3.out
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/p/vcftools/code/!svn/ver/881/trunk/examples/annotate3.out
+END
+cmp-test.out
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/p/vcftools/code/!svn/ver/881/trunk/examples/cmp-test.out
+END
+contrast.out
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/p/vcftools/code/!svn/ver/881/trunk/examples/contrast.out
+END
+annotate-test.vcf
+K 25
+svn:wc:ra_dav:version-url
+V 62
+/p/vcftools/code/!svn/ver/881/trunk/examples/annotate-test.vcf
+END
+parse-test.vcf
+K 25
+svn:wc:ra_dav:version-url
+V 59
+/p/vcftools/code/!svn/ver/881/trunk/examples/parse-test.vcf
+END
+consensus.fa
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/p/vcftools/code/!svn/ver/881/trunk/examples/consensus.fa
+END
+merge-test-a.vcf
+K 25
+svn:wc:ra_dav:version-url
+V 61
+/p/vcftools/code/!svn/ver/881/trunk/examples/merge-test-a.vcf
+END
+merge-test-b.vcf
+K 25
+svn:wc:ra_dav:version-url
+V 61
+/p/vcftools/code/!svn/ver/881/trunk/examples/merge-test-b.vcf
+END
+valid-4.0.vcf.stats
+K 25
+svn:wc:ra_dav:version-url
+V 64
+/p/vcftools/code/!svn/ver/881/trunk/examples/valid-4.0.vcf.stats
+END
+merge-test-c.vcf
+K 25
+svn:wc:ra_dav:version-url
+V 61
+/p/vcftools/code/!svn/ver/881/trunk/examples/merge-test-c.vcf
+END
+concat.out
+K 25
+svn:wc:ra_dav:version-url
+V 55
+/p/vcftools/code/!svn/ver/881/trunk/examples/concat.out
+END
+annotate.out
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/p/vcftools/code/!svn/ver/881/trunk/examples/annotate.out
+END
+subset.vcf
+K 25
+svn:wc:ra_dav:version-url
+V 55
+/p/vcftools/code/!svn/ver/881/trunk/examples/subset.vcf
+END
+filters.txt
+K 25
+svn:wc:ra_dav:version-url
+V 56
+/p/vcftools/code/!svn/ver/881/trunk/examples/filters.txt
+END
+consensus.out
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/p/vcftools/code/!svn/ver/881/trunk/examples/consensus.out
+END
+shuffle-test.vcf
+K 25
+svn:wc:ra_dav:version-url
+V 61
+/p/vcftools/code/!svn/ver/881/trunk/examples/shuffle-test.vcf
+END
+cmp-test-a.vcf
+K 25
+svn:wc:ra_dav:version-url
+V 59
+/p/vcftools/code/!svn/ver/881/trunk/examples/cmp-test-a.vcf
+END
+cmp-test-b.vcf
+K 25
+svn:wc:ra_dav:version-url
+V 59
+/p/vcftools/code/!svn/ver/881/trunk/examples/cmp-test-b.vcf
+END
+indel-stats.tab
+K 25
+svn:wc:ra_dav:version-url
+V 60
+/p/vcftools/code/!svn/ver/881/trunk/examples/indel-stats.tab
+END
+subset.SNPs.out
+K 25
+svn:wc:ra_dav:version-url
+V 60
+/p/vcftools/code/!svn/ver/881/trunk/examples/subset.SNPs.out
+END
+fix-ploidy.vcf
+K 25
+svn:wc:ra_dav:version-url
+V 59
+/p/vcftools/code/!svn/ver/881/trunk/examples/fix-ploidy.vcf
+END
+fix-ploidy.txt
+K 25
+svn:wc:ra_dav:version-url
+V 59
+/p/vcftools/code/!svn/ver/881/trunk/examples/fix-ploidy.txt
+END
+concat-a.vcf
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/p/vcftools/code/!svn/ver/881/trunk/examples/concat-a.vcf
+END
+concat-b.vcf
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/p/vcftools/code/!svn/ver/881/trunk/examples/concat-b.vcf
+END
+indel-stats.vcf
+K 25
+svn:wc:ra_dav:version-url
+V 60
+/p/vcftools/code/!svn/ver/881/trunk/examples/indel-stats.vcf
+END
+concat-c.vcf
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/p/vcftools/code/!svn/ver/881/trunk/examples/concat-c.vcf
+END
+floats.vcf
+K 25
+svn:wc:ra_dav:version-url
+V 55
+/p/vcftools/code/!svn/ver/881/trunk/examples/floats.vcf
+END
+consensus.out2
+K 25
+svn:wc:ra_dav:version-url
+V 59
+/p/vcftools/code/!svn/ver/881/trunk/examples/consensus.out2
+END
+fill-an-ac.out
+K 25
+svn:wc:ra_dav:version-url
+V 59
+/p/vcftools/code/!svn/ver/881/trunk/examples/fill-an-ac.out
+END
+contrast.vcf
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/p/vcftools/code/!svn/ver/881/trunk/examples/contrast.vcf
+END
+valid-4.0.vcf
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/p/vcftools/code/!svn/ver/881/trunk/examples/valid-4.0.vcf
+END
+valid-4.1.vcf
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/p/vcftools/code/!svn/ver/881/trunk/examples/valid-4.1.vcf
+END
+valid-3.3.vcf
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/p/vcftools/code/!svn/ver/881/trunk/examples/valid-3.3.vcf
+END

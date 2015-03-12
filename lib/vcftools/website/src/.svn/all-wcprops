@@ -1,0 +1,89 @@
+K 25
+svn:wc:ra_dav:version-url
+V 47
+/p/vcftools/code/!svn/ver/987/trunk/website/src
+END
+index.inc
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/p/vcftools/code/!svn/ver/943/trunk/website/src/index.inc
+END
+man_latest.inc
+K 25
+svn:wc:ra_dav:version-url
+V 62
+/p/vcftools/code/!svn/ver/987/trunk/website/src/man_latest.inc
+END
+perl_module.inc
+K 25
+svn:wc:ra_dav:version-url
+V 63
+/p/vcftools/code/!svn/ver/943/trunk/website/src/perl_module.inc
+END
+documentation.inc
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/p/vcftools/code/!svn/ver/943/trunk/website/src/documentation.inc
+END
+downloads.inc
+K 25
+svn:wc:ra_dav:version-url
+V 61
+/p/vcftools/code/!svn/ver/987/trunk/website/src/downloads.inc
+END
+specs.inc
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/p/vcftools/code/!svn/ver/942/trunk/website/src/specs.inc
+END
+examples.inc
+K 25
+svn:wc:ra_dav:version-url
+V 60
+/p/vcftools/code/!svn/ver/987/trunk/website/src/examples.inc
+END
+man_0112a.inc
+K 25
+svn:wc:ra_dav:version-url
+V 61
+/p/vcftools/code/!svn/ver/973/trunk/website/src/man_0112a.inc
+END
+links.inc
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/p/vcftools/code/!svn/ver/942/trunk/website/src/links.inc
+END
+man_0112b.inc
+K 25
+svn:wc:ra_dav:version-url
+V 61
+/p/vcftools/code/!svn/ver/987/trunk/website/src/man_0112b.inc
+END
+perl_examples.inc
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/p/vcftools/code/!svn/ver/943/trunk/website/src/perl_examples.inc
+END
+license.inc
+K 25
+svn:wc:ra_dav:version-url
+V 59
+/p/vcftools/code/!svn/ver/942/trunk/website/src/license.inc
+END
+htslib.inc
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/p/vcftools/code/!svn/ver/942/trunk/website/src/htslib.inc
+END
+index.php
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/p/vcftools/code/!svn/ver/943/trunk/website/src/index.php
+END
