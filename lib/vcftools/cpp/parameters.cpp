@@ -657,6 +657,7 @@ void parameters::check_parameters()
 	if (isatty(STDIN_FILENO) && stream_in)
 		LOG.error("No input detected via stream.");
 
+	// Sivley edit: This no longer generates output so that --recode can be used
 	if (!weir_fst_populations.empty()) num_outputs++;
 	if (num_outputs > 1) error("Only one output function may be called.",0);
 	if (vcf_filename == "" && !stream_in) error("Input file required.", 0);

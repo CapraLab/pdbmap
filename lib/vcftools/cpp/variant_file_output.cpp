@@ -3457,6 +3457,8 @@ void variant_file::output_weir_and_cockerham_fst(const parameters &params)
   vector< vector<bool> > indvs_in_pops;
   unsigned int N_pops = params.weir_fst_populations.size();
   indvs_in_pops.resize(N_pops, vector<bool>(meta_data.N_indv, false));
+  // Store the names of all populations
+  std::vector<string> populations(N_pops);
   vector<bool> all_indv(meta_data.N_indv,false);
   map<string, int> indv_to_idx;
   for (unsigned int ui=0; ui<meta_data.N_indv; ui++)
@@ -3469,14 +3471,21 @@ void variant_file::output_weir_and_cockerham_fst(const parameters &params)
       LOG.error("Could not open Individual file: " + params.weir_fst_populations[ui]);
     string line;
     string tmp_indv;
+    // Sivley edit: store the population names for each individual
+    string loc_pop;
+    string con_pop;
     stringstream ss;
     while (!indv_file.eof())
     {
       getline(indv_file, line);
       ss.str(line);
-      ss >> tmp_indv;
+      ss >> tmp_indv; // record the individual ID
+      // Sivley edit: record the local and continental population names
+      ss >> loc_pop;  // record the local population
+      ss >> con_pop;  // record the continental population
       if (indv_to_idx.find(tmp_indv) != indv_to_idx.end())
       {
+    	populations[ui]=con_pop;
         indvs_in_pops[ui][indv_to_idx[tmp_indv]]=true;
         all_indv[indv_to_idx[tmp_indv]]=true;
       }
@@ -3500,7 +3509,7 @@ void variant_file::output_weir_and_cockerham_fst(const parameters &params)
   ostream out(buf);
   out << "CHROM\tPOS\tNhat\tDhat\tWEIR_AND_COCKERHAM_FST" << endl;
 
-  entry *e = get_entry_object();
+  vcf_entry *e = dynamic_cast<vcf_entry*>(get_entry_object());
   vector<char> variant_line;
 
   double sum1=0.0, sum2 = 0.0;
@@ -3516,7 +3525,7 @@ void variant_file::output_weir_and_cockerham_fst(const parameters &params)
       continue;
     N_kept_entries++;
 
-    e->parse_basic_entry(true);
+    e->parse_basic_entry(true,true,true);
     e->parse_full_entry(true);
     e->parse_genotype_entries(true);
 
@@ -3602,8 +3611,23 @@ void variant_file::output_weir_and_cockerham_fst(const parameters &params)
       sum3 += fst;
       count++;
     }
+    else {
+    	fst = abs(fst); // force positive nan
+    }
+    // Sivley edit: Update the INFO and output
     // Output the SNP information, numerator, denominator, and Fst
+//	std::set<std::string> emptyset;
+//	std::string INFO = e->get_INFO(emptyset,true);
+	// Suppress output so that --recode can be used with Fst
     out << e->get_CHROM() << "\t" << e->get_POS() << "\t" << sum_a << "\t" << sum_all << "\t" << fst << endl;
+//    string pops = accumulate(populations.begin(), populations.end(), string(""));
+//    string INFOheader = "ID=" + pops + ",Number=A,Type=Float,Description=Weir and Cockerham Nhat,Dhat, and Fst";
+//    meta_data.add_INFO_descriptor(INFOheader, meta_data.INFO_map.size());
+//    INFO = INFO + ";" + pops + "_FST=" + output_log::dbl2str(sum_a,5) + "|" + output_log::dbl2str(sum_all,5) + "|" + output_log::dbl2str(fst,5);
+//    e->set_INFO(INFO);
+//    // Check the current state of the entry
+//    const set<string> null;
+//    e->print(out,null,true);
   }
 
   double weighted_Fst = sum1 / sum2;

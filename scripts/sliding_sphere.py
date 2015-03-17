@@ -255,17 +255,21 @@ def ddaf_roi(ddafs):
   y[np.isnan(y)] = -1 # temporary logical replacement (needs to be negative)
   y[y<0] = -0.000000001
   meanDDAF1 = y.sum(0)/((y>=0).sum(0))
-  meanDDAF1[np.isinf(meanDDAF1)] = 0
+  meanDDAF1[np.isinf(meanDDAF1)] = 0 # NaN and Inf are artifacts of division by 0
+  meanDDAF1[np.isnan(meanDDAF1)] = 0 # They should logically equal 0
   # Calculate pop2 mean deltaDAF
   y = np.copy(-ddafs)
   y[np.isnan(y)] = -1
   y[y<0] = -0.000000001
   meanDDAF2 = y.sum(0)/((y>=0).sum(0))
+  meanDDAF2[np.isinf(meanDDAF2)] = 0 # NaN and Inf are artifacts of division by 0
+  meanDDAF2[np.isnan(meanDDAF2)] = 0 # They should logically equal 0
   # Calculate pop1+pop2 mean magnitude deltaDAF
   y = np.abs(np.copy(ddafs))
   invalid = np.isnan(y)
   y[invalid] = 0
   meanDDAFM = y.sum(0)/((~invalid).sum(0))
+  meanDDAFM[np.isinf(meanDDAFM)] = 0 # Inf is an artifacts of division by 0
   # Construct and flatten the return matrix; 10 population combinations, 3 measurements
   return np.column_stack((meanDDAF1,meanDDAF2,meanDDAFM)).reshape(30,).tolist()
 
