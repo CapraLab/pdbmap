@@ -140,6 +140,7 @@ public:
 	void output_INFO_for_each_site(const parameters &params);
 	void write_stats(const parameters &params);
 
+	virtual void print_header(const parameters &params) = 0;
 	virtual void print(const parameters &params) = 0;
 	virtual void print_bcf(const parameters &params) = 0;
 

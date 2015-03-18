@@ -25,6 +25,7 @@ public:
 	void get_entry(vector<char> &out);
 	entry* get_entry_object();
 
+	void print_header(const parameters &params);
 	void print(const parameters &params);
 	void print_bcf(const parameters &params);
 

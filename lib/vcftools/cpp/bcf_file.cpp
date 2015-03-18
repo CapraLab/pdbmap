@@ -193,6 +193,40 @@ bool bcf_file::eof()
 		return(file_in->eof());
 }
 
+void bcf_file::print_header(const parameters &params)
+{
+	LOG.printLOG("Outputting VCF file...\n");
+
+	string output_file = params.output_prefix + ".recode.vcf";
+	streambuf * buf;
+	ofstream temp_out;
+	if (!params.stream_out)
+	{
+		temp_out.open(output_file.c_str(), ios::out);
+		if (!temp_out.is_open()) LOG.error("Could not open VCF Output file: " + output_file, 3);
+		buf = temp_out.rdbuf();
+	}
+	else
+		buf = cout.rdbuf();
+
+	ostream out(buf);
+	if (meta_data.has_idx)
+	{
+		LOG.warning("BCF file contains IDX values in header. These are being removed for conversion to VCF.");
+		meta_data.reprint();
+	}
+	for (unsigned int ui=0; ui<meta_data.lines.size(); ui++)
+		out << meta_data.lines[ui] << endl;
+
+	out << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO";
+	if (meta_data.N_indv > 0)
+		out << "\tFORMAT";
+	for (unsigned int ui=0; ui<meta_data.N_indv; ui++)
+		if (include_indv[ui])
+			out << "\t" << meta_data.indv[ui];
+	out << endl;
+}
+
 void bcf_file::print(const parameters &params)
 {
 	LOG.printLOG("Outputting VCF file...\n");

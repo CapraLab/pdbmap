@@ -3442,6 +3442,8 @@ void variant_file::output_site_depth(const parameters &params, bool output_mean)
 
 void variant_file::output_weir_and_cockerham_fst(const parameters &params)
 { // Implements the bi-allelic version of Weir and Cockerham's Fst
+  int formatlines = meta_data.lines.size();
+
   if (params.weir_fst_populations.size() == 1)
   {
     LOG.printLOG("Require at least two populations to estimate Fst. Skipping\n");
@@ -3507,7 +3509,7 @@ void variant_file::output_weir_and_cockerham_fst(const parameters &params)
     buf = cout.rdbuf();
 
   ostream out(buf);
-  out << "CHROM\tPOS\tNhat\tDhat\tWEIR_AND_COCKERHAM_FST" << endl;
+//  out << "CHROM\tPOS\tNhat\tDhat\tWEIR_AND_COCKERHAM_FST" << endl;
 
   vcf_entry *e = dynamic_cast<vcf_entry*>(get_entry_object());
   vector<char> variant_line;
@@ -3616,18 +3618,30 @@ void variant_file::output_weir_and_cockerham_fst(const parameters &params)
     }
     // Sivley edit: Update the INFO and output
     // Output the SNP information, numerator, denominator, and Fst
-//	std::set<std::string> emptyset;
-//	std::string INFO = e->get_INFO(emptyset,true);
 	// Suppress output so that --recode can be used with Fst
-    out << e->get_CHROM() << "\t" << e->get_POS() << "\t" << sum_a << "\t" << sum_all << "\t" << fst << endl;
-//    string pops = accumulate(populations.begin(), populations.end(), string(""));
-//    string INFOheader = "ID=" + pops + ",Number=A,Type=Float,Description=Weir and Cockerham Nhat,Dhat, and Fst";
-//    meta_data.add_INFO_descriptor(INFOheader, meta_data.INFO_map.size());
-//    INFO = INFO + ";" + pops + "_FST=" + output_log::dbl2str(sum_a,5) + "|" + output_log::dbl2str(sum_all,5) + "|" + output_log::dbl2str(fst,5);
-//    e->set_INFO(INFO);
-//    // Check the current state of the entry
-//    const set<string> null;
-//    e->print(out,null,true);
+//    out << e->get_CHROM() << "\t" << e->get_POS() << "\t" << sum_a << "\t" << sum_all << "\t" << fst << endl;
+
+    // Extract the INFO for this vcf_entry
+    std::set<std::string> emptyset;
+    std::string INFO = e->get_INFO(emptyset,true);
+    // Determine the populations involved in this Fst and construct new INFO descriptor string
+    string pops = accumulate(populations.begin(), populations.end(), string(""));
+    string INFOheader = "##INFO=<ID=" + pops + ",Number=A,Type=Float,Description=\"Weir and Cockerham Scores. Format: Nhat|Dhat|Fst\">";
+    // Add the INFO descriptor to the meta_data (header) if not already done
+    if (formatlines == meta_data.lines.size()) {
+    	meta_data.lines.push_back(INFOheader);
+//    	meta_data.add_INFO_descriptor(INFOheader, meta_data.INFO_map.size());
+    	this->print_header(params);
+    }
+    // Construct INFO string for this vcf_entry
+    INFO = INFO + ";" + pops + "_FST=" + output_log::dbl2str(sum_a,5) + "|" + output_log::dbl2str(sum_all,5) + "|" + output_log::dbl2str(fst,5);
+    e->set_INFO(INFO);
+    e->parse_basic_entry(true, true, true);
+    e->parse_full_entry(true);
+    e->parse_genotype_entries(true,true,true,true);
+    // Check the current state of the entry
+    const set<string> null;
+    e->print(out,null,true);
   }
 
   double weighted_Fst = sum1 / sum2;

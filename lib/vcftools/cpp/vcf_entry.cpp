@@ -275,8 +275,12 @@ void vcf_entry::print(ostream &out, const set<string> &INFO_to_keep, bool keep_a
 
 	if (keep_all_INFO == false)
 		out << '\t' << get_INFO(INFO_to_keep);
-	else
-		out << '\t' << INFO_str;
+	else {
+		// Sivley edit: INFO_str not updated by set_INFO
+		//		out << '\t' << INFO_str;
+		std::set<std::string> emptyset;
+		out << '\t' << get_INFO(emptyset,true);
+	}
 
 	pair<int, int> genotype;
 	string GFILTER_tmp;

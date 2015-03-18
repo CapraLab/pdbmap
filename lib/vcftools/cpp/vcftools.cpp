@@ -97,6 +97,7 @@ int main(int argc, char *argv[])
 	if (params.output_TsTv_by_count) vf->output_TsTv_by_count(params);
 	if (params.output_TsTv_by_qual) vf->output_TsTv_by_quality(params);
 	if (params.output_TsTv_summary) vf->output_TsTv_summary(params);
+	// Sivley edit: move this to after the Weir and Cockerham Fst calculation
 	if (params.recode == true) vf->print(params);
 	if (params.recode_bcf == true) vf->print_bcf(params);
 	if (params.output_filter_summary == true) vf->output_FILTER_summary(params);
@@ -109,6 +110,8 @@ int main(int argc, char *argv[])
 	if (params.output_PCA == true) vf->output_PCA(params);
 	if (params.output_N_PCA_SNP_loadings > 0) vf->output_PCA_SNP_loadings(params);
 
+	// Sivley edit: Modified print_header function
+//	if (params.fst_window_size <= 0 && params.weir_fst_populations.size() > 0) vf->print_header(params);
 	if (params.fst_window_size <= 0 && params.weir_fst_populations.size() > 0) vf->output_weir_and_cockerham_fst(params);
 	else if (params.weir_fst_populations.size() > 0) vf->output_windowed_weir_and_cockerham_fst(params);
 
