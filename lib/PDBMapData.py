@@ -23,7 +23,7 @@ import vcf # PyVCF
 
 class PDBMapData():
   
-  def __init__(self,vep="variant_effect_predictor.pl",plink="plink",j=1):
+  def __init__(self,vep="variant_effect_predictor.pl",plink="plink",dname='1kg3',j=1):
     self.vep = vep
     if not os.path.exists(vep):
       msg = "ERROR (PDBMapData) VEP location invalid: %s"%vep
@@ -121,6 +121,24 @@ class PDBMapData():
     if 'ERATE'   not in record.INFO: record.INFO['ERATE']   = None
     if 'THETA'   not in record.INFO: record.INFO['THETA']   = None
     if 'LDAF'    not in record.INFO: record.INFO['LDAF']    = None
+    
+    # Ensure 1000 Genomes Fst fields are populated or None
+    popfst  = ['AMREASFST','AMRSASFST','AMREURFST','AMRAFRFST','EASSASFST']
+    popfst += ['EASEURFST','EASAFRFST','SASEURFST','SASAFRFST','EURAFRFST']
+    popfst += ['AMREASSASEURAFRFST'] # all-populations Fst
+    for fst in popfst:
+      if pop in record.INFO:
+        pop = pop[:-3] # Remove the FST suffix
+        pop = pop if pop != 'AMREASSASEURAFR' else 'ALLPOP'
+        nhat,dhat,fst = record.INFO[pop].split('|')
+        record.INFO["%s_Nhat"%pop] = nhat
+        record.INFO["%s_Dhat"%pop] = dhat
+        record.INFO["%s_Fst"%pop]  = fst
+      else:
+        pop = pop[:-3] # Remove the FST suffix
+        record.INFO["%s_Nhat"%pop] = None
+        record.INFO["%s_Dhat"%pop] = None
+        record.INFO["%s_Fst"%pop]  = None
 
     # Allele frequency is sometimes reecorded as a tuple or list
     # Enforce biallelic assumption
@@ -169,8 +187,9 @@ class PDBMapData():
   def load_vcf(self,fname):
     """ Pipe VCF file through VEP and yield VEP rows """
     print "Initializing VCF generator."
-    # Parse the VCF output from VEP
-    parser = vcf.Reader(self.load_vep(fname,'vcf'),prepend_chr=True)
+    # Parse the VCF output from VEP, save to cache
+    cache  = 'data/cache/%s'%os.path.basename(fname)
+    parser = vcf.Reader(self.load_vep(fname,'vcf',cache),prepend_chr=True)
     # Determine Info headers
     info_headers = parser.infos.keys()
     # Determine Consequence headers
@@ -196,8 +215,9 @@ class PDBMapData():
   def load_bed(self,fname,id_type="id"):
     """ Load data from BED """
     print "Initializing BED generator."
-    # Parse the VCF output from VEP
-    parser = vcf.Reader(self.load_vep(fname,id_type))
+    # Parse the VCF output from VEP, save to cache
+    cache  = 'data/cache/%s'%os.path.basename(fname)
+    parser = vcf.Reader(self.load_vep(fname,id_type,cache))
     # Determine Info headers
     info_headers = parser.infos.keys()
     # Determine Consequence headers
@@ -242,12 +262,12 @@ class PDBMapData():
             types.insert(i,"VARCHAR(250)") # reasonably large varchar
     table_def = ["%s %s"%(header[i],types[i]) for i in range(len(header))]
     query = "DROP TABLE IF EXISTS pdbmap_supp.%s"
-    query = query%io.dlabel
+    query = query%self.dname
     io.secure_command(query)
     query = "CREATE TABLE IF NOT EXISTS pdbmap_supp.%s (%s, PRIMARY KEY(chr,start,end,name))"
-    query = query%(io.dlabel,','.join(table_def))
+    query = query%(self.dname,','.join(table_def))
     io.secure_command(query)
-    query  = "LOAD DATA LOCAL INFILE '%s' INTO TABLE pdbmap_supp.%s "%(fname,io.dlabel)
+    query  = "LOAD DATA LOCAL INFILE '%s' INTO TABLE pdbmap_supp.%s "%(fname,self.dname)
     if delim != '\t':
       query += r"FIELDS TERMINATED BY '%s'"%delim
     else:
@@ -256,10 +276,10 @@ class PDBMapData():
     io.secure_command(query)
     # Make any necessary indexing conversions
     if indexing == 'ucsc':
-      query = "UPDATE IGNORE pdbmap_supp.%s SET start=start+1, end=end+1 ORDER BY start,end DESC"%io.dlabel
+      query = "UPDATE IGNORE pdbmap_supp.%s SET start=start+1, end=end+1 ORDER BY start,end DESC"%self.dname
       io.secure_command(query)
     elif indexing == 'ensembl':
-      query = "UPDATE IGNORE pdbmap_supp.%s SET end=end+1 ORDER BY start,end DESC"%io.dlabel
+      query = "UPDATE IGNORE pdbmap_supp.%s SET end=end+1 ORDER BY start,end DESC"%self.dname
       io.secure_command(query)
     # Retain only rsID if not VEP-default format
     if id_type != 'default':
@@ -285,14 +305,18 @@ class PDBMapData():
     try:
       # Call VEP and capture stdout in realtime
       p = sp.Popen(cmd,stdout=sp.PIPE)
+      if self.dname == '1kg3':
+        # Pipe output to vcf_fst for Fst calculations
+        p1 = p
+        p = sp.Popen("lib/vcf_fst.sh",stdin=p1.stdout)
       if outfile:
-        fout = open(outfile,'wb')
-      for line in iter(p.stdout.readline,b''):
-        if outfile:
+        fout = open(outfile,'wb') # Open cache for writing
+      for line in iter(p2.stdout.readline,b''):
+        if outfile: # Write to cache before yielding
           fout.write(line)
         yield line
       if outfile:
-        fout.close()
+        fout.close() # Close the cache
     except KeyboardInterrupt:
       msg = "ERROR (PDBMapData) Keyboard interrupt. Canceling VEP...\n"
       sys.stderr.write(msg)

@@ -160,7 +160,7 @@ class PDBMap():
 
   def load_data(self,dname,dfile,indexing=None):
     """ Loads a data file into the PDBMap database """
-    d = PDBMapData.PDBMapData(self.vep,self.plink)
+    d = PDBMapData.PDBMapData(self.vep,self.plink,dname)
     if not os.path.exists(dfile):
       dfile = "%s.ped"%dfile # Test if PEDMAP basename
       if not os.path.exists(dfile):
