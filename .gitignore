@@ -16,6 +16,7 @@ scripts/
 *.tab
 *.o*
 *.e*
+*.pyc
 
 ## OS Generated files ##
 .DS_Store
