@@ -419,7 +419,7 @@ if __name__== "__main__":
   parser.add_argument("-v", "--version", action="version", 
               version="PDBMap version 1.8")
   parser.add_argument("cmd",nargs='?', 
-              help="PDBMap subroutine")
+              help="PDBMap subroutine: refresh, load_pdb, load_unp, load_data, intersect, visualize")
   parser.add_argument("args",nargs=argparse.REMAINDER, 
               help="Arguments to cmd")
   parser.add_argument("--dbhost", 
