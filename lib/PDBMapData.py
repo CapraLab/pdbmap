@@ -15,7 +15,8 @@
 #=============================================================================#
 
 # See main check for cmd line parsing
-import sys,os,csv,re
+import sys,os,csv,re,gzip
+import numpy as np
 import subprocess as sp
 from Bio import pairwise2
 from Bio.SubsMat import MatrixInfo as matlist
@@ -25,6 +26,7 @@ class PDBMapData():
   
   def __init__(self,vep="variant_effect_predictor.pl",plink="plink",dname='1kg3',j=1):
     self.vep = vep
+    self.dname=dname
     if not os.path.exists(vep):
       msg = "ERROR (PDBMapData) VEP location invalid: %s"%vep
       raise Exception(msg)
@@ -126,14 +128,18 @@ class PDBMapData():
     popfst  = ['AMREASFST','AMRSASFST','AMREURFST','AMRAFRFST','EASSASFST']
     popfst += ['EASEURFST','EASAFRFST','SASEURFST','SASAFRFST','EURAFRFST']
     popfst += ['AMREASSASEURAFRFST'] # all-populations Fst
-    for fst in popfst:
+    for pop in popfst:
       if pop in record.INFO:
+        nhat,dhat,fst = record.INFO[pop]
         pop = pop[:-3] # Remove the FST suffix
         pop = pop if pop != 'AMREASSASEURAFR' else 'ALLPOP'
-        nhat,dhat,fst = record.INFO[pop].split('|')
-        record.INFO["%s_Nhat"%pop] = nhat
-        record.INFO["%s_Dhat"%pop] = dhat
-        record.INFO["%s_Fst"%pop]  = fst
+        if nhat=='nan' or dhat=='nan':
+          print "nhat/dhat is string nan:",nhat
+        if np.isnan(nhat) or np.isnan(dhat):
+          print "nhat/dhat is numpy nan:",nhat,dhat
+        record.INFO["%s_Nhat"%pop] = nhat if not np.isnan(nhat) else None
+        record.INFO["%s_Dhat"%pop] = dhat if not np.isnan(dhat) else None
+        record.INFO["%s_Fst"%pop]  = fst  if not np.isnan(fst)  else None
       else:
         pop = pop[:-3] # Remove the FST suffix
         record.INFO["%s_Nhat"%pop] = None
@@ -308,10 +314,10 @@ class PDBMapData():
       if self.dname == '1kg3':
         # Pipe output to vcf_fst for Fst calculations
         p1 = p
-        p = sp.Popen("lib/vcf_fst.sh",stdin=p1.stdout)
+        p = sp.Popen(["bash","lib/vcf_fst.sh"],stdin=p1.stdout,stdout=sp.PIPE)
       if outfile:
-        fout = open(outfile,'wb') # Open cache for writing
-      for line in iter(p2.stdout.readline,b''):
+        fout = gzip.open(outfile,'wb') # Open cache for writing
+      for line in iter(p.stdout.readline,b''):
         if outfile: # Write to cache before yielding
           fout.write(line)
         yield line

@@ -5,14 +5,17 @@
 
 PERMUTATIONS = 999
 
-from profilehooks import profile
+# All processes use the same seed
+# Change the seed if the process load is imbalanced
 import numpy as np
+np.random.seed(5)
+random.seed(5)
+
+from profilehooks import profile
 np.set_printoptions(threshold='nan')
 from scipy.spatial import KDTree
 from scipy.stats import chisquare,fisher_exact,describe
 import sys,os,csv,time,math,random,copy,gzip
-np.random.seed(5)
-random.seed(5)
 np.seterr(all='ignore')
 import MySQLdb, MySQLdb.cursors
 from warnings import filterwarnings,resetwarnings
@@ -23,8 +26,8 @@ filterwarnings('ignore', category = MySQLdb.Warning)
 
 def connect(retry=True):
   try:
-    con = MySQLdb.connect(host='10.109.20.218',user='mike',passwd='cheezburger',
-                          db='pdbmap_v10',cursorclass=MySQLdb.cursors.Cursor)
+    con = MySQLdb.connect(host='chgr2.accre.vanderbilt.edu',user='sivleyrm',passwd='global-trifecta',
+                          db='pdbmap_v11',cursorclass=MySQLdb.cursors.Cursor)
     return con
   except MySQLdb.Error as e:
     msg = "There was an error connecting to the database: %s\n"%e
@@ -94,14 +97,6 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
       # Load the structure
       residues,nbrs3D,nbrs1D = load_structure(structid,biounit,radius,verbose)
 
-      # Load the 1000 Genomes Phase III sample-population assignments
-      # Sample order shared between panel file and genoptypes field,
-      # so only the population list is loaded; order must not be altered
-      # with open('/dors/capra_lab/data/1kg/vcf/integrated_call_samples_v3.20130502.ALL.panel','rb') as fin:
-      #   fin.readline() # burn the header
-      #   reader = csv.reader(fin,delimiter='\t')
-      #   spop   = [r[2] for r in reader]
-
       # Run the sliding sphere analysis over permutated SNP-residue assignments
       perm_spheres = []
       if verbose:
@@ -114,22 +109,9 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
         stats = sliding_sphere(perm_residues,(nbrs3D,nbrs1D),radius,verbose)
         pspheres = [perm_residues[j] + stat for j,stat in enumerate(stats)]
         perm_spheres.append(pspheres)
+      perm_spheres = np.array(perm_spheres)
       if verbose:
         print " (%2.2fs)"%(time.time()-t0) # Report permutation testing completion.
-
-      # Run the sliding sphere analysis over the permutation values
-      perm_spheres = np.array(perm_spheres)
-      # print 'info:',perm_spheres[0,:,:-60].shape
-      # print 'stats:',np.percentile(perm_spheres[:,:,-60:],[5,25,50,75,95],axis=0).shape
-      # perm_stats   = np.concatenate((perm_spheres[0,:,:-60],np.percentile(perm_spheres[:,:,-60:],[5,25,50,75,95],axis=0)),axis=1)
-      np.savez_compressed(perm_file,perm_spheres)
-      # To load this file, use syntax:
-      # with np.load('fname') as npzfile:
-      #   x = npzfile.items()[0][1]
-
-      # perm_shape   = perm_spheres.shape
-      # flatten      = (perm_shape[0]*perm_shape[1],perm_shape[2])
-      # np.savetxt(perm_file,perm_spheres.reshape(flatten),fmt='%s',delimiter='\t',comments='',header='\t'.join(header[:-60]))
 
       # Calculate sliding sphere over observed SNP assignments
       if verbose:
@@ -141,18 +123,34 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
       spheres = np.array([residues[i] + stat for i,stat in enumerate(stats)])
 
       # Total descriptors:   19
-      # Total measurements: 102
-      # Total p-values:     102
+      # Total measurements: 122
+      # Total p-values:     122
       # -----------------------
       # Total descriptors:   19
-      # Total numeric:      204
-      # Total columns:      223
+      # Total numeric:      244
+      # Total columns:      263
 
       # Calculate the empirical p-value of each measurement for each sphere
-      perm_extremes = np.array([np.sum(sphere[-102:] <= perm_spheres[:,i,-102:],axis=0) for i,sphere in enumerate(spheres)]) 
+      perm_extremes = np.array([np.sum(sphere[-122:] <= perm_spheres[:,i,-122:],axis=0) for i,sphere in enumerate(spheres)]) 
       pvals = (perm_extremes+1) / float(PERMUTATIONS+1)
       spheres = np.concatenate((spheres,pvals),axis=1)
+      
+      ## Write the observed results to file
       np.savetxt(obs_file,spheres,header='\t'.join(header),fmt='%s',delimiter='\t',comments='')
+
+      ## Write the permutation results to file
+      # Extract information columns
+      info  = perm_spheres[0,:,:19] # slice info from first permutation
+      # Calculate percentiles for numeric columns
+      stats = np.percentile(perm_spheres[:,:,19:],[0,25,50,75,100],axis=0)
+      stats = stats.swapaxes(0,1).swapaxes(1,2)
+      # Duplicate information columns along a third axis to match stats
+      info = np.repeat(info[:,:,None],5,axis=2)
+      # Recombine info with stats
+      perm_spheres = np.concatenate((info,stats),axis=1)
+      # Write the 5-number summary to a compressed matrix file
+      # ax1: residue, ax2: metric, ax3: 5-number summary
+      np.savez_compressed(perm_file,perm_spheres)
 
       if verbose:
         print "100%% (%2.2fs)"%(time.time()-t0)
@@ -168,6 +166,7 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
         os.remove(perm_file)
       # Report the error, but continue to the next biological assembly
       sys.stderr.write("Exception occurred for biological assembly %s.%s: %s. Skipping.\n"%(structid,biounit,str(e).replace('\n','; ')))
+      raise
   # end main
   print " (%2.2fs)"%(time.time()-pt0) # Report process completion.
 
@@ -180,26 +179,32 @@ def sliding_sphere(residues,nbrs,radius,verbose=False):
 def sphere(r,residues,nbrs,radius):
   nbrs3D,nbrs1D = nbrs
   sphere   = isolate_sphere(r,residues,radius,nbrs3D)
+  print "\nSphere:"
+  print sphere
   scounts  = sphere_count(sphere) # Residue and variant counts (by pop)
   sdaf     = daf(sphere)     # Calculate DAF
   scdaf    = cumdaf(sdaf)    # Cumulative frequency (by pop)
   sddaf    = ddaf(sdaf)      # Calculate deltaDAF
   sddafroi = ddaf_roi(sddaf) # Sphere deltaDAF statistics
+  fstroi   = fst_roi(sphere) # Sphere Fst statistics
   # Repeat analysis with comparable sequence windows
   window   = isolate_window(r,residues,nbrs1D)
   wcounts  = sphere_count(window)[1:] # Variant counts only (by pop)
   wdaf     = daf(window)     # Calculate DAF
-  wcdaf    = cumdaf(wdaf)  # Cumulative frequency (by pop)
+  wcdaf    = cumdaf(wdaf)    # Cumulative frequency (by pop)
   wddaf    = ddaf(wdaf)      # Calculate deltaDAF
-  wddafroi = ddaf_roi(wddaf) # Sphere deltaDAF statistics
+  wddafroi = ddaf_roi(wddaf) # Window deltaDAF statistics
+  wfstroi  = fst_roi(window) # Window Fst statistics
   # Returns:
   #  1 residue count + 16 population SNP counts (sphere)
   #  5 cumulative SNP deltaDAF                  (sphere)
   #  30 deltaDAF measurements                   (sphere)
+  #  10 Fst measurements                        (sphere)
   #  16 population SNP counts                   (window)
   #  5 cumulative SNP deltaDAF                  (window)
   #  30 deltaDAF measurements                   (window)
-  return scounts+scdaf+sddafroi+wcounts+wcdaf+wddafroi
+  #  10 Fst measurements                        (window)
+  return scounts+scdaf+sddafroi+fstroi+wcounts+wcdaf+wddafroi+wfstroi
 
 def isolate_sphere(center,residues,radius,nbrs=None):
   center = (center[11],center[12],center[14],center[15])
@@ -229,6 +234,18 @@ def sphere_count(residues):
   # Total return vector length => 17
   return [numres,allsnp]+numsnp+shrsnp
 
+def fst_roi(residues):
+  if not residues: return np.repeat([None],10)
+  print "\n+~+~+~+~+~+~+~+~+~+~+~+~+~+~+~+~+"
+  print residues.shape
+  nhat_agg = np.sum([[r[i] for i in range(16,27)] for r in residues if r[1]],axis=0)
+  dhat_agg = np.sum([[r[i] for r in range(27,37)] for r in residues if r[1]],axis=0)
+  print nhat_agg.shape
+  print dhat_agg.shape
+  print (nhat_agg/dhat_agg).shape
+  print nhat_agg/dhat_agg
+  return (nhat_agg / dhat_agg).to_list()
+
 def cumdaf(dafs):
   if not dafs: return [0,0,0,0,0]
   # Returns 5 cumulative deltaDAF
@@ -246,12 +263,14 @@ def ddaf(dafs,weighted=False):
   return np.array([[r[i]-r[j] if r[i]>0 or r[j]>0 else np.nan for r in dafs] for i in range(5) for j in range(i+1,5)]).transpose()
 
 def ddaf_roi(ddafs):
-  # Sphere isn't empty and isn't full of NaN
-  if not np.any(ddafs) or np.all(np.isnan(ddafs)):
+  # Sphere isn't empty and isn't full of NaN and there are >1 SNPs in the sphere
+  if not np.any(ddafs) or np.all(np.isnan(ddafs)) or ddafs.shape[0]<2:
     # Null values for 10 pop combos (i) and 3 metrics (j)
     return [0 for i in range(10) for j in range(3)] # 0 for each population pair
   # Calculate pop1 mean deltaDAF
   y = np.copy(ddafs)
+  # If a column has <2 SNPs, don't calculate the aggregate dDAF for that column
+  # y[:,(~np.isnan(y)).sum(0)<2] = np.nan
   y[np.isnan(y)] = -1 # temporary logical replacement (needs to be negative)
   y[y<0] = -0.000000001
   meanDDAF1 = y.sum(0)/((y>=0).sum(0))
@@ -259,6 +278,8 @@ def ddaf_roi(ddafs):
   meanDDAF1[np.isnan(meanDDAF1)] = 0 # They should logically equal 0
   # Calculate pop2 mean deltaDAF
   y = np.copy(-ddafs)
+  # If a column has <2 SNPs, don't calculate the aggregate dDAF for that column
+  # y[:,(~np.isnan(y)).sum(0)<2] = np.nan
   y[np.isnan(y)] = -1
   y[y<0] = -0.000000001
   meanDDAF2 = y.sum(0)/((y>=0).sum(0))
@@ -266,10 +287,18 @@ def ddaf_roi(ddafs):
   meanDDAF2[np.isnan(meanDDAF2)] = 0 # They should logically equal 0
   # Calculate pop1+pop2 mean magnitude deltaDAF
   y = np.abs(np.copy(ddafs))
+  # If a column has <2 SNPs, don't calculate the aggregate dDAF for that column
+  # y[:,(~np.isnan(y)).sum(0)<2] = np.nan
   invalid = np.isnan(y)
   y[invalid] = 0
   meanDDAFM = y.sum(0)/((~invalid).sum(0))
+  meanDDAFM[np.isinf(meanDDAFM)] = 0 # NaN and Inf are artifacts of division by 0
   meanDDAFM[np.isinf(meanDDAFM)] = 0 # Inf is an artifacts of division by 0
+  # Mask results for spheres with <2 SNPs in the population combination
+  novar = (~np.isnan(ddafs)).sum(0)<2 # Not enough (or no) variation
+  meanDDAF1[novar] = np.nan
+  meanDDAF2[novar] = np.nan
+  meanDDAFM[novar] = np.nan
   # Construct and flatten the return matrix; 10 population combinations, 3 measurements
   return np.column_stack((meanDDAF1,meanDDAF2,meanDDAFM)).reshape(30,).tolist()
 
@@ -325,7 +354,12 @@ def load_structure(structid,biounit,radius,verbose=False):
   # Load the structure with 1000 Genomes Phase III population allele frequencies
   q  = "SELECT !ISNULL(c.gc_id) as isvar,c.consequence LIKE '%%missense_variant%%' as issnp,"
   q += "d.name,d.amr_af,d.eas_af,d.sas_af,d.eur_af,d.afr_af,"
-  q += "d.da,d.ref_allele,d.alt_allele,e.model,e.chain,e.unp,a.seqid,a.icode, "
+  q += "d.da,d.ref_allele,d.alt_allele,e.model,e.chain,e.unp,a.seqid,a.icode,"
+  q += "d.amreas_Nhat,d.amrsas_Nhat,d.amreur_Nhat,d.amrafr_Nhat,d.eassas_Nhat,"
+  q += "d.easeur_Nhat,d.easafr_Nhat,d.saseur_Nhat,d.sasafr_Nhat,d.eurafr_Nhat,"
+  q += "d.allpop_Nhat,d.amreas_Dhat,d.amrsas_Dhat,d.amreur_Dhat,d.amrafr_Dhat,"
+  q += "d.eassas_Dhat,d.easeur_Dhat,d.easafr_Dhat,d.saseur_Dhat,d.sasafr_Dhat,"
+  q += "d.eurafr_Dhat,d.allpop_Dhat,"
   q += "a.x,a.y,a.z FROM Residue as a "
   q += "INNER JOIN Chain as e ON a.label=e.label AND a.structid=e.structid "
   q += "AND a.biounit=e.biounit AND a.model=e.model AND a.chain=e.chain "
@@ -346,8 +380,6 @@ def load_structure(structid,biounit,radius,verbose=False):
   try:
     c.execute(q)
   except:
-    os.system('ping 10.109.20.218')
-    os.system('traceroute 10.109.20.218')
     # Print some summary info about the connection
     # Then try again. If it fails again, let it
     c = con.cursor()

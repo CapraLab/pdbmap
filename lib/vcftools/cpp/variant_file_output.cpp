@@ -3618,10 +3618,11 @@ void variant_file::output_weir_and_cockerham_fst(const parameters &params)
     	fst = abs(fst); // force positive nan
     }
 
+    // Sivley edit:
     // Add the INFO descriptor to the meta_data (header) if not already done
     if (add_format) {
     	pops = accumulate(populations.begin(), populations.end(), string("")); // only needs to be inferred once
-    	string INFOheader = "##INFO=<ID=" + pops + "FST,Number=A,Type=Float,Description=\"Weir and Cockerham Scores. Format: Nhat|Dhat|Fst\">";
+    	string INFOheader = "##INFO=<ID=" + pops + "FST,Number=3,Type=Float,Description=\"Weir and Cockerham Scores. Format: Nhat,Dhat,Fst\">";
     	meta_data.lines.push_back(INFOheader);
     	this->print_header(params);
     	add_format=false;
@@ -3629,7 +3630,7 @@ void variant_file::output_weir_and_cockerham_fst(const parameters &params)
     // Update the INFO string for this vcf_entry
     std::set<std::string> emptyset;
     std::string INFO = e->get_INFO(emptyset,true);
-    INFO = INFO + ";" + pops + "FST=" + output_log::dbl2str(sum_a,5) + "|" + output_log::dbl2str(sum_all,5) + "|" + output_log::dbl2str(fst,5);
+    INFO = INFO + ";" + pops + "FST=" + output_log::dbl2str(sum_a,5) + "," + output_log::dbl2str(sum_all,5) + "," + output_log::dbl2str(fst,5);
     e->set_INFO(INFO);
     e->parse_basic_entry(true, true, true);
     e->parse_full_entry(true);
