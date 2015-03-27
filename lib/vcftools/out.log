@@ -1,0 +1,13 @@
+
+VCFtools - v0.1.13
+(C) Adam Auton and Anthony Marcketta 2009
+
+Parameters as interpreted:
+	--gzvcf /dors/capra_lab/data/1kg/vcf/ALL.chr22.phase3_shapeit2_mvncall_integratedUsing zlib version: 1.2.3
+Versions of zlib >= 1.2.4 will be *much* faster when reading zipped VCF files.
+After filtering, kept 2504 out of 2504 Individuals
+Outputting Weir and Cockerham Fst estimates.
+Outputting VCF file...
+04 out of 2504 Individuals
+Outputting Weir and Cockerham Fst estimates.
+Outputting VCF file...
