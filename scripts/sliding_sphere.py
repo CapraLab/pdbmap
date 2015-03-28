@@ -123,16 +123,16 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
       stats = sliding_sphere(residues,(nbrs3D,nbrs1D),radius,verbose)
       spheres = np.array([residues[i][:16] + residues[i][-3:] + stat for i,stat in enumerate(stats)])
 
-      # Total descriptors:   19
-      # Total measurements: 125
-      # Total p-values:     125
+      # Total descriptors:   20
+      # Total measurements: 124
+      # Total p-values:     124
       # -----------------------
-      # Total descriptors:   19
-      # Total numeric:      250
-      # Total columns:      269
+      # Total descriptors:   20
+      # Total numeric:      248
+      # Total columns:      268
 
       # Calculate the empirical p-value of each measurement for each sphere
-      perm_extremes = np.array([np.sum((np.isnan(np.array(sphere[-125:],dtype=np.float64))) | (sphere[-125:] <= perm_spheres[:,i,-125:]),axis=0) for i,sphere in enumerate(spheres)]) 
+      perm_extremes = np.array([np.sum((np.isnan(np.array(sphere[-124:],dtype=np.float64))) | (sphere[-124:] <= perm_spheres[:,i,-124:]),axis=0) for i,sphere in enumerate(spheres)]) 
       pvals = (perm_extremes+1) / float(PERMUTATIONS+1)
       spheres = np.concatenate((spheres,pvals),axis=1)
       
@@ -141,9 +141,9 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
 
       ## Write the permutation results to file
       # Extract information columns
-      info  = perm_spheres[0,:,:19] # slice info from first permutation
+      info  = perm_spheres[0,:,:20] # slice info from first permutation
       # Calculate percentiles for numeric columns
-      stats = np.percentile(perm_spheres[:,:,19:],[0,25,50,75,100],axis=0)
+      stats = np.percentile(perm_spheres[:,:,20:],[0,25,50,75,100],axis=0)
       stats = stats.swapaxes(0,1).swapaxes(1,2)
       # Duplicate information columns along a third axis to match stats
       info = np.repeat(info[:,:,None],5,axis=2)
