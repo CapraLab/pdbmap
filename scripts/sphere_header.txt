@@ -79,6 +79,7 @@ easafr_fst
 saseur_fst
 sasafr_fst
 eurafr_fst
+allpop_fst
 w_snpcount
 w_amr_snps
 w_eas_snps
@@ -140,6 +141,7 @@ w_easafr_fst
 w_saseur_fst
 w_sasafr_fst
 w_eurafr_fst
+w_allpop_fst
 snpcount_pval
 amr_snps_pval
 eas_snps_pval
@@ -201,6 +203,7 @@ easafr_fst_pval
 saseur_fst_pval
 sasafr_fst_pval
 eurafr_fst_pval
+allpop_fst_pval
 w_snpcount_pval
 w_amr_snps_pval
 w_eas_snps_pval
@@ -262,3 +265,4 @@ w_easafr_fst_pval
 w_saseur_fst_pval
 w_sasafr_fst_pval
 w_eurafr_fst_pval
+w_allpop_fst_pval

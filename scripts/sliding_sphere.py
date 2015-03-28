@@ -3,7 +3,7 @@
 # Implementation of the sliding sphere analysis for variant localization 
 # and population differentiation.
 
-PERMUTATIONS = 99
+PERMUTATIONS = 9
 
 # All processes use the same seed
 # Change the seed if the process load is imbalanced
@@ -124,15 +124,15 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
       spheres = np.array([residues[i][:16] + residues[i][-3:] + stat for i,stat in enumerate(stats)])
 
       # Total descriptors:   19
-      # Total measurements: 122
-      # Total p-values:     122
+      # Total measurements: 125
+      # Total p-values:     125
       # -----------------------
       # Total descriptors:   19
-      # Total numeric:      244
-      # Total columns:      263
+      # Total numeric:      250
+      # Total columns:      269
 
       # Calculate the empirical p-value of each measurement for each sphere
-      perm_extremes = np.array([np.sum(sphere[-122:] <= perm_spheres[:,i,-122:],axis=0) for i,sphere in enumerate(spheres)]) 
+      perm_extremes = np.array([np.sum((np.isnan(np.array(sphere[-125:],dtype=np.float64))) | (sphere[-125:] <= perm_spheres[:,i,-125:]),axis=0) for i,sphere in enumerate(spheres)]) 
       pvals = (perm_extremes+1) / float(PERMUTATIONS+1)
       spheres = np.concatenate((spheres,pvals),axis=1)
       
@@ -198,11 +198,12 @@ def sphere(r,residues,nbrs,radius):
   #  1 residue count + 16 population SNP counts (sphere)
   #  5 cumulative SNP deltaDAF                  (sphere)
   #  30 deltaDAF measurements                   (sphere)
-  #  10 Fst measurements                        (sphere)
+  #  11 Fst measurements                        (sphere)
   #  16 population SNP counts                   (window)
   #  5 cumulative SNP deltaDAF                  (window)
   #  30 deltaDAF measurements                   (window)
-  #  10 Fst measurements                        (window)
+  #  11 Fst measurements                        (window)
+  print scounts+scdaf+sddafroi+fstroi+wcounts+wcdaf+wddafroi+wfstroi
   return scounts+scdaf+sddafroi+fstroi+wcounts+wcdaf+wddafroi+wfstroi
 
 def isolate_sphere(center,residues,radius,nbrs=None):
