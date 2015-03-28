@@ -3,7 +3,7 @@
 # Implementation of the sliding sphere analysis for variant localization 
 # and population differentiation.
 
-PERMUTATIONS = 9
+PERMUTATIONS = 999
 
 # All processes use the same seed
 # Change the seed if the process load is imbalanced
@@ -132,7 +132,9 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
       # Total columns:      268
 
       # Calculate the empirical p-value of each measurement for each sphere
-      perm_extremes = np.array([np.sum((np.isnan(np.array(sphere[-124:],dtype=np.float64))) | (sphere[-124:] <= perm_spheres[:,i,-124:]),axis=0) for i,sphere in enumerate(spheres)]) 
+      perm_extremes = np.array([np.sum((np.isnan(np.array(sphere[-124:],dtype=np.float64))) | \
+                      (sphere[-124:] <= perm_spheres[:,i,-124:]), \
+                      axis=0) for i,sphere in enumerate(spheres)]) 
       pvals = (perm_extremes+1) / float(PERMUTATIONS+1)
       spheres = np.concatenate((spheres,pvals),axis=1)
       
@@ -146,11 +148,10 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
       stats = np.percentile(perm_spheres[:,:,20:],[0,25,50,75,100],axis=0)
       stats = stats.swapaxes(0,1).swapaxes(1,2)
       # Duplicate information columns along a third axis to match stats
-      info = np.repeat(info[:,:,None],5,axis=2)
+      info = np.repeat(info[:,None,:],124,axis=1)
       # Recombine info with stats
-      perm_spheres = np.concatenate((info,stats),axis=1)
-      # Write the 5-number summary to a compressed matrix file
-      # ax1: residue, ax2: metric, ax3: 5-number summary
+      perm_spheres = np.concatenate((info,stats),axis=2)
+      # ax1: residue, ax2: metric, ax3: 20-col resi info, 5-number summary
       np.savez_compressed(perm_file,perm_spheres)
 
       if verbose:
@@ -203,7 +204,6 @@ def sphere(r,residues,nbrs,radius):
   #  5 cumulative SNP deltaDAF                  (window)
   #  30 deltaDAF measurements                   (window)
   #  11 Fst measurements                        (window)
-  print scounts+scdaf+sddafroi+fstroi+wcounts+wcdaf+wddafroi+wfstroi
   return scounts+scdaf+sddafroi+fstroi+wcounts+wcdaf+wddafroi+wfstroi
 
 def isolate_sphere(center,residues,radius,nbrs=None):
@@ -239,9 +239,9 @@ def fst_roi(residues):
   fstvals = np.array([[r[i] if r[i] else np.nan for i in range(16,38)] for r in residues if r[1]])
   # Sphere isn't empty and isn't full of NaN and there are >1 SNPs in the sphere
   if not np.any(fstvals) or np.all(np.isnan(fstvals)) or fstvals.shape[0]<2:
-    return [np.nan for i in range(11)]
-  nhat_agg = np.sum([[r[i] for i in range(0 ,11)] for r in fstvals],axis=0).flatten()
-  dhat_agg = np.sum([[r[i] for i in range(11,22)] for r in fstvals],axis=0).flatten()
+    return [0 for i in range(11)]
+  nhat_agg = np.sum([[r[i] if ~np.isnan(r[i]) else 0 for i in range(0 ,11)] for r in fstvals],axis=0).flatten()
+  dhat_agg = np.sum([[r[i] if ~np.isnan(r[i]) else 0 for i in range(11,22)] for r in fstvals],axis=0).flatten()
   return (nhat_agg / dhat_agg).tolist()
 
 def cumdaf(dafs):
@@ -263,12 +263,11 @@ def ddaf(dafs,weighted=False):
 def ddaf_roi(ddafs):
   # Sphere isn't empty and isn't full of NaN and there are >1 SNPs in the sphere
   if not np.any(ddafs) or np.all(np.isnan(ddafs)) or ddafs.shape[0]<2:
-    # Null values for 10 pop combos (i) and 3 metrics (j)
-    return [np.nan for i in range(10) for j in range(3)] # 0 for each population pair
+    # 0 values for 10 pop combos (i) and 3 metrics (j)
+    return [0 for i in range(10) for j in range(3)] # 0 for each population pair
   # Calculate pop1 mean deltaDAF
   y = np.copy(ddafs)
   # If a column has <2 SNPs, don't calculate the aggregate dDAF for that column
-  # y[:,(~np.isnan(y)).sum(0)<2] = np.nan
   y[np.isnan(y)] = -1 # temporary logical replacement (needs to be negative)
   y[y<0] = -0.000000001
   meanDDAF1 = y.sum(0)/((y>=0).sum(0))
@@ -277,7 +276,6 @@ def ddaf_roi(ddafs):
   # Calculate pop2 mean deltaDAF
   y = np.copy(-ddafs)
   # If a column has <2 SNPs, don't calculate the aggregate dDAF for that column
-  # y[:,(~np.isnan(y)).sum(0)<2] = np.nan
   y[np.isnan(y)] = -1
   y[y<0] = -0.000000001
   meanDDAF2 = y.sum(0)/((y>=0).sum(0))
@@ -286,7 +284,6 @@ def ddaf_roi(ddafs):
   # Calculate pop1+pop2 mean magnitude deltaDAF
   y = np.abs(np.copy(ddafs))
   # If a column has <2 SNPs, don't calculate the aggregate dDAF for that column
-  # y[:,(~np.isnan(y)).sum(0)<2] = np.nan
   invalid = np.isnan(y)
   y[invalid] = 0
   meanDDAFM = y.sum(0)/((~invalid).sum(0))
@@ -294,9 +291,9 @@ def ddaf_roi(ddafs):
   meanDDAFM[np.isinf(meanDDAFM)] = 0 # Inf is an artifacts of division by 0
   # Mask results for spheres with <2 SNPs in the population combination
   novar = (~np.isnan(ddafs)).sum(0)<2 # Not enough (or no) variation
-  meanDDAF1[novar] = np.nan
-  meanDDAF2[novar] = np.nan
-  meanDDAFM[novar] = np.nan
+  meanDDAF1[novar] = 0
+  meanDDAF2[novar] = 0
+  meanDDAFM[novar] = 0
   # Construct and flatten the return matrix; 10 population combinations, 3 measurements
   return np.column_stack((meanDDAF1,meanDDAF2,meanDDAFM)).reshape(30,).tolist()
 
@@ -337,8 +334,8 @@ def permute_snps(residues,permutations=1000):
     # Reset SNP assignments
     for r in perm_residues:
       r[1]     = 0 # reset SNP flag
-      r[3:8]   = [None for i in range(5)]  # reset MAFs
-      r[16:-3] = [None for i in range(22)] # reset Fsts
+      r[3:8]   = [np.nan for i in range(5)]  # reset MAFs
+      r[16:-3] = [np.nan for i in range(22)] # reset Fsts
     # Permute the snpidx assignments, propagate through residx to loc_mat
     # More accurately models plausible variant distribution
     perm_snpidx   = random.sample(residx.keys(),snpcount)
