@@ -3,7 +3,7 @@
 -- --------------------------------------------------------------------------------
 DELIMITER ;;
 
-CREATE PROCEDURE `get_structure` (IN STRUCTID VARCHAR(100),IN BIOUNIT INT)
+CREATE PROCEDURE `get_structure` (IN SLABEL VARCHAR(100), IN DLABEL VARCHAR(100), IN STRUCTID VARCHAR(100),IN BIOUNIT INT)
 BEGIN
 SELECT
 /*SLABEL*/a.label as slabel,
@@ -42,9 +42,8 @@ LEFT JOIN AlignmentScore as j
 ON h.label=j.label AND h.structid=j.structid AND h.chain=j.chain AND h.transcript=j.transcript
 LEFT JOIN pfam as p
 ON a.structid=p.pdbid AND a.chain=p.chain AND a.seqid BETWEEN p.seqstart AND p.seqend
-WHERE a.label='uniprot-pdb'
-AND b.label='uniprot-pdb'
 AND (f.transcript IS NULL OR f.transcript=h.transcript)
-AND a.structid=STRUCTID AND a.biounit=BIOUNIT
+where a.label=SLABEL and g.label=DLABEL
+and a.structid=STRUCTID AND a.biounit=BIOUNIT
 ORDER BY a.structid,a.biounit,a.model,a.chain,a.seqid;
 END
