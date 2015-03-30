@@ -50,10 +50,10 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
   # Load the structure lists
   structs = []
   if structid:
-    structs += [('u',structid,1)] # Manually specified structid
+    structs += [('u','','',structid,0)] # Manually specified structid
   else:
     # Load the list of biological assemblies
-    with open('../temp/pdbmap_v10_1kg3_biounits.txt','rb') as fin:
+    with open('../temp/UNP_Repr_Biounits_PDBONLY.txt','rb') as fin:
       fin.readline() # burn header
       structs += [['s']+row.strip().split('\t') for row in fin.readlines()]
 
@@ -85,15 +85,15 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
   pt0 = time.time() # process start time
   sys.stdout.write("\rProcessing %d structures..."%num_structs)
   sys.stdout.flush()
-  for k,(typ,structid,biounit) in enumerate(structs):
+  for k,(typ,label,unp,structid,biounit) in enumerate(structs):
     try:
       obs_file = '../results/sliding_sphere_%d/split/obs/bystruct/sliding_sphere_%s-%s.txt.gz'%(radius,structid,biounit)
       perm_file = '../results/sliding_sphere_%d/split/perm/bystruct/sliding_sphere_perm_%s-%s.npz'%(radius,structid,biounit)
       if verbose:
         print "%s.%s"%(structid,biounit)
 
-      # if os.path.exists(obs_file) and os.path.exists(perm_file):
-      #   continue # skip if this biological asssembly has been processed
+      if os.path.exists(obs_file) and os.path.exists(perm_file):
+        continue # skip if this biological asssembly has been processed
 
       # Load the structure
       residues,nbrs3D,nbrs1D = load_structure(structid,biounit,radius,verbose)
@@ -245,9 +245,10 @@ def fst_roi(residues):
   return (nhat_agg / dhat_agg).tolist()
 
 def cumdaf(dafs):
-  if not dafs: return [0,0,0,0,0]
+  if not np.any(dafs) or np.all(np.isnan(dafs)) or len(dafs)<2:
+    return [0,0,0,0,0]
   # Returns 5 cumulative deltaDAF
-  return np.sum(np.array(dafs),axis=0).tolist()
+  return np.nansum(np.array(dafs),axis=0).tolist()
 
 def daf(residues):
   # Compute the DAF for each residue, for each population.
@@ -386,8 +387,7 @@ def load_structure(structid,biounit,radius,verbose=False):
   try:
     c.execute(q)
   except:
-    # Print some summary info about the connection
-    # Then try again. If it fails again, let it
+    # Try again. If it fails again, let it
     c = con.cursor()
     c.execute(q)
   res = [list(r) for r in c]
@@ -421,10 +421,10 @@ def load_structure(structid,biounit,radius,verbose=False):
                               kdt.query((r[14]+(ord(r[15])/100.),), # center
                               len(nbrs3D[(r[11],r[12],r[14],r[15])]))) # k, select indices
                               for r in cres) # for all residues in this model+chain
-    # Correct list structure for model/chains of one element
+    # Correct array structure for model/chains of one element
     for (seqid,icode),nbs in nbrs1D[(model,chain)].iteritems():
-      if not isinstance(nbs[0],list):
-        nbrs1D[(model,chain)][(seqid,icode)] = [list(e) for e in nbs]
+      if not isinstance(nbs[0],np.ndarray):
+        nbrs1D[(model,chain)][(seqid,icode)] = [np.array([e]) for e in nbs]
   if verbose:
     print "100%% (%2.2fs)"%(time.time()-t0)
   return res,nbrs3D,nbrs1D
