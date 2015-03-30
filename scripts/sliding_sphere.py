@@ -50,7 +50,7 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
   # Load the structure lists
   structs = []
   if structid:
-    structs += [('u','','',structid,0)] # Manually specified structid
+    structs += [('u','','',structid,1)] # Manually specified structid
   else:
     # Load the list of biological assemblies
     with open('../temp/UNP_Repr_Biounits_PDBONLY.txt','rb') as fin:
@@ -245,10 +245,11 @@ def fst_roi(residues):
   return (nhat_agg / dhat_agg).tolist()
 
 def cumdaf(dafs):
-  if not np.any(dafs) or np.all(np.isnan(dafs)) or len(dafs)<2:
+  dafs = np.array(dafs,dtype=np.float64) # change local datatype to force None->NaN
+  if not np.any(dafs) or np.all(np.isnan(dafs)) or dafs.shape[0]<2:
     return [0,0,0,0,0]
   # Returns 5 cumulative deltaDAF
-  return np.nansum(np.array(dafs),axis=0).tolist()
+  return np.nansum(dafs,axis=0).tolist()
 
 def daf(residues):
   # Compute the DAF for each residue, for each population.
