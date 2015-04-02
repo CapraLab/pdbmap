@@ -3,7 +3,7 @@
 -- Note: comments before and after the routine body will not be stored by the server
 -- --------------------------------------------------------------------------------
 DELIMITER ;;
-
+DROP PROCEDURE IF EXISTS `get_full_structure`;;
 CREATE PROCEDURE `get_full_structure`(IN SLABEL VARCHAR(100), IN DLABEL VARCHAR(100), IN STRUCTID VARCHAR(100),IN BIOUNIT INT)
 BEGIN
 SELECT
@@ -26,11 +26,11 @@ ON b.label=d.label AND b.structid=d.modelid
 LEFT JOIN GenomicIntersection as e
 ON a.label=e.slabel AND a.structid=e.structid AND a.chain=e.chain AND a.seqid=e.seqid AND e.dlabel='1kg3'
 LEFT JOIN GenomicConsequence as f
-ON e.dlabel=f.label AND e.gc_id=f.gc_id
+ON e.dlabel=f.label AND e.gc_id=f.gc_id AND f.canonical=1
 LEFT JOIN GenomicData as g
 ON f.label=g.label AND f.chr=g.chr AND f.start=g.start AND f.end=g.end AND f.name=g.name
 LEFT JOIN Alignment as h USE INDEX(PRIMARY)
-ON a.label=h.label AND a.structid=h.structid AND a.chain=h.chain AND a.seqid=h.chain_seqid #AND f.transcript=h.transcript
+ON a.label=h.label AND a.structid=h.structid AND a.chain=h.chain AND a.seqid=h.chain_seqid AND f.transcript=h.transcript
 LEFT JOIN Transcript as i USE INDEX(PRIMARY)
 ON h.label=i.label AND h.transcript=i.transcript AND h.trans_seqid=i.seqid
 LEFT JOIN AlignmentScore as j
