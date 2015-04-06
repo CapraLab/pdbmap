@@ -53,7 +53,7 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
     structs += [('u','','',structid,1)] # Manually specified structid
   else:
     # Load the list of biological assemblies
-    with open('../temp/UNP_Repr_Biounits_Solved_lt4Res_gt99Alnq.txt','rb') as fin:
+    with open('../temp/UNP_Repr_Biounits_Solved_lt4Res_gt99Aln.txt','rb') as fin:
       fin.readline() # burn header
       structs += [['s']+row.strip().split('\t') for row in fin.readlines()]
 
@@ -146,7 +146,7 @@ def main(ppart=0,ppidx=0,structid=None,radius=15):
       info  = perm_spheres[0,:,:20] # slice info from first permutation
       # Calculate percentiles for numeric columns
       stats = np.percentile(perm_spheres[:,:,20:],[0,24,25,26,50,74,75,76,100],axis=0)
-      stats = sstats.nan_to_num(0) # remove NaN valuess
+      stats = np.nan_to_num(np.array(stats,dtype=np.float64)) # remove NaN values
       stats = stats.swapaxes(0,1).swapaxes(1,2)
       # Duplicate information columns along a third axis to match stats
       info = np.repeat(info[:,None,:],124,axis=1)
@@ -376,7 +376,7 @@ def load_structure(structid,biounit,radius,verbose=False):
   q += "ON a.label=b.slabel AND a.structid=b.structid "
   q += "AND a.chain=b.chain AND a.seqid=b.seqid AND b.dlabel='1kg3' "
   q += "LEFT JOIN GenomicConsequence as c "
-  q += "ON b.dlabel=c.label AND b.gc_id=c.gc_id AND c.canonical=1"
+  q += "ON b.dlabel=c.label AND b.gc_id=c.gc_id AND c.canonical=1 "
   q += "LEFT JOIN GenomicData as d "
   q += "ON c.label=d.label AND c.chr=d.chr "
   q += "AND c.start=d.start AND c.end=d.end AND c.name=d.name "

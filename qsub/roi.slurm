@@ -3,7 +3,7 @@
 #SBATCH --mail-user=mike.sivley@vanderbilt.edu
 #SBATCH --mail-type=all
 #SBATCH --ntasks=1
-#SBATCH --time1-0
+#SBATCH --time=1-0
 #SBATCH --mem=15GB
 #SBATCH -o ROI_out/ROI.%A[%a].out
 #SBATCH -e ROI_out/ROI.%A[%a].err

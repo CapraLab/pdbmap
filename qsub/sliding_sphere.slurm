@@ -3,7 +3,7 @@
 #SBATCH --mail-user=mike.sivley@vanderbilt.edu
 #SBATCH --mail-type=all
 #SBATCH --ntasks=1
-#SBATCH --time=3-0
+#SBATCH --time=1-0
 #SBATCH --mem=20GB
 #SBATCH -o sliding_sphere_10A_out/sliding_sphere_10A.%A[%a].out
 #SBATCH -e sliding_sphere_10A_out/sliding_sphere_10A.%A[%a].err

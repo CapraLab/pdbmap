@@ -1,7 +1,7 @@
 #!/usr/bin/env python2.7
 
 # Load libraries
-import glob,gzip,os
+import glob,gzip,os,sys
 import numpy as np
 from numpy.random import randn
 from itertools import combinations
@@ -22,7 +22,6 @@ os.chdir('../../pdbmap')
 header_fname  = 'scripts/sphere_header.txt'
 with open(header_fname,'rb') as hfin:
     header = [h.strip() for h in hfin.readlines()]
-os.system("ls /dors/capra_lab/sivleyrm/pdbmap/results/sliding_sphere_10/split/obs/bystruct/*.txt.gz")
 # Load the results file into a pandas data frame
 fnames = glob.glob('/dors/capra_lab/sivleyrm/pdbmap/results/sliding_sphere_10/split/obs/bystruct/*.txt.gz')
 rlist  = [[r.split('-')[0][-4:],r.split('-')[1].split('.')[0]] for r in fnames]
@@ -110,19 +109,20 @@ def collapse_roi(df,structid,biounit,pmetric,metric):
 
 for pcolset in pvalue_cols[3:5]: # abs(dDAF) and Fst
     for p,pcol in enumerate(pcolset):
-        if p!=sys.argv[1]: continue
+        outdir = 'results/roi' 
+        os.system('mkdir -p %s'%outdir)
+        if p!=int(sys.argv[1]): continue
         col = '_'.join(pcol.split('_')[:-1])
+        fout = open('%s/%s.txt'%(outdir,col),'wb')
+        fout.write("structid\tbiounit\troi\tnumspheres\n")
         dfroi = []
         for i,(sid,biounit) in enumerate(rlist):
-            print "\rROI determination for %20s %3d%% complete (%s.%s)"%(pcol,int(float(i)/len(rlist)*100),sid,biounit),
+            #print "\rROI determination for %20s %3d%% complete (%s.%s)"%(pcol,int(float(i)/len(rlist)*100),sid,biounit),
             dfroi.append(collapse_roi(df,sid,biounit,pcol,col))
-        print "\rROI determination for %20s 100% complete"%(pcol)
+        #print "\rROI determination for %20s 100% complete"%(pcol)
         dfroi  = pd.concat(dfroi)
         if not dfroi.empty:
-            print "Largest significant %s ROI"%col
             dfroig = dfroi.groupby(["structid","biounit","%s_roi"%pcol])
-            head = 5 if len(dfroig) > 5 else len(dfroig)
-            for _,group in sorted(dfroig,key=lambda x: len(x[1]),reverse=True)[:head]:
-                print "%s.%s[%d]; %d spheres"%(group["structid"].iloc[0],group["biounit"].iloc[0],group["%s_roi"%pcol].iloc[0],len(group))
-            print ''
-    print "=================\n"
+            for _,group in sorted(dfroig,key=lambda x: len(x[1]),reverse=True):
+                fout.write("%s\t%s\t%3d\t%3d\n"%(group["structid"].iloc[0],group["biounit"].iloc[0],group["%s_roi"%pcol].iloc[0],len(group)))
+        fout.close()
