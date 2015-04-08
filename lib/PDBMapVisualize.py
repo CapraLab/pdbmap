@@ -28,20 +28,22 @@ class PDBMapVisualize():
 
   def visualize_structure(self,structid,biounit=0,anno_list=['maf'],eps=None,mins=None,spectrum_range=[],group=None,colors=[],permute=False):
     """ Visualize the annotated dataset within a structure """
-    modelflag = 1 if biounit<0 else 0
     biounit = 0 if biounit<0 else biounit
-    print "Visualizing %s.%s"%(structid,biounit)
+    print "Visualizing %s.%s..."%(structid,biounit),
     structid = structid.lower()
     res  = self.io.load_structure(structid,biounit,raw=True)
+    if not res:
+      msg = "WARNING (PDBMapVisualize) No variants for %s, biounit %s\n"%(structid,biounit)
+      sys.stderr.write(msg)
+      return
+    modelflag = True if res['mpqs'][0] else False
+
     # Reduce to variable residues
     for key in res:
       if key != 'issnp':
         res[key] = [r for i,r in enumerate(res[key]) if res['issnp'][i]]
     del res['issnp']
-    if not res:
-      msg = "WARNING (PDBMapVisualize) No variants for %s, biounit %d\n"%(structid,biounit)
-      sys.stderr.write(msg)
-      return
+    print "(%d SNPs)"%len(res['seqid'])
 
     # Convert MAF values into DAF values
     for anno in anno_list:
@@ -140,7 +142,10 @@ class PDBMapVisualize():
         for row in out:
           # #0.model:resi.chain value [value ...]
           value = -1 if row[-1] is None else float(row[-1])
-          fout.write("\t#0.%d:%d.%s\t%0.6f\n"%(tuple(row)))
+          if not modelflag:
+            fout.write("\t#0.%d:%d.%s\t%0.6f\n"%(tuple(row)))
+          else: # do not include chain specifier for models
+            fout.write("\t#0.%d:%d\t%0.6f\n"%(tuple(row[:2]+[row[-1]])))
           if -1 < value < minval: minval=value
           if value > maxval: maxval=value
       minval,maxval = (minval,maxval) if not spectrum_range else spectrum_range[a]
