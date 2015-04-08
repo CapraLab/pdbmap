@@ -80,6 +80,17 @@ pvalue_cols = [count_pval_cols,cdaf_pval_cols,ddaf_pval_cols,absddaf_pval_cols,f
 for col in fst_cols + w_fst_cols:
     df.ix[df[col]<0,col] = 0
 
+# Correct poorly implemented >1 SNP per sphere restriction
+# If there are fewer than 2 shared SNPs in the sphere, all measurements
+# should be set to 0, and all p-values to 1.0
+for i,scount in enumerate(count_cols[-10:]): # Shared SNP counts (spheres)
+    df.ix[df[scount]<2,[c[i] for c in value_cols[2:5]]]  = 0.
+    df.ix[df[scount]<2,[c[i] for c in pvalue_cols[2:5]]] = 1.
+
+for i,wcount in enumerate(w_count_cols[-10:]): # Shared SNP counts (windows)
+    df.ix[df[wcount]<2,[c[i] for c in value_cols[5:]]]  = 0.
+    df.ix[df[wcount]<2,[c[i] for c in pvalue_cols[5:]]] = 1.
+
 # Identifies overlapping spheres forming an ROI
 # and assigns a biounit-unique RID to the set
 def collapse_roi(df,structid,biounit,pmetric,metric):

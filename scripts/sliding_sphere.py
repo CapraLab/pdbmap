@@ -9,8 +9,8 @@ PERMUTATIONS = 999
 # Change the seed if the process load is imbalanced
 import numpy as np
 import random
-np.random.seed(5)
-random.seed(5)
+np.random.seed(10)
+random.seed(10)
 
 from profilehooks import profile
 np.set_printoptions(threshold='nan')
@@ -376,12 +376,15 @@ def load_structure(structid,biounit,radius,verbose=False):
   q += "ON a.label=b.slabel AND a.structid=b.structid "
   q += "AND a.chain=b.chain AND a.seqid=b.seqid AND b.dlabel='1kg3' "
   q += "LEFT JOIN GenomicConsequence as c "
-  q += "ON b.dlabel=c.label AND b.gc_id=c.gc_id AND c.canonical=1 "
+  q += "ON b.dlabel=c.label AND b.gc_id=c.gc_id "
   q += "LEFT JOIN GenomicData as d "
   q += "ON c.label=d.label AND c.chr=d.chr "
   q += "AND c.start=d.start AND c.end=d.end AND c.name=d.name "
   q += "WHERE a.label='uniprot-pdb' "
   q += "AND a.structid='%s' AND a.biounit=%s "%(structid,biounit)
+  # Ensure SNPs only show up once in the structure
+  q += "GROUP BY d.chr,d.start,d.end,d.name,a.structid,"
+  q += "a.biounit,a.model,a.chain,a.seqid "
   # Place all variants at the beginning of the results
   q += "ORDER BY model ASC, chain ASC, seqid ASC, icode ASC"
   global con
