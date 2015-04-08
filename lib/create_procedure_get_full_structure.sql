@@ -26,7 +26,7 @@ ON b.label=d.label AND b.structid=d.modelid
 LEFT JOIN GenomicIntersection as e
 ON a.label=e.slabel AND a.structid=e.structid AND a.chain=e.chain AND a.seqid=e.seqid AND e.dlabel='1kg3'
 LEFT JOIN GenomicConsequence as f
-ON e.dlabel=f.label AND e.gc_id=f.gc_id AND f.canonical=1
+ON e.dlabel=f.label AND e.gc_id=f.gc_id
 LEFT JOIN GenomicData as g
 ON f.label=g.label AND f.chr=g.chr AND f.start=g.start AND f.end=g.end AND f.name=g.name
 LEFT JOIN Alignment as h USE INDEX(PRIMARY)
@@ -40,5 +40,6 @@ ON a.structid=p.pdbid AND a.chain=p.chain AND a.seqid BETWEEN p.seqstart AND p.s
 AND (f.transcript IS NULL OR f.transcript=h.transcript)
 where a.label=SLABEL and g.label=DLABEL
 and a.structid=STRUCTID AND a.biounit=BIOUNIT
+GROUP BY d.chr,d.start,d.end,d.name,a.structid,a.biounit,a.model,a.chain,a.seqid 
 ORDER BY a.structid,a.biounit,a.model,a.chain,a.seqid;
 END
