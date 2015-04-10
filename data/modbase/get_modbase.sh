@@ -53,6 +53,7 @@ do
   fi
 done
 
-# Backup the original compressed directories
-mkdir H_sapiens_2013/opt
-mv H_sapiens_2013/*.xz H_sapiens_2013/opt
+# # Backup the original compressed directories
+# mkdir H_sapiens_2013/opt
+# mv H_sapiens_2013/*.xz H_sapiens_2013/opt
+# Keep them where they are so that wget will only update if necessary

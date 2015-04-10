@@ -331,37 +331,49 @@ class PDBMap():
     """ Returns summary statistics for the PDBMap database """
     print "Basic summary statistics for PDBMap. Not implemented."
 
-  def refresh_cache(self,args,io):
+  def refresh_cache(self,args,io,force=False):
     """ Refreshes all mirrored data """
     if args.sprot:
       print "Refreshing local SwissProt cache..."
       script_path   = os.path.dirname(os.path.realpath(args.sprot))
-      get_sprot     = "%s/get_swissprot.sh"%(script_path)
+      get_sprot     = "cd %s ./get_swissprot.sh"%(script_path)
       os.system(get_sprot)
     if args.idmapping:
       print "Refreshing local UniProt ID Mapping cache..."
       script_path   = os.path.dirname(os.path.realpath(args.idmapping))
-      get_idmapping = "%s/get_idmapping.sh"%(script_path)
+      get_idmapping = "cd %s; ./get_idmapping.sh"%(script_path)
       os.system(get_idmapping)
     if args.pdb_dir:
       print "Refreshing local PDB cache..."
       script_path   = os.path.realpath(args.pdb_dir)
-      get_pdb       = "%s/get_pdb.sh"%(script_path)
+      get_pdb       = "cd %s; ./get_pdb.sh"%(script_path)
       os.system(get_pdb)
+    if args.modbase_dir:
+      print "Refreshing local ModBase cache..."
+      script_path   = os.path.realpath(args.modbase_dir)
+      get_modbase   = "cd %s; ./get_modbase.sh"%(script_path)
+      os.system(get_modbase)
     if args.pfam:
       print "Refreshing local PFAM cache..."
+      mtime = os.stat(args.pfam)[-2]
       script_path   = os.path.dirname(os.path.realpath(args.pfam))
-      get_pfam      = "%s/get_pfam.sh"%(script_path)
+      get_pfam      = "cd %s; ./get_pfam.sh"%(script_path)
       os.system(get_pfam)
-      print "Loading PFAM into PDBMap..."
-      io.load_pfam("%s/pdb_pfam_mapping.txt"%script_path)
+      if mtime != os.stat(args.pfam)[-2]:
+        print "  Updating PFAM in PDBMap...",
+        rc = io.load_pfam(args.pfam)
+        print "%d rows added"%"{:,}".format(rc)
     if args.sifts:
       print "Refreshing local SIFTS cache..."
+      mtime = os.stat(args.pfam)[-2]
       script_path   = os.path.dirname(os.path.realpath(args.sifts))
-      get_sifts     = "%s/get_sifts.sh"%(script_path)
+      get_sifts     = "cd %s; ./get_sifts.sh"%(script_path)
       os.system(get_sifts)
-      print "Loading SIFTS into PDBMap..."
-      io.load_sifts("%s/pdb_chain_uniprot.tsv"%script_path)
+      if mtime != os.stat(args.pfam)[-2]:
+        print "  Updating SIFTS in PDBMap...",
+        sys.stdout.flush() # flush buffer before long query
+        rc = io.load_sifts(args.sifts,args.sprot)
+        print "%d rows added"%"{:,}".format(rc)
 
 ## Copied from biolearn
 def multidigit_rand(digits):
