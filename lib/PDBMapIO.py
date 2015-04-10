@@ -595,9 +595,14 @@ class PDBMapIO(PDBIO):
       query += "%(EASEUR_Fst)s,%(EASAFR_Fst)s,%(SASEUR_Fst)s,%(SASAFR_Fst)s,%(EURAFR_Fst)s,"
       query += "%(ALLPOP_Nhat)s,%(ALLPOP_Dhat)s,%(ALLPOP_Fst)s,%(SNPSOURCE)s,%(FORMAT)s,%(GT)s)"
       try: self._c.execute(query,record.INFO)
-      except:
-        msg = self._c._last_executed.replace('\n',';')
-        sys.stderr.write("WARNING (PDBMapIO) MySQL query failed: %s\n"%msg)
+      except Exception as e:
+        if "_last_executed" in dir(self._c):
+          msg = self._c._last_executed.replace('\n',';')
+          sys.stderr.write("WARNING (PDBMapIO) MySQL query failed: %s\n"%msg)
+        else:
+          msg  = str(e).replace('\n',';')
+          msg += "WARNING (PDBMapIO) MySQL query failed: %s\n"%msg
+          sys.stderr.write(msg)
       # Upload each consequence to GenomicConsequence
       query  = "INSERT IGNORE INTO GenomicConsequence "
       query += "(label,chr,start,end,name,transcript,protein,canonical,allele,"
@@ -613,9 +618,14 @@ class PDBMapIO(PDBIO):
       for csq in record.CSQ:
         csq["LABEL"] = self.dlabel
         try: self._c.execute(query,csq)
-        except:
-          msg = self._c._last_executed.replace('\n',';')
-          sys.stderr.write("WARNING (PDBMapIO) MySQL query failed: %s\n"%msg)
+        except Exception as e:
+          if "_last_executed" in dir(self._c):
+            msg = self._c._last_executed.replace('\n',';')
+            sys.stderr.write("WARNING (PDBMapIO) MySQL query failed: %s\n"%msg)
+          else:
+            msg  = str(e).replace('\n',';')
+            msg += "WARNING (PDBMapIO) MySQL query failed: %s\n"%msg
+            sys.stderr.write(msg)            
     resetwarnings()
     self._close()
     return i # return the number of uploaded rows
@@ -853,13 +863,22 @@ class PDBMapIO(PDBIO):
     if not self._con:
       try:
         if usedb:
-          con = MySQLdb.connect(host=self.dbhost,
-                user=self.dbuser,passwd=self.dbpass,
-                db=self.dbname,cursorclass = cursorclass)
+          if self.dbpass:
+            con = MySQLdb.connect(host=self.dbhost,
+                  user=self.dbuser,passwd=self.dbpass,
+                  db=self.dbname,cursorclass=cursorclass)
+          else:
+            cton = MySQLdb.connect(host=self.dbhost,
+                  user=self.dbuser,db=self.dbname,
+                  cursorclass = cursorclass)
         else:
-          con = MySQLdb.connect(host=self.dbhost,
-                user=self.dbuser,passwd=self.dbpass,
-                cursorclass = cursorclass)
+          if self.dbpass:
+            con = MySQLdb.connect(host=self.dbhost,
+                  user=self.dbuser,passwd=self.dbpass,
+                  cursorclass = cursorclass)
+          else:
+            con = MySQLdb.connect(host=self.dbhost,
+                user=self.dbuser,cursorclass=cursorclass)
         # Add to connection pool and set as active connection
         self._cons.append(con)
         self._con = con

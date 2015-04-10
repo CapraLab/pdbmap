@@ -195,6 +195,8 @@ class PDBMapData():
     print "Initializing VCF generator."
     # Parse the VCF output from VEP, save to cache
     cache  = 'data/cache/%s'%os.path.basename(fname)
+    if cache.split('.')[-1] != 'gz':
+      cache += '.gz'
     parser = vcf.Reader(self.load_vep(fname,'vcf',cache),prepend_chr=True)
     # Determine Info headers
     info_headers = parser.infos.keys()
@@ -222,7 +224,9 @@ class PDBMapData():
     """ Load data from BED """
     print "Initializing BED generator."
     # Parse the VCF output from VEP, save to cache
-    cache  = 'data/cache/%s'%os.path.basename(fname)
+    cache  = 'data/cache/%s.gz'%os.path.basename(fname)
+    if cache.split('.')[-1] != 'gz':
+      cache += '.gz'
     parser = vcf.Reader(self.load_vep(fname,id_type,cache))
     # Determine Info headers
     info_headers = parser.infos.keys()
