@@ -133,13 +133,6 @@ class PDBMapProtein():
     PDBMapProtein.sprot = sprot
 
   @classmethod
-  def load_pfam(cls,pfam_fname):
-    fields = ['pdbid','chain','seqstart','seqend','acc','name','desc','evalue']
-    with open(pfam_fname) as fin:
-      reader = csv.reader(fin,delimiter='\t')
-      pfam = [row for row in reader]
-
-  @classmethod
   def check_loaded(cls):
     # Checks if external database ID mapping has been loaded
     if not PDBMapProtein._refseq2unp or \

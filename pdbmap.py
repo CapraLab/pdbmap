@@ -31,7 +31,7 @@ from lib.PDBMapVisualize import PDBMapVisualize
 QUICK_THRESH = 20000
 
 class PDBMap():
-  def __init__(self,idmapping=None,sec2prim=None,sprot=None,pfam=None,
+  def __init__(self,idmapping=None,sec2prim=None,sprot=None,
                 pdb_dir=None,modbase_dir=None,modbase_summary=None,
                 vep=None,plink=None,reduce=None,probe=None):
     self.pdb     = False
@@ -43,8 +43,6 @@ class PDBMap():
       PDBMapProtein.PDBMapProtein.load_sec2prim(sec2prim)
     if sprot:
       PDBMapProtein.PDBMapProtein.load_sprot(sprot)
-    if pfam:
-      PDBMapProtein.PDBMapProtein.load_pfam(pfam)
     if pdb_dir:
       self.pdb = True
       self.pdb_dir = pdb_dir
@@ -333,29 +331,37 @@ class PDBMap():
     """ Returns summary statistics for the PDBMap database """
     print "Basic summary statistics for PDBMap. Not implemented."
 
-  def refresh_mirrors(self,idmapping=None,sprot=None,sec2prim=None,
-                pdb_dir=None,modbase_dir=None):
+  def refresh_cache(self,args,io):
     """ Refreshes all mirrored data """
-    if sprot:
-      script_path   = os.path.dirname(os.path.realpath(sprot))
-      get_sprot     = "cd %s; %s/get_swissprot.sh"%(script_path,script_path)
+    if args.sprot:
+      print "Refreshing local SwissProt cache..."
+      script_path   = os.path.dirname(os.path.realpath(args.sprot))
+      get_sprot     = "%s/get_swissprot.sh"%(script_path)
       os.system(get_sprot)
-    if idmapping:
-      script_path   = os.path.dirname(os.path.realpath(idmapping))
-      get_idmapping = "cd %s; %s/get_idmapping.sh"%(script_path,script_path)
+    if args.idmapping:
+      print "Refreshing local UniProt ID Mapping cache..."
+      script_path   = os.path.dirname(os.path.realpath(args.idmapping))
+      get_idmapping = "%s/get_idmapping.sh"%(script_path)
       os.system(get_idmapping)
-    if pdb_dir:
-      script_path   = os.path.realpath(pdb_dir)
-      get_pdb       = "cd %s; %s/get_pdb.sh"%(script_path,script_path)
+    if args.pdb_dir:
+      print "Refreshing local PDB cache..."
+      script_path   = os.path.realpath(args.pdb_dir)
+      get_pdb       = "%s/get_pdb.sh"%(script_path)
       os.system(get_pdb)
-    # ModBase does not update in the same way as other resources
-    # if self.modbase_dir:
-    #   get_modbase   = "%s/get_modbase.sh"%os.path.realpath(self.modbase_dir)
-    #   os.system(get_modbase)
-    # Refreshed by get_idmapping.sh
-    # if self.sec2prim:
-    #   get_sec2prim  = "%s/get_sec2prim.sh"%os.path.realpath(self.sec2prim)
-    #   os.system(get_sec2prim)
+    if args.pfam:
+      print "Refreshing local PFAM cache..."
+      script_path   = os.path.dirname(os.path.realpath(args.pfam))
+      get_pfam      = "%s/get_pfam.sh"%(script_path)
+      os.system(get_pfam)
+      print "Loading PFAM into PDBMap..."
+      io.load_pfam("%s/pdb_pfam_mapping.txt"%script_path)
+    if args.sifts:
+      print "Refreshing local SIFTS cache..."
+      script_path   = os.path.dirname(os.path.realpath(args.sifts))
+      get_sifts     = "%s/get_sifts.sh"%(script_path)
+      os.system(get_sifts)
+      print "Loading SIFTS into PDBMap..."
+      io.load_sifts("%s/pdb_chain_uniprot.tsv"%script_path)
 
 ## Copied from biolearn
 def multidigit_rand(digits):
@@ -477,20 +483,19 @@ if __name__== "__main__":
     print "You have opted to create a new database."
     if raw_input("Are you sure you want to do this? (y/n):") == 'n':
       print "Aborting..."
-      sys.exit(0)
     else:
+      print "Creating database tables..."
       io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,
                             args.dbpass,args.dbname,createdb=True)
-      print "Databases created. Please set create_new_db to False."
-      sys.exit(1)
+      print "Refreshing remote data cache and populating tables..."
+      PDBMap().refresh_cache(args,io)
+      print "Database created. Please set create_new_db to False."
+    sys.exit(0)
   # Initialize PDBMap, refresh mirrored data if specified
   if args.cmd=="refresh":
-    pdbmap = PDBMap(idmapping=args.idmapping,sec2prim=args.sec2prim,
-                    sprot=args.sprot,pdb_dir=args.pdb_dir,
-                    modbase_dir=args.modbase_dir,
-                    modbase_summary=args.modbase_summary)
-    pdbmap.refresh_mirrors(idmapping=args.idmapping,pdb_dir=args.pdb_dir,
-                            sprot=args.sprot,modbase_dir=args.modbase_dir)
+    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,
+                            args.dbpass,args.dbname)
+    PDBMap().refresh_cache(args,io)
     print "Refresh complete."
     sys.exit(1)
 

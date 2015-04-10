@@ -700,8 +700,12 @@ class PDBMapIO(PDBIO):
                 'lib/create_schema_GenomicData.sql',
                 'lib/create_schema_GenomicConsequence.sql',
                 'lib/create_schema_GenomicIntersection.sql',
-                'lib/create_proc_build_GenomePDB.sql',
-                'lib/create_proc_update_GenomePDB.sql']
+                'lib/create_schema_sifts.sql',
+                'lib/create_schema_pfam.sql',
+                'lib/create_procedure_get_protein.sql',
+                'lib/create_procedure_get_structure.sql',
+                'lib/create_procedure_get_full_structure.sql',
+                'lib/create_procedure_get_repr_subset.sql']
     filterwarnings('ignore', category = MySQLdb.Warning)
     try: # Create the database if not exists
       self._c.execute("CREATE DATABASE %s"%self.dbname)
@@ -859,6 +863,44 @@ class PDBMapIO(PDBIO):
       if isgene:
         return unp
     return None
+
+  def load_sifts(self,fname):
+    with open(fname,'rb') as fin:
+      fin.readline(); fin.readline() # skip first two lines
+      reader = csv.reader(fin,delimiter='\t')
+      for row in reader:
+        q  = "INSERT IGNORE INTO sifts "
+        q += "(pdbid,chain,sp,pdb_seqid,sp_seqid) VALUES "
+        v = []
+        pdbid,chain,sp = row[0:3]
+        pdbid = pdbid.strip()
+        try:
+          res_beg,res_end,pdb_beg,pdb_end,sp_beg,sp_end = [int(x) for x in row[3:]]
+        except:
+          # msg  = "WARNING (PDBMapIO) SIFTS icode error: "
+          # msg += "%s,%s,%s\n"%(pdbid,chain,sp)
+          # sys.stderr.write(msg)
+          continue
+        res_range = range(res_beg,res_end+1)
+        pdb_range = range(pdb_beg,pdb_end+1)
+        sp_range  = range(sp_beg,sp_end+1)
+        if len(res_range) != len(pdb_range) or len(pdb_range) != len(sp_range):
+          # msg  = "WARNING (PDBMapIO) SIFTS range mismatch: "
+          # msg += "%s,%s,%s\n"%(pdbid,chain,sp)
+          # sys.stderr.write(msg) 
+          continue
+        for i,seqid in enumerate(pdb_range):
+          v.append("('%s','%s','%s',%d,%d)"%(pdbid,chain,sp,seqid,sp_range[i]))
+        # Upload after each row
+        q = q+','.join(v)
+        self.secure_query(q)
+
+  def load_pfam(self,fname):
+    query  = "LOAD DATA LOCAL INFILE %s "
+    query += "INTO TABLE pfam "
+    query += "FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n' "
+    query += "IGNORE 1 LINES"
+    self.secure_query(query,(fname,))
 
   def show(self):
     return(self.__dict__['structure'])
