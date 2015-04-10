@@ -575,11 +575,11 @@ if __name__== "__main__":
 
   ## load_data ##
   elif args.cmd == "load_data":
-    pdbmap = PDBMap(vep=args.vep,plink=args.plink)
     if len(args.args) < 1:
-      msg  = "usage: pdbmap.py -c conf_file load_data data_file data_name [data_file data_name] ...\n"
-      msg += "alt:   pdbmap.py -c conf_file --label=data_name load_data data_file [data_file] ...\n"
+      msg  = "usage: pdbmap.py -c conf_file load_data <data_file> <data_name> [data_file data_name] ...\n"
+      msg += "alt:   pdbmap.py -c conf_file --dlabel=<data_name> load_data <data_file> [data_file] ...\n"
       print msg; sys.exit(1)
+    pdbmap = PDBMap(vep=args.vep,plink=args.plink)
     # Process many data file(s) (set(s))
     if not args.dlabel: # Assign individual labels
       dfiles = zip(args.args[0::2],args.args[1::2])
@@ -606,10 +606,10 @@ if __name__== "__main__":
 
   ## visualize ##
   elif args.cmd == "visualize":
-    pdbmap = PDBMap(idmapping=args.idmapping)
     if len(args.args) < 3:
-      msg = "usage: pdbmap.py -c conf_file visualize entity data_name feature[,...] biounit[,...] [minval:maxval,...] [color1,color2,...;...]\n"
+      msg = "usage: pdbmap.py -c conf_file visualize <entity> <data_name> <feature[,...]> <biounit[,...]> [minval:maxval,...] [color1,color2,...;...]\n"
       print msg; sys.exit(1)
+    pdbmap = PDBMap(idmapping=args.idmapping)
     entity = args.args[0]
     struct_label   = 'uniprot-pdb' if not args.slabel else args.slabel
     data_label = args.args[1]
@@ -639,15 +639,15 @@ if __name__== "__main__":
   ## stats ##
   elif args.cmd == "stats":
     if len(args.args) < 1:
-      msg = "usage: pdbmap.py -c conf_file stats genotypes populations data_name\n"
+      msg = "usage: pdbmap.py -c conf_file stats <genotypes> <populations> <data_name>\n"
       print msg; sys.exit(1)
     print "Functionality not yet implemented."
 
   ## residue interaction network ##
   elif args.cmd == "network":
-    pdbmap = PDBMap(reduce=args.reduce,probe=args.probe)
     if len(args.args) < 2:
-      msg = "usage: pdbmap.py -c conf_file network structid [backbone(T/F) pdb_bonds(T/F)]"
+      msg = "usage: pdbmap.py -c conf_file network <structid> [backbone(T/F) pdb_bonds(T/F)]"
+    pdbmap = PDBMap(reduce=args.reduce,probe=args.probe)
     structid   = args.args[0]
     coord_file = args.args[1]
     backbone,pdb_bonds = False,False
@@ -659,10 +659,17 @@ if __name__== "__main__":
 
   ## intersect ##
   elif args.cmd == "intersect":
+    if len(args.args) < 1:
+      msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> intersect <data_name>\n"
+      msg += "alt:   pdbmap.py -c conf_file --slabel=<slabel> --dlabel=<data_name> intersect\n"
+      print msg; sys.exit(1)
     pdbmap = PDBMap()
-    msg  = "WARNING (PDBMap) If loading data, intersections may be automatically applied.\n"
-    sys.stderr.write(msg)
-    dname = args.args[0] # Get the dataset name
+    # msg  = "WARNING (PDBMap) If loading data, intersections may be automatically applied.\n"
+    # sys.stderr.write(msg)
+    if not args.dlabel:
+      dname = args.args[0] # Get the dataset name
+    else:
+      dname = args.dlabel
     sname = None if len(args.args) < 2 else args.args[1]
     if sname == 'all': sname = None
     nrows = QUICK_THRESH+1 if len(args.args) < 3 else int(args.args[2])
