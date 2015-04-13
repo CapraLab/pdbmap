@@ -336,7 +336,7 @@ class PDBMap():
     if args.sprot:
       print "Refreshing local SwissProt cache..."
       script_path   = os.path.dirname(os.path.realpath(args.sprot))
-      get_sprot     = "cd %s ./get_swissprot.sh"%(script_path)
+      get_sprot     = "cd %s; ./get_swissprot.sh"%(script_path)
       os.system(get_sprot)
     if args.idmapping:
       print "Refreshing local UniProt ID Mapping cache..."
@@ -355,25 +355,32 @@ class PDBMap():
       os.system(get_modbase)
     if args.pfam:
       print "Refreshing local PFAM cache..."
-      mtime = os.stat(args.pfam)[-2]
+      if os.path.exists(args.pfam):
+        mtime = os.stat(args.pfam)[-2]
+      else:
+        mtime = None
       script_path   = os.path.dirname(os.path.realpath(args.pfam))
       get_pfam      = "cd %s; ./get_pfam.sh"%(script_path)
       os.system(get_pfam)
-      if mtime != os.stat(args.pfam)[-2]:
+      if not mtime or mtime != os.stat(args.pfam)[-2]:
         print "  Updating PFAM in PDBMap...",
         rc = io.load_pfam(args.pfam)
-        print "%d rows added"%"{:,}".format(rc)
+        print "%d rows added"%"{:,}".format(int(rc))
     if args.sifts:
       print "Refreshing local SIFTS cache..."
-      mtime = os.stat(args.pfam)[-2]
+      if os.path.exists(args.sifts):
+        mtime = os.stat(args.sifts)[-2]
+      else:
+        mtime = None
       script_path   = os.path.dirname(os.path.realpath(args.sifts))
       get_sifts     = "cd %s; ./get_sifts.sh"%(script_path)
       os.system(get_sifts)
-      if mtime != os.stat(args.pfam)[-2]:
+      if not mtime or mtime != os.stat(args.sifts)[-2]:
         print "  Updating SIFTS in PDBMap...",
         sys.stdout.flush() # flush buffer before long query
         rc = io.load_sifts(args.sifts,args.sprot)
-        print "%d rows added"%"{:,}".format(rc)
+        print rc
+        print "%d rows added"%"{:,}".format(int(rc))
 
 ## Copied from biolearn
 def multidigit_rand(digits):
