@@ -156,9 +156,12 @@ class PDBMap():
       return 1
     return 0
 
-  def load_data(self,dname,dfile,indexing=None):
+  def load_data(self,dname,dfile,indexing=None,usevep=True):
     """ Loads a data file into the PDBMap database """
-    d = PDBMapData.PDBMapData(self.vep,self.plink,dname)
+    if usevep:
+      d = PDBMapData.PDBMapData(vep=self.vep,plink=self.plink,dname=dname)
+    else:
+      d = PDBMapData.PDBMapData(plink=self.plink,dname=dname)
     if not os.path.exists(dfile):
       dfile = "%s.ped"%dfile # Test if PEDMAP basename
       if not os.path.exists(dfile):
@@ -171,7 +174,7 @@ class PDBMap():
       ext = dfile.split('.')[-2].lower()
     # Process and accordingly
     if ext == 'vcf':
-      generator = d.load_vcf(dfile)
+      generator = d.load_vcf(dfile,usevep)
     elif ext in ["bed","txt","csv"]:
       # Determine the column delimiter by file type
       delim = '\t'
@@ -180,8 +183,9 @@ class PDBMap():
       indexing = 'ucsc' if ext == 'bed' and not indexing else 'pdbmap'
       msg = "Using %s indexing for %s.\n"%(indexing,dfile)
       sys.stderr.write(msg)
-      dfile,id_type = d.load_bedfile(dfile,io,delim,indexing) # dfile side effect returned
-      generator = d.load_bed(dfile,id_type)
+      dfile,id_type = d.load_bedfile(dfile,io,delim,indexing,usevep)
+      print "Creating BED generator..."
+      generator = d.load_bed(dfile,id_type,usevep)
     elif ext in ["ped","map"] :
       generator = d.load_pedmap(dfile)
     else:
@@ -427,6 +431,7 @@ if __name__== "__main__":
     "slabel" : "",
     "dlabel" : "",
     "indexing": None,
+    "novep" : False,
     "cores" : 1,
     "ppart" : None,
     "ppidx" : None
@@ -485,6 +490,8 @@ if __name__== "__main__":
               help="Data label for this session")
   parser.add_argument("--indexing",
  							help="Indexing used by data file(s) [pdbmap,ensembl,ucsc]")
+  parser.add_argument("--novep",action='store_true',
+              help="Disables VEP consequence prediction. All SNPs uploaded.")
   parser.add_argument("--ppart", type=int,
               help="Used to manage parallel subprocesses. Do not call directly.")
   parser.add_argument("--ppidx", type=int,
@@ -600,8 +607,8 @@ if __name__== "__main__":
   ## load_data ##
   elif args.cmd == "load_data":
     if len(args.args) < 1:
-      msg  = "usage: pdbmap.py -c conf_file load_data <data_file> <data_name> [data_file data_name] ...\n"
-      msg += "alt:   pdbmap.py -c conf_file --dlabel=<data_name> load_data <data_file> [data_file] ...\n"
+      msg  = "usage: pdbmap.py -c conf_file [--novep] load_data <data_file> <data_name> [data_file data_name] ...\n"
+      msg += "alt:   pdbmap.py -c conf_file [--novep] --dlabel=<data_name> load_data <data_file> [data_file] ...\n"
       print msg; sys.exit(1)
     pdbmap = PDBMap(vep=args.vep,plink=args.plink)
     # Process many data file(s) (set(s))
@@ -612,7 +619,7 @@ if __name__== "__main__":
     nrows = 0
     for dfile,dname in dfiles:
       print "## Processing (%s) %s ##"%(dname,dfile)
-      nrows += pdbmap.load_data(dname,dfile,args.indexing)
+      nrows += pdbmap.load_data(dname,dfile,args.indexing,not args.novep)
       print " # %d data rows uploaded."%nrows
     #TESTING: Explicit calls allow for parallelization of load_data and filter
     #       : over each chromosome/file in the dataset

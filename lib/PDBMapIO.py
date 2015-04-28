@@ -598,11 +598,13 @@ class PDBMapIO(PDBIO):
       except Exception as e:
         if "_last_executed" in dir(self._c):
           msg = self._c._last_executed.replace('\n',';')
-          sys.stderr.write("WARNING (PDBMapIO) MySQL query failed: %s\n"%msg)
+          sys.stderr.write("WARNING (PDBMapIO) MySQL query failed, query: %s\n"%msg)
         else:
           msg  = str(e).replace('\n',';')
-          msg += "WARNING (PDBMapIO) MySQL query failed: %s\n"%msg
+          msg += "WARNING (PDBMapIO) MySQL query failed, exception: %s\n"%msg
           sys.stderr.write(msg)
+      self._close()
+      self._connect(cursorclass=MySQLdb.cursors.Cursor)
       # Upload each consequence to GenomicConsequence
       query  = "INSERT IGNORE INTO GenomicConsequence "
       query += "(label,chr,start,end,name,transcript,protein,canonical,allele,"
@@ -621,10 +623,10 @@ class PDBMapIO(PDBIO):
         except Exception as e:
           if "_last_executed" in dir(self._c):
             msg = self._c._last_executed.replace('\n',';')
-            sys.stderr.write("WARNING (PDBMapIO) MySQL query failed: %s\n"%msg)
+            sys.stderr.write("WARNING (PDBMapIO) MySQL query failed, query:: %s\n"%msg)
           else:
             msg  = str(e).replace('\n',';')
-            msg += "WARNING (PDBMapIO) MySQL query failed: %s\n"%msg
+            msg += "WARNING (PDBMapIO) MySQL query failed, exception: %s\n"%msg
             sys.stderr.write(msg)            
     resetwarnings()
     self._close()
@@ -891,7 +893,11 @@ class PDBMapIO(PDBIO):
           time.sleep(30) # Wait 30 seconds and retry
           return self._connect(usedb,cursorclass,retry=False)
         else:
-          msg = "Database connection unsuccessful: %s\n"%e
+          msg  = "\nDatabase connection unsuccessful: %s\n"%e
+          msg += "Parameters:\n"
+          msg += " DBHOST = %s\n"%self.dbhost
+          msg += " DBNAME = %s\n"%self.dbname
+          msg += " DBUSER = %s\n\n"%self.dbuser
           sys.stderr.write(msg)
           raise
     # Finally, open a cursor from the active connection
