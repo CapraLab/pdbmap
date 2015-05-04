@@ -19,9 +19,9 @@ from Bio.PDB.PDBParser import PDBParser
 from Bio.PDB.PDBIO import PDBIO
 import Bio.PDB
 import numpy as np
-from PDBMapStructure import PDBMapStructure
 from PDBMapModel import PDBMapModel
 from PDBMapProtein import PDBMapProtein
+from PDBMapStructure import PDBMapStructure
 import MySQLdb, MySQLdb.cursors
 from warnings import filterwarnings,resetwarnings
 from Bio.PDB.PDBExceptions import PDBConstructionWarning
@@ -700,14 +700,17 @@ class PDBMapIO(PDBIO):
       c = row['chain']
       if c not in m: m.add(Bio.PDB.Chain.Chain(c))
       c = m[c]
+      c.biounit = row['biounit']
       c.unp  = row['unp']
       c.transcript  = row['enst']
       c.gene  = row['ensg']
       c.perc_identity = row['perc_identity']
       c.hybrid  = row['hybrid']
       r = (' ',row['seqid'], ' ')
-      c.add(Bio.PDB.Residue.Residue(r,row['rescode'],' '))
+      c.add(Bio.PDB.Residue.Residue(r,aa_code_map[row['rescode']],' '))
       r = c[r]
+      r.biounit = row['biounit']
+      r.rescode = row['rescode']
       r.seqid = row['seqid']
       r.coords = (row['x'],row['y'],row['z'])
       r.pfam  = (row['pfamid'],row['pfam_domain'],row['pfam_desc'],row['pfam_evalue'])
@@ -1065,6 +1068,8 @@ aa_code_map = {"ala" : "A",
         "trp" : "W",
         "tyr" : "Y",
         "val" : "V"}
+for key,val in aa_code_map.items():
+  aa_code_map[val] = key        
 solv_acc = {"A" : 115,
         "R" : 225,
         "N" : 150,

@@ -263,7 +263,7 @@ class PDBMapData():
     """ Convert PED/MAP to VCF, pipe VCF through VEP and load VEP output """
     print "load_pedmap not implemented"
 
-  def load_bed(self,fname,id_type="id",vep=True):
+  def load_bed(self,fname,id_type="id",vep=True,indexing=None):
     """ Load data from BED """
     print "Initializing BED generator."
     # Parse the VCF output from VEP, save to cache
@@ -273,7 +273,7 @@ class PDBMapData():
     if vep:
       parser = vcf.Reader(self.load_vep(fname,id_type,cache))
     else:
-      parser = bed.Reader(fname)
+      parser = bed.Reader(fname,indexing=indexing)
     # Determine Info headers
     info_headers = parser.infos.keys()
     # Determine Consequence headers

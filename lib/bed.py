@@ -12,9 +12,10 @@
 import sys,io,csv,gzip
 
 class Reader:
-  def __init__(self,fsock=None,filename=None,compressed=False,
+  def __init__(self,fsock=None,filename=None,compressed=False,indexing='ucsc',
                 prepend_chr=False,delimiter='\t',header=False):
     self.prepend_chr = prepend_chr
+    self.indexing    = indexing
     if fsock and filename:
       raise Exception("Cannot process both fsock and filename")
     elif fsock:
@@ -39,7 +40,6 @@ class Reader:
           sys.stderr.write("BED file contains additional columns but no header.\n")
           self.header += ["V%d"%i for i in range(self.NCOLS-len(self.header))]
     self.infos = dict((f,[]) for f in self.header)
-    r = Record(self.header,self.peek)
     self.infos["CSQ"] = Consequence()
 
   def __iter__(self):
@@ -48,18 +48,18 @@ class Reader:
       self.peek = None
       if self.prepend_chr and not row[0].startswith('chr'):
         row[0] = 'chr'+row[0]
-      yield Record(self.header,row)
+      yield Record(self.header,row,self.indexing)
     for row in self.reader:   
       if self.prepend_chr and not row[0].startswith('chr'):
         row[0] = 'chr'+row[0]
-      yield Record(self.header,row)
+      yield Record(self.header,row,self.indexing)
 
 class Record:
-  def __init__(self,info,values):
+  def __init__(self,info,values,indexing):
     self.CHROM  = values[0]
-    self.START  = int(values[1])
-    self.END    = int(values[2])
-    self.POS    = int(values[1])
+    self.START  = int(values[1]) + int((indexing == 'ucsc'))
+    self.END    = int(values[2]) + int((indexing == 'ucsc'))
+    self.POS    = int(values[1]) + int((indexing == 'ucsc'))
     self.ID     = values[3]
     self.REF    = values[info.index("REF")]    if "REF"    in info else None
     self.ALT    = values[info.index("ALT")]    if "ALT"    in info else [None]

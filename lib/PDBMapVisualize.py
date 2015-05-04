@@ -182,7 +182,7 @@ class PDBMapVisualize():
         biounits = [r[0] for r in res]
         for biounit in biounits:
           print "Visualizing model %s.%s"%(entity,biounit)
-          self.visualize_model(entity,biounit,anno_list,eps,mins,spectrum_range,group=unpid,colors=colors)
+          self.visualize_structure(entity,biounit,anno_list,eps,mins,spectrum_range,group=unpid,colors=colors)
       else:
         msg = "ERROR (PDBMapVisualize) Invalid entity_type for %s: %s"%(entity,entity_type)
         raise Exception(msg)

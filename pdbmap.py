@@ -19,8 +19,12 @@
 
 # See main check for cmd line parsing
 import argparse,ConfigParser
-import sys,os,csv,time,pdb,glob
+import sys,os,csv,time,pdb,glob,gzip
 import subprocess as sp
+from Bio.PDB.PDBIO import PDBIO
+from Bio.PDB.PDBParser import PDBParser
+from warnings import filterwarnings,resetwarnings
+from Bio.PDB.PDBExceptions import PDBConstructionWarning
 from lib import PDBMapIO,PDBMapStructure,PDBMapProtein
 from lib import PDBMapAlignment,PDBMapData,PDBMapTranscript
 from lib import PDBMapIntersect,PDBMapModel
@@ -180,12 +184,12 @@ class PDBMap():
       delim = '\t'
       if ext != "bed":
         delim = ' ' if ext=='txt' else ','
-      indexing = 'ucsc' if ext == 'bed' and not indexing else 'pdbmap'
-      msg = "Using %s indexing for %s.\n"%(indexing,dfile)
-      sys.stderr.write(msg)
+      if not indexing:
+        indexing = 'ucsc' if ext == 'bed' else 'pdbmap'
+      print "Using %s indexing for %s."%(indexing,dfile)
       dfile,id_type = d.load_bedfile(dfile,io,delim,indexing,usevep)
       print "Creating BED generator..."
-      generator = d.load_bed(dfile,id_type,usevep)
+      generator = d.load_bed(dfile,id_type,usevep,indexing)
     elif ext in ["ped","map"] :
       generator = d.load_pedmap(dfile)
     else:
@@ -194,15 +198,16 @@ class PDBMap():
     nrows = io.upload_genomic_data(generator,dname)
     return(nrows)
   
-  def intersect_data(self,dname,sname=None,dtype="Genomic",quick=False):
+  def intersect_data(self,dname,slabel=None,dtype="Genomic",quick=False):
     """ Intersects a loaded dataset with the PDBMap structural domain """
-    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,dlabel=dname)
+    slabel = slabel if slabel else self.slabel
+    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,dlabel=dname,slabel=slabel)
     i = PDBMapIntersect.PDBMapIntersect(io)
     # Note: Only all-structures <-> genomic data intersections supported
     if quick:
-    	nrows = i.quick_intersect(dname,sname,dtype)
+    	nrows = i.quick_intersect(dname,slabel,dtype)
     else:
-    	nrows = i.intersect(dname,sname,dtype)
+    	nrows = i.intersect(dname,slabel,dtype)
     return(nrows) # Return the number of intersections
 
   def filter_data(self,dname,dfiles):
@@ -323,6 +328,59 @@ class PDBMap():
       msg = "ERROR (PDBMap) Visualization failed: %s"%str(e)
       # raise Exception(msg)
       raise
+
+  def mutate(self,structid,biounit,muts):
+    p = PDBParser()
+    if biounit:
+      bio = "%s/biounit/coordinates/all/%s.pdb%d.gz"%(args.pdb_dir,structid.lower(),biounit)
+    else:
+      bio = "%s/structures/all/pdb/pdb%s.ent.gz"%(args.pdb_dir,structid.lower())
+    # cmd = ['lib/clean_pdb.py',bio,'nochain','nopdbout']
+    print "Reading coordinates for %s.%s from %s"%(structid,biounit,bio)
+    # proc   = sp.Popen(cmd,stdout=sp.PIPE)
+    # s = p.get_structure(structid,proc.stdout)
+    with gzip.open(bio,'rb') as fin:
+      s = p.get_structure(structid,fin)
+    s = PDBMapStructure.PDBMapStructure(s)
+    s = s.clean()
+    # Atoms are renumbered, build a map
+    resmap = {}
+    with gzip.open(bio,'rb') as fin:
+      oldres = -1
+      newres = 0
+      for line in fin:
+        if line.startswith('ATOM'):
+          chain   = line[21]
+          resnum  = int(line[22:27])
+          if oldres != resnum:
+            newres += 1
+            resmap[(chain,resnum)] = newres
+          oldres = resnum
+    for r in s.get_residues():
+      r.biounit=biounit
+      if r.resname.lower() in PDBMapTranscript.aa_code_map:
+        r.rescode = PDBMapTranscript.aa_code_map[r.resname.lower()]
+    io = PDBIO()
+    print "Relaxing original structure with Rosetta::FastRelax...",;sys.stdout.flush()
+    t0 = time.time()
+    sr = s.relax() # relax with Rosetta::FastRelax
+    io.set_structure(sr)
+    io.save("results/%s_%s.relaxed.pdb"%(structid,biounit))
+    print "%.1f minutes"%((time.time()-t0)/60.)
+    for mut in muts:
+      mut = ('A',358,'V','M') # 1FSU mutation
+      # mut = ('A',33,'K','R') # 1A1Z mutation
+      print "Inserting mutation with SCWRL4...";sys.stdout.flush()
+      sm = s.mutate([mut],resmap) # Insert mutation with SCWRL4
+      # sm = PDBMapStructure.PDBMapStructure(sm)
+      print "Relaxing mutant with Rosetta::FastRelax...",;sys.stdout.flush()
+      t0 = time.time()
+      sr = sm.relax() # relax with Rosetta::FastRelax
+      # sr = PDBMapStructure.PDBMapStructure(sr)
+      io.set_structure(sr)
+      io.save("results/%s_%s_%s%s%s.relaxed.pdb"%(structid,biounit,mut[2],mut[1],mut[3]))
+      print "%.1f minutes"%((time.time()-t0)/60.)
+
 
   def network(self,structid,coord_file,backbone=False,pdb_bonds=False):
     """ Returns the residue interaction network for the structure """
@@ -701,14 +759,55 @@ if __name__== "__main__":
       dname = args.args[0] # Get the dataset name
     else:
       dname = args.dlabel
-    sname = None if len(args.args) < 2 else args.args[1]
-    if sname == 'all': sname = None
+    slabel = None if len(args.args) < 2 else args.args[1]
     nrows = QUICK_THRESH+1 if len(args.args) < 3 else int(args.args[2])
     print "## Intersecting %s with PDBMap ##"%dname
     quick = True if nrows < QUICK_THRESH else False
     print [" # (This may take a while) #"," # Using quick-intersect #"][int(quick)]
-    nrows = pdbmap.intersect_data(dname,sname=sname,quick=quick)
+    nrows = pdbmap.intersect_data(dname,slabel=slabel,quick=quick)
     print " # %d intersection rows uploaded."%nrows
+
+  ## mutate ##
+  elif args.cmd == "mutate":
+    if len(args.args) < 1:
+      msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> entity [mut1[,mut2,...]]"
+      print msg; sys.exit(1)
+    pdbmap = PDBMap()
+    entity = args.args[0]
+    muts   = args.args[1].split(',')
+    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,slabel=args.slabel)
+    etype = io.detect_entity_type(entity)
+    if etype == 'structure':
+      # Query all biological assemblies, exclude the asymmetric unit
+      query = "SELECT DISTINCT biounit FROM Chain WHERE label=%s AND structid=%s AND biounit>0"
+      res   = io.secure_query(query,(args.slabel,entity,),cursorclass='Cursor')
+      biounits = [(entity,r[0]) for r in res]
+      if not biounits:
+        print "No biological assemblies found. Using asymmetric unit."
+        query = "SELECT DISTINCT biounit FROM Chain WHERE label=%s AND structid=%s"
+        res   = io.secure_query(query,(args.slabel,entity,),cursorclass='Cursor')
+        biounits = [(entity,r[0]) for r in res]
+    elif etype == 'model':
+      biounits = [(entity,-1)]
+    elif etype == 'unp':
+      res_list  = self.io.load_unp(unpid)
+      for etype,entity in res_list:
+        if etype == 'structure':
+          # Query all biological assemblies, exclude the asymmetric unit
+          query = "SELECT DISTINCT biounit FROM Chain WHERE label=%s AND structid=%s AND biounit>0"
+          res   = io.secure_query(query,(args.slabel,entity,),cursorclass='Cursor')
+          biounits = [(entity,r[0]) for r in res]
+        elif etype =='model':
+          # Query all biological assemblies
+          query = "SELECT DISTINCT biounit FROM Chain WHERE label=%s AND structid=%s"
+          res   = self.io.secure_query(query,(args.slabel,entity),cursorclass='Cursor')
+          biounits = [(entity,r[0]) for r in res]
+    for sid,bio in biounits:
+      for mut in muts:
+        print "\n#####################################\n"
+        print "Modeling mutation %s in %s.%s"%(mut,sid,bio)
+        print "\n#####################################\n"
+        pdbmap.mutate(sid,bio,[mut])
 
   ## filter ##
   elif args.cmd == "filter":
