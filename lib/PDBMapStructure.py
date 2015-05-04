@@ -15,11 +15,17 @@
 #=============================================================================#
 
 # See main check for cmd line parsing
-import sys,os,csv,copy
+import sys,os,csv,copy,time,random
+import subprocess as sp
 import numpy as np
 from Bio.PDB.Structure import Structure
+from Bio.PDB.PDBIO import PDBIO
+from Bio.PDB.PDBParser import PDBParser
+import lib.PDBMapIO
 from lib.PDBMapTranscript import PDBMapTranscript
 from lib.PDBMapAlignment import PDBMapAlignment
+from warnings import filterwarnings,resetwarnings
+from Bio.PDB.PDBExceptions import PDBConstructionWarning
 
 class PDBMapStructure(Structure):
 
@@ -30,7 +36,7 @@ class PDBMapStructure(Structure):
     self.transcripts = []
 
   def __getattr__(self,attr):
-    # Defer appropriate calls to the structure
+    # Defer appropriate calls to the internal structure
     if attr in dir(self.structure):
       result = self.structure.__getattribute__(attr)
     else:
@@ -142,6 +148,95 @@ class PDBMapStructure(Structure):
         for r in c:
           if r.snp[0]:
             yield (c.id,r.seqid,r.snp[1])
+
+  def mutate(self,muts,resmap={}):
+    """ Takes iterable of mutations in the form (mid,cid,rid,a1,a2) """
+    s = copy.deepcopy(self)
+    for c,r,a1,a2 in muts:
+      if resmap:
+        newres = resmap[(c,r)]
+        resi   = s.structure[0][' '][newres]
+      else:
+        resi = s.structure[0][c][r]
+      sys.stderr.write("%s was renumbered to %s. Inserting %s%s%s\n"%(r,resi,a1,r,a2))
+      if resi.rescode == a1:
+        resi.rescode = a2
+      else:
+        raise Exception("Sequence does not contain the reference allele")
+    altseq = ''.join([r.rescode for m in s.structure for c in m for r in c])
+    return s.scwrl(altseq)
+
+  def clean(self):
+    p  = PDBParser()
+    io = PDBIO()
+    cleanfile = "temp/%d.pdb"%multidigit_rand(10)
+    io.set_structure(self.structure)
+    io.save(cleanfile)
+    cmd  = ['lib/clean_pdb.py',cleanfile,'nochain','nopdbout']
+    print "\n%s"%' '.join(cmd)
+    proc = sp.Popen(cmd,stdout=sp.PIPE)
+    s = p.get_structure(self.get_id(),proc.stdout)
+    s = PDBMapStructure(s)
+    os.remove(cleanfile)
+    return s
+
+  def scwrl(self,altseq):
+    """ Repacks sidechains using SCWRL4 and returns a copy """
+    io = PDBIO()
+    seqfname = "temp/%d.txt"%multidigit_rand(10)
+    with open(seqfname,'wb') as seqfile:
+      structfile = "temp/%d.pdb"%multidigit_rand(10)
+      seqfile.write(altseq)
+      scwrlfile = structfile+".scwrl"
+      io.set_structure(self.structure)
+      io.save(structfile)
+    cmd = ["scwrl","-0","-i",structfile,'-s',seqfname,'-o',scwrlfile]
+    print "\n%s"%' '.join(cmd)
+    sp.Popen(cmd,stdout=sp.PIPE,stderr=sp.PIPE).communicate()
+    p = PDBParser()
+    with open(scwrlfile,'rb') as fin:
+      filterwarnings('ignore',category=PDBConstructionWarning)
+      s = p.get_structure(self.id,scwrlfile)
+      resetwarnings()
+    s = PDBMapStructure(s)
+    os.remove(structfile)
+    os.remove(scwrlfile)
+    os.remove(seqfname)
+    return s
+
+  def relax(self):
+    """ Apply Rosetta:FastRelax """
+    io = PDBIO()
+    os.chdir('temp')
+    structfile = "%d.pdb"%multidigit_rand(10)
+    relaxfile  = "%s_0001.pdb"%('.'.join(structfile.split('.')[:-1]))
+    io.set_structure(self.structure)
+    io.save(structfile)
+    #FIXME: Need to specify Rosetta directory in config and not manually here
+    #FIXME: Figure out how to name the output from FastRelax
+    cmd  = ["relax","-database","/dors/capra_lab/bin/rosetta/main/database"]
+    cmd += ["-in:file:s",structfile,"-out:file:o","-relax:fast","-overwrite"]
+    print "\n%s"%' '.join(cmd)
+    t0 = time.time()
+    sp.Popen(cmd,stdout=sp.PIPE,stderr=sp.PIPE).communicate()
+    with open(relaxfile,'rb') as fin:
+      filterwarnings('ignore',category=PDBConstructionWarning)
+      p = PDBParser()
+      s = p.get_structure(self.get_id(),relaxfile)
+      resetwarnings()
+    s = PDBMapStructure(s)
+    print 'removing temp/%s'%structfile
+    os.remove(structfile)
+    print 'removing temp/%s'%relaxfile
+    os.remove(relaxfile)
+    os.chdir('..')
+    return s
+
+## Copied from biolearn
+def multidigit_rand(digits):
+  randlist = [random.randint(1,10) for i in xrange(digits)]
+  multidigit_rand = int(''.join([str(x) for x in randlist]))
+  return multidigit_rand
 
 # Main check
 if __name__== "__main__":
