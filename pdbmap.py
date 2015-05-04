@@ -31,7 +31,7 @@ from lib.PDBMapVisualize import PDBMapVisualize
 QUICK_THRESH = 20000
 
 class PDBMap():
-  def __init__(self,idmapping=None,sec2prim=None,sprot=None,pfam=None,
+  def __init__(self,idmapping=None,sec2prim=None,sprot=None,
                 pdb_dir=None,modbase_dir=None,modbase_summary=None,
                 vep=None,plink=None,reduce=None,probe=None):
     self.pdb     = False
@@ -43,8 +43,6 @@ class PDBMap():
       PDBMapProtein.PDBMapProtein.load_sec2prim(sec2prim)
     if sprot:
       PDBMapProtein.PDBMapProtein.load_sprot(sprot)
-    if pfam:
-      PDBMapProtein.PDBMapProtein.load_pfam(pfam)
     if pdb_dir:
       self.pdb = True
       self.pdb_dir = pdb_dir
@@ -158,9 +156,12 @@ class PDBMap():
       return 1
     return 0
 
-  def load_data(self,dname,dfile,indexing=None):
+  def load_data(self,dname,dfile,indexing=None,usevep=True):
     """ Loads a data file into the PDBMap database """
-    d = PDBMapData.PDBMapData(self.vep,self.plink,dname)
+    if usevep:
+      d = PDBMapData.PDBMapData(vep=self.vep,plink=self.plink,dname=dname)
+    else:
+      d = PDBMapData.PDBMapData(plink=self.plink,dname=dname)
     if not os.path.exists(dfile):
       dfile = "%s.ped"%dfile # Test if PEDMAP basename
       if not os.path.exists(dfile):
@@ -173,7 +174,7 @@ class PDBMap():
       ext = dfile.split('.')[-2].lower()
     # Process and accordingly
     if ext == 'vcf':
-      generator = d.load_vcf(dfile)
+      generator = d.load_vcf(dfile,usevep)
     elif ext in ["bed","txt","csv"]:
       # Determine the column delimiter by file type
       delim = '\t'
@@ -182,8 +183,9 @@ class PDBMap():
       indexing = 'ucsc' if ext == 'bed' and not indexing else 'pdbmap'
       msg = "Using %s indexing for %s.\n"%(indexing,dfile)
       sys.stderr.write(msg)
-      dfile,id_type = d.load_bedfile(dfile,io,delim,indexing) # dfile side effect returned
-      generator = d.load_bed(dfile,id_type)
+      dfile,id_type = d.load_bedfile(dfile,io,delim,indexing,usevep)
+      print "Creating BED generator..."
+      generator = d.load_bed(dfile,id_type,usevep)
     elif ext in ["ped","map"] :
       generator = d.load_pedmap(dfile)
     else:
@@ -333,29 +335,56 @@ class PDBMap():
     """ Returns summary statistics for the PDBMap database """
     print "Basic summary statistics for PDBMap. Not implemented."
 
-  def refresh_mirrors(self,idmapping=None,sprot=None,sec2prim=None,
-                pdb_dir=None,modbase_dir=None):
+  def refresh_cache(self,args,io,force=False):
     """ Refreshes all mirrored data """
-    if sprot:
-      script_path   = os.path.dirname(os.path.realpath(sprot))
-      get_sprot     = "cd %s; %s/get_swissprot.sh"%(script_path,script_path)
+    if args.sprot:
+      print "Refreshing local SwissProt cache..."
+      script_path   = os.path.dirname(os.path.realpath(args.sprot))
+      get_sprot     = "cd %s; ./get_swissprot.sh"%(script_path)
       os.system(get_sprot)
-    if idmapping:
-      script_path   = os.path.dirname(os.path.realpath(idmapping))
-      get_idmapping = "cd %s; %s/get_idmapping.sh"%(script_path,script_path)
+    if args.idmapping:
+      print "Refreshing local UniProt ID Mapping cache..."
+      script_path   = os.path.dirname(os.path.realpath(args.idmapping))
+      get_idmapping = "cd %s; ./get_idmapping.sh"%(script_path)
       os.system(get_idmapping)
-    if pdb_dir:
-      script_path   = os.path.realpath(pdb_dir)
-      get_pdb       = "cd %s; %s/get_pdb.sh"%(script_path,script_path)
+    if args.pdb_dir:
+      print "Refreshing local PDB cache..."
+      script_path   = os.path.realpath(args.pdb_dir)
+      get_pdb       = "cd %s; ./get_pdb.sh"%(script_path)
       os.system(get_pdb)
-    # ModBase does not update in the same way as other resources
-    # if self.modbase_dir:
-    #   get_modbase   = "%s/get_modbase.sh"%os.path.realpath(self.modbase_dir)
-    #   os.system(get_modbase)
-    # Refreshed by get_idmapping.sh
-    # if self.sec2prim:
-    #   get_sec2prim  = "%s/get_sec2prim.sh"%os.path.realpath(self.sec2prim)
-    #   os.system(get_sec2prim)
+    if args.modbase_dir:
+      print "Refreshing local ModBase cache..."
+      script_path   = os.path.realpath(args.modbase_dir)
+      get_modbase   = "cd %s; ./get_modbase.sh"%(script_path)
+      os.system(get_modbase)
+    if args.pfam:
+      print "Refreshing local PFAM cache..."
+      if os.path.exists(args.pfam):
+        mtime = os.stat(args.pfam)[-2]
+      else:
+        mtime = None
+      script_path   = os.path.dirname(os.path.realpath(args.pfam))
+      get_pfam      = "cd %s; ./get_pfam.sh"%(script_path)
+      os.system(get_pfam)
+      if not mtime or mtime != os.stat(args.pfam)[-2]:
+        print "  Updating PFAM in PDBMap...",
+        rc = io.load_pfam(args.pfam)
+        print "%d rows added"%"{:,}".format(int(rc))
+    if args.sifts:
+      print "Refreshing local SIFTS cache..."
+      if os.path.exists(args.sifts):
+        mtime = os.stat(args.sifts)[-2]
+      else:
+        mtime = None
+      script_path   = os.path.dirname(os.path.realpath(args.sifts))
+      get_sifts     = "cd %s; ./get_sifts.sh"%(script_path)
+      os.system(get_sifts)
+      if not mtime or mtime != os.stat(args.sifts)[-2]:
+        print "  Updating SIFTS in PDBMap...",
+        sys.stdout.flush() # flush buffer before long query
+        rc = io.load_sifts(args.sifts,args.sprot)
+        print rc
+        print "%d rows added"%"{:,}".format(int(rc))
 
 ## Copied from biolearn
 def multidigit_rand(digits):
@@ -402,6 +431,7 @@ if __name__== "__main__":
     "slabel" : "",
     "dlabel" : "",
     "indexing": None,
+    "novep" : False,
     "cores" : 1,
     "ppart" : None,
     "ppidx" : None
@@ -460,6 +490,8 @@ if __name__== "__main__":
               help="Data label for this session")
   parser.add_argument("--indexing",
  							help="Indexing used by data file(s) [pdbmap,ensembl,ucsc]")
+  parser.add_argument("--novep",action='store_true',
+              help="Disables VEP consequence prediction. All SNPs uploaded.")
   parser.add_argument("--ppart", type=int,
               help="Used to manage parallel subprocesses. Do not call directly.")
   parser.add_argument("--ppidx", type=int,
@@ -477,20 +509,19 @@ if __name__== "__main__":
     print "You have opted to create a new database."
     if raw_input("Are you sure you want to do this? (y/n):") == 'n':
       print "Aborting..."
-      sys.exit(0)
     else:
+      print "Creating database tables..."
       io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,
                             args.dbpass,args.dbname,createdb=True)
-      print "Databases created. Please set create_new_db to False."
-      sys.exit(1)
+      print "Refreshing remote data cache and populating tables..."
+      PDBMap().refresh_cache(args,io)
+      print "Database created. Please set create_new_db to False."
+    sys.exit(0)
   # Initialize PDBMap, refresh mirrored data if specified
   if args.cmd=="refresh":
-    pdbmap = PDBMap(idmapping=args.idmapping,sec2prim=args.sec2prim,
-                    sprot=args.sprot,pdb_dir=args.pdb_dir,
-                    modbase_dir=args.modbase_dir,
-                    modbase_summary=args.modbase_summary)
-    pdbmap.refresh_mirrors(idmapping=args.idmapping,pdb_dir=args.pdb_dir,
-                            sprot=args.sprot,modbase_dir=args.modbase_dir)
+    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,
+                            args.dbpass,args.dbname)
+    PDBMap().refresh_cache(args,io)
     print "Refresh complete."
     sys.exit(1)
 
@@ -575,11 +606,11 @@ if __name__== "__main__":
 
   ## load_data ##
   elif args.cmd == "load_data":
-    pdbmap = PDBMap(vep=args.vep,plink=args.plink)
     if len(args.args) < 1:
-      msg  = "usage: pdbmap.py -c conf_file load_data data_file data_name [data_file data_name] ...\n"
-      msg += "alt:   pdbmap.py -c conf_file --label=data_name load_data data_file [data_file] ...\n"
+      msg  = "usage: pdbmap.py -c conf_file [--novep] load_data <data_file> <data_name> [data_file data_name] ...\n"
+      msg += "alt:   pdbmap.py -c conf_file [--novep] --dlabel=<data_name> load_data <data_file> [data_file] ...\n"
       print msg; sys.exit(1)
+    pdbmap = PDBMap(vep=args.vep,plink=args.plink)
     # Process many data file(s) (set(s))
     if not args.dlabel: # Assign individual labels
       dfiles = zip(args.args[0::2],args.args[1::2])
@@ -588,7 +619,7 @@ if __name__== "__main__":
     nrows = 0
     for dfile,dname in dfiles:
       print "## Processing (%s) %s ##"%(dname,dfile)
-      nrows += pdbmap.load_data(dname,dfile,args.indexing)
+      nrows += pdbmap.load_data(dname,dfile,args.indexing,not args.novep)
       print " # %d data rows uploaded."%nrows
     #TESTING: Explicit calls allow for parallelization of load_data and filter
     #       : over each chromosome/file in the dataset
@@ -606,10 +637,10 @@ if __name__== "__main__":
 
   ## visualize ##
   elif args.cmd == "visualize":
-    pdbmap = PDBMap(idmapping=args.idmapping)
     if len(args.args) < 3:
-      msg = "usage: pdbmap.py -c conf_file visualize entity data_name feature[,...] biounit[,...] [minval:maxval,...] [color1,color2,...;...]\n"
+      msg = "usage: pdbmap.py -c conf_file visualize <entity> <data_name> <feature[,...]> <biounit[,...]> [minval:maxval,...] [color1,color2,...;...]\n"
       print msg; sys.exit(1)
+    pdbmap = PDBMap(idmapping=args.idmapping)
     entity = args.args[0]
     struct_label   = 'uniprot-pdb' if not args.slabel else args.slabel
     data_label = args.args[1]
@@ -639,15 +670,15 @@ if __name__== "__main__":
   ## stats ##
   elif args.cmd == "stats":
     if len(args.args) < 1:
-      msg = "usage: pdbmap.py -c conf_file stats genotypes populations data_name\n"
+      msg = "usage: pdbmap.py -c conf_file stats <genotypes> <populations> <data_name>\n"
       print msg; sys.exit(1)
     print "Functionality not yet implemented."
 
   ## residue interaction network ##
   elif args.cmd == "network":
-    pdbmap = PDBMap(reduce=args.reduce,probe=args.probe)
     if len(args.args) < 2:
-      msg = "usage: pdbmap.py -c conf_file network structid [backbone(T/F) pdb_bonds(T/F)]"
+      msg = "usage: pdbmap.py -c conf_file network <structid> [backbone(T/F) pdb_bonds(T/F)]"
+    pdbmap = PDBMap(reduce=args.reduce,probe=args.probe)
     structid   = args.args[0]
     coord_file = args.args[1]
     backbone,pdb_bonds = False,False
@@ -659,10 +690,17 @@ if __name__== "__main__":
 
   ## intersect ##
   elif args.cmd == "intersect":
+    if len(args.args) < 1:
+      msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> intersect <data_name>\n"
+      msg += "alt:   pdbmap.py -c conf_file --slabel=<slabel> --dlabel=<data_name> intersect\n"
+      print msg; sys.exit(1)
     pdbmap = PDBMap()
-    msg  = "WARNING (PDBMap) If loading data, intersections may be automatically applied.\n"
-    sys.stderr.write(msg)
-    dname = args.args[0] # Get the dataset name
+    # msg  = "WARNING (PDBMap) If loading data, intersections may be automatically applied.\n"
+    # sys.stderr.write(msg)
+    if not args.dlabel:
+      dname = args.args[0] # Get the dataset name
+    else:
+      dname = args.dlabel
     sname = None if len(args.args) < 2 else args.args[1]
     if sname == 'all': sname = None
     nrows = QUICK_THRESH+1 if len(args.args) < 3 else int(args.args[2])

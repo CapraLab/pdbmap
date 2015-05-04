@@ -595,9 +595,16 @@ class PDBMapIO(PDBIO):
       query += "%(EASEUR_Fst)s,%(EASAFR_Fst)s,%(SASEUR_Fst)s,%(SASAFR_Fst)s,%(EURAFR_Fst)s,"
       query += "%(ALLPOP_Nhat)s,%(ALLPOP_Dhat)s,%(ALLPOP_Fst)s,%(SNPSOURCE)s,%(FORMAT)s,%(GT)s)"
       try: self._c.execute(query,record.INFO)
-      except:
-        msg = self._c._last_executed.replace('\n',';')
-        sys.stderr.write("WARNING (PDBMapIO) MySQL query failed: %s\n"%msg)
+      except Exception as e:
+        if "_last_executed" in dir(self._c):
+          msg = self._c._last_executed.replace('\n',';')
+          sys.stderr.write("WARNING (PDBMapIO) MySQL query failed, query: %s\n"%msg)
+        else:
+          msg  = str(e).replace('\n',';')
+          msg += "WARNING (PDBMapIO) MySQL query failed, exception: %s\n"%msg
+          sys.stderr.write(msg)
+      self._close()
+      self._connect(cursorclass=MySQLdb.cursors.Cursor)
       # Upload each consequence to GenomicConsequence
       query  = "INSERT IGNORE INTO GenomicConsequence "
       query += "(label,chr,start,end,name,transcript,protein,canonical,allele,"
@@ -613,9 +620,14 @@ class PDBMapIO(PDBIO):
       for csq in record.CSQ:
         csq["LABEL"] = self.dlabel
         try: self._c.execute(query,csq)
-        except:
-          msg = self._c._last_executed.replace('\n',';')
-          sys.stderr.write("WARNING (PDBMapIO) MySQL query failed: %s\n"%msg)
+        except Exception as e:
+          if "_last_executed" in dir(self._c):
+            msg = self._c._last_executed.replace('\n',';')
+            sys.stderr.write("WARNING (PDBMapIO) MySQL query failed, query:: %s\n"%msg)
+          else:
+            msg  = str(e).replace('\n',';')
+            msg += "WARNING (PDBMapIO) MySQL query failed, exception: %s\n"%msg
+            sys.stderr.write(msg)            
     resetwarnings()
     self._close()
     return i # return the number of uploaded rows
@@ -646,75 +658,6 @@ class PDBMapIO(PDBIO):
         raise
     self._close()
     return(i) # Return the number of uploaded rows
-
-  def secure_command(self,query,qvars=None):
-    """ Executes commands using safe practices """
-    self._connect()
-    filterwarnings('ignore', category = MySQLdb.Warning)
-    try:
-      if qvars: self._c.execute(query,qvars)
-      else:     self._c.execute(query)
-    except Exception as e:
-      msg  = "ERROR (PDBMapIO) Secure command failed; Exception: %s; "%str(e)
-      msg += "Command: %s"%self._c._last_executed
-      raise Exception(msg)
-    self._close()
-    resetwarnings()
-
-  def secure_query(self,query,qvars=None,cursorclass='SSDictCursor'):
-    """ Executes queries using safe practices """
-    if cursorclass == 'SSDictCursor':
-      self._connect(cursorclass=MySQLdb.cursors.SSDictCursor)
-    elif cursorclass == 'SSCursor':
-      self._connect(cursorclass=MySQLdb.cursors.SSCursor)
-    elif cursorclass == 'Cursor':
-      self._connect(cursorclass=MySQLdb.cursors.Cursor)
-    else:
-      self._connect()
-    filterwarnings('ignore', category = MySQLdb.Warning)
-    try:
-      if qvars: self._c.execute(query,qvars)
-      else:     self._c.execute(query)
-    except Exception as e:
-      msg  = "ERROR (PDBMapIO) Secure query failed; Exception: %s; "%str(e)
-      msg += " Provided query: %s"%query
-      msg += " Provided args: %s"%str(qvars)
-      if "_last_executed" in dir(self._c):
-        msg += " Executed Query: %s"%self._c._last_executed
-      raise Exception(msg)
-    resetwarnings()
-    for row in self._c:
-      yield row
-    self._close()
-
-  def check_schema(self):
-    self._connect(usedb=False)
-    format_dict = {'dbuser':self.dbuser,'dbhost':self.dbhost}
-    queries = [ 'lib/create_schema_Structure.sql',
-                'lib/create_schema_Model.sql',
-                'lib/create_schema_Chain.sql',
-                'lib/create_schema_Residue.sql',
-                'lib/create_schema_Transcript.sql',
-                'lib/create_schema_Alignment.sql',
-                'lib/create_schema_AlignmentScore.sql',
-                'lib/create_schema_GenomicData.sql',
-                'lib/create_schema_GenomicConsequence.sql',
-                'lib/create_schema_GenomicIntersection.sql',
-                'lib/create_proc_build_GenomePDB.sql',
-                'lib/create_proc_update_GenomePDB.sql']
-    filterwarnings('ignore', category = MySQLdb.Warning)
-    try: # Create the database if not exists
-      self._c.execute("CREATE DATABASE %s"%self.dbname)
-    except: pass # Database exists. Using existing.
-    finally: self._c.execute("USE %s"%self.dbname)
-    for q in queries:
-      try: # Create the tables and procedures if not exists
-        lines = [line.split('#')[0].rstrip() for line in open(q,'rb')]
-        query = ' '.join(lines)
-        self._c.execute(query%format_dict)
-      except: pass # Table exists. Using existing.
-    resetwarnings()
-    self._close()
 
   def load_structure(self,structid,biounit=0,useranno=False,raw=False):
     """ Reconstructs annotated PDBMapStructure from the database """
@@ -860,6 +803,54 @@ class PDBMapIO(PDBIO):
         return unp
     return None
 
+  def load_sifts(self,fname,sprot=None):
+    if sprot:
+      PDBMapProtein.load_sprot(sprot)
+      humansp = PDBMapProtein.sprot
+    else:
+      humansp = None
+    rc = 0
+    with open(fname,'rb') as fin:
+      fin.readline(); fin.readline() # skip first two lines
+      reader = csv.reader(fin,delimiter='\t')
+      for row in reader:
+        q  = "INSERT IGNORE INTO sifts "
+        q += "(pdbid,chain,sp,pdb_seqid,sp_seqid) VALUES "
+        v = []
+        pdbid,chain,sp = row[0:3]
+        pdbid = pdbid.strip()
+        if humansp and row[2] not in humansp:
+          continue # not a human protein
+        try:
+          res_beg,res_end,pdb_beg,pdb_end,sp_beg,sp_end = [int(x) for x in row[3:]]
+        except:
+          # msg  = "WARNING (PDBMapIO) SIFTS icode error: "
+          # msg += "%s,%s,%s\n"%(pdbid,chain,sp)
+          # sys.stderr.write(msg)
+          continue
+        res_range = range(res_beg,res_end+1)
+        pdb_range = range(pdb_beg,pdb_end+1)
+        sp_range  = range(sp_beg,sp_end+1)
+        if len(res_range) != len(pdb_range) or len(pdb_range) != len(sp_range):
+          # msg  = "WARNING (PDBMapIO) SIFTS range mismatch: "
+          # msg += "%s,%s,%s\n"%(pdbid,chain,sp)
+          # sys.stderr.write(msg) 
+          continue
+        for i,seqid in enumerate(pdb_range):
+          v.append("('%s','%s','%s',%d,%d)"%(pdbid,chain,sp,seqid,sp_range[i]))
+        # Upload after each row
+        q = q+','.join(v)
+        rc += self.secure_command(q)
+    return rc
+
+  def load_pfam(self,fname):
+    query  = "LOAD DATA LOCAL INFILE %s "
+    query += "INTO TABLE pfam "
+    query += "FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n' "
+    query += "IGNORE 1 LINES"
+    rc = self.secure_command(query,(fname,))
+    return rc
+
   def show(self):
     return(self.__dict__['structure'])
 
@@ -874,13 +865,22 @@ class PDBMapIO(PDBIO):
     if not self._con:
       try:
         if usedb:
-          con = MySQLdb.connect(host=self.dbhost,
-                user=self.dbuser,passwd=self.dbpass,
-                db=self.dbname,cursorclass = cursorclass)
+          if self.dbpass:
+            con = MySQLdb.connect(host=self.dbhost,
+                  user=self.dbuser,passwd=self.dbpass,
+                  db=self.dbname,cursorclass=cursorclass)
+          else:
+            cton = MySQLdb.connect(host=self.dbhost,
+                  user=self.dbuser,db=self.dbname,
+                  cursorclass = cursorclass)
         else:
-          con = MySQLdb.connect(host=self.dbhost,
-                user=self.dbuser,passwd=self.dbpass,
-                cursorclass = cursorclass)
+          if self.dbpass:
+            con = MySQLdb.connect(host=self.dbhost,
+                  user=self.dbuser,passwd=self.dbpass,
+                  cursorclass = cursorclass)
+          else:
+            con = MySQLdb.connect(host=self.dbhost,
+                user=self.dbuser,cursorclass=cursorclass)
         # Add to connection pool and set as active connection
         self._cons.append(con)
         self._con = con
@@ -893,7 +893,11 @@ class PDBMapIO(PDBIO):
           time.sleep(30) # Wait 30 seconds and retry
           return self._connect(usedb,cursorclass,retry=False)
         else:
-          msg = "Database connection unsuccessful: %s\n"%e
+          msg  = "\nDatabase connection unsuccessful: %s\n"%e
+          msg += "Parameters:\n"
+          msg += " DBHOST = %s\n"%self.dbhost
+          msg += " DBNAME = %s\n"%self.dbname
+          msg += " DBUSER = %s\n\n"%self.dbuser
           sys.stderr.write(msg)
           raise
     # Finally, open a cursor from the active connection
@@ -903,6 +907,81 @@ class PDBMapIO(PDBIO):
   def _close(self):
     self._c.close() # Close only the cursor
     return
+
+  def secure_query(self,query,qvars=None,cursorclass='SSDictCursor'):
+    """ Executes queries using safe practices """
+    if cursorclass == 'SSDictCursor':
+      self._connect(cursorclass=MySQLdb.cursors.SSDictCursor)
+    elif cursorclass == 'SSCursor':
+      self._connect(cursorclass=MySQLdb.cursors.SSCursor)
+    elif cursorclass == 'Cursor':
+      self._connect(cursorclass=MySQLdb.cursors.Cursor)
+    else:
+      self._connect()
+    filterwarnings('ignore', category = MySQLdb.Warning)
+    try:
+      if qvars: self._c.execute(query,qvars)
+      else:     self._c.execute(query)
+    except Exception as e:
+      msg  = "ERROR (PDBMapIO) Secure query failed; Exception: %s; "%str(e)
+      msg += " Provided query: %s"%query
+      msg += " Provided args: %s"%str(qvars)
+      if "_last_executed" in dir(self._c):
+        msg += " Executed Query: %s"%self._c._last_executed
+      raise Exception(msg)
+    resetwarnings()
+    for row in self._c:
+      yield row
+    self._close()
+
+  def secure_command(self,query,qvars=None):
+    """ Executes commands using safe practices """
+    self._connect()
+    filterwarnings('ignore', category = MySQLdb.Warning)
+    try:
+      if qvars: self._c.execute(query,qvars)
+      else:     self._c.execute(query)
+    except Exception as e:
+      msg  = "ERROR (PDBMapIO) Secure command failed; Exception: %s; "%str(e)
+      msg += "Command: %s"%self._c._last_executed
+      raise Exception(msg)
+    rc = self._c.rowcount
+    self._close()
+    resetwarnings()
+    return rc
+
+  def check_schema(self):
+    self._connect(usedb=False)
+    format_dict = {'dbuser':self.dbuser,'dbhost':self.dbhost}
+    queries = [ 'lib/create_schema_Structure.sql',
+                'lib/create_schema_Model.sql',
+                'lib/create_schema_Chain.sql',
+                'lib/create_schema_Residue.sql',
+                'lib/create_schema_Transcript.sql',
+                'lib/create_schema_Alignment.sql',
+                'lib/create_schema_AlignmentScore.sql',
+                'lib/create_schema_GenomicData.sql',
+                'lib/create_schema_GenomicConsequence.sql',
+                'lib/create_schema_GenomicIntersection.sql',
+                'lib/create_schema_sifts.sql',
+                'lib/create_schema_pfam.sql',
+                'lib/create_procedure_get_protein.sql',
+                'lib/create_procedure_get_structure.sql',
+                'lib/create_procedure_get_full_structure.sql',
+                'lib/create_procedure_get_repr_subset.sql']
+    filterwarnings('ignore', category = MySQLdb.Warning)
+    try: # Create the database if not exists
+      self._c.execute("CREATE DATABASE %s"%self.dbname)
+    except: pass # Database exists. Using existing.
+    finally: self._c.execute("USE %s"%self.dbname)
+    for q in queries:
+      try: # Create the tables and procedures if not exists
+        lines = [line.split('#')[0].rstrip() for line in open(q,'rb')]
+        query = ' '.join(lines)
+        self._c.execute(query%format_dict)
+      except: pass # Table exists. Using existing.
+    resetwarnings()
+    self._close()
 
   # Query definitions
  

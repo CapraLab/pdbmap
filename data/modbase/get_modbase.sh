@@ -19,10 +19,11 @@
 #=============================================================================#
 
 # Download the ModBase Human Protein Model Database for 2013
-wget -r --no-parent -N --reject -nH -nd --timeout=200000 --tries=100 ftp://salilab.org/databases/modbase/projects/genomes/H_sapiens/2013 -P H_sapiens_2013
+wget -q -r --no-parent -N --reject -nH -nd --timeout=200000 --tries=100 ftp://salilab.org/databases/modbase/projects/genomes/H_sapiens/2013 -P H_sapiens_2013
 
 # Decompress tar.xz
 tar xf H_sapiens_2013.tar.xz
+cd H_sapiens_2013
 tar xf ModBase_H_sapiens_2013_GRCh37.70.pep.abinitio.tar.xz 
 tar xf ModBase_H_sapiens_2013_GRCh37.70.pep.all.tar.xz 
 tar xf ModBase_H_sapiens_2013_refseq.tar.xz
@@ -37,6 +38,7 @@ for f in H_sapiens_2013/ModBase_H_sapiens_2013_GRCh37.70.pep.all/models/model/*.
 do
   unxz $f
   if [ -s $f ] # Test for empty files (0 initially observed)
+  then
     gzip $f
   else
     rm -f $f
@@ -53,6 +55,7 @@ do
   fi
 done
 
-# Backup the original compressed directories
-mkdir H_sapiens_2013/opt
-mv H_sapiens_2013/*.xz H_sapiens_2013/opt
+# # Backup the original compressed directories
+# mkdir H_sapiens_2013/opt
+# mv H_sapiens_2013/*.xz H_sapiens_2013/opt
+# Keep them where they are so that wget will only update if necessary

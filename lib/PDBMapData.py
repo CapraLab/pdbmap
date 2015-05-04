@@ -21,58 +21,60 @@ import subprocess as sp
 from Bio import pairwise2
 from Bio.SubsMat import MatrixInfo as matlist
 import vcf # PyVCF
+from lib import bed # PyVCF emulator for BED files
 
 class PDBMapData():
   
-  def __init__(self,vep="variant_effect_predictor.pl",plink="plink",dname='1kg3',j=1):
+  def __init__(self,vep="",plink="plink",dname='1kg3',j=1):
     self.vep = vep
     self.dname=dname
-    if not os.path.exists(vep):
+    if self.vep and not os.path.exists(self.vep):
       msg = "ERROR (PDBMapData) VEP location invalid: %s"%vep
       raise Exception(msg)
-    # Check for a dbconn file
-    registry = "%s/dbconn.conf"%os.path.dirname(vep)
-    cache    = "/dors/capra_lab/data/vep/"
-    # cache    = os.path.expanduser(cache) # replace ~ with explicit home directory
-    if not os.path.exists(cache):
-      msg = "WARNING (PDBMapData) No cache exists. Using network connection.\n"
-      sys.stderr.write(msg)
-      cache = None
-    if not os.path.exists(registry):
-      msg = "WARNING (PDBMapData) No registry specified. Using Ensembl.\n"
-      sys.stderr.write(msg)
-      registry = None
-    # Construct the VEP command
-    self.vep_cmd = [self.vep,'-i','','--database']
-    self.vep_cmd.extend(['--format',''])
-    if cache:
-      # Use a local VEP cache
-      self.vep_cmd.extend(['--cache','--dir_cache',cache])
-    if registry:
-      # Use a local Ensembl database
-      self.vep_cmd.extend(['--registry',registry])
-    # Disable the progress bars
-    self.vep_cmd.extend(['--no_progress'])
-    # Specify the species for faster db queries
-    self.vep_cmd.extend(['--species','homo_sapiens'])
-    # Increase buffer size to improve runtime (default 5,000)
-    self.vep_cmd.extend(['--buffer_size','200000']) # ~5GB per 100,000
-    # Annotate with functional info/prediction
-    self.vep_cmd.extend(['--sift','s','--polyphen','s','--regulatory'])
-    # Annotate with variant, gene, protein, and domain identifiers
-    self.vep_cmd.extend(['--check_existing','--symbol','--protein','--domains'])
-    # Annotate transcript with canonical bool and biotype
-    self.vep_cmd.extend(['--canonical','--biotype'])
-    # Retain only nonsynonymous coding variants
-    self.vep_cmd.extend(['--vcf','--filter','coding_change'])
-    # Send to stdout and don't generate a summary stats file
-    self.vep_cmd.extend(['--no_stats'])
-    self.vep_cmd.extend(['-o','stdout'])
-    if j > 1:
-      # Fork to decrease runtime
-      self.vep_cmd.extend(['--fork',str(j)])
+    if self.vep:
+      # Check for a dbconn file
+      registry = "%s/dbconn.conf"%os.path.dirname(vep)
+      cache    = "/dors/capra_lab/data/vep/"
+      # cache    = os.path.expanduser(cache) # replace ~ with explicit home directory
+      if not os.path.exists(cache):
+        msg = "WARNING (PDBMapData) No cache exists. Using network connection.\n"
+        sys.stderr.write(msg)
+        cache = None
+      if not os.path.exists(registry):
+        msg = "WARNING (PDBMapData) No registry specified. Using Ensembl.\n"
+        sys.stderr.write(msg)
+        registry = None
+      # Construct the VEP command
+      self.vep_cmd = [self.vep,'-i','','--database']
+      self.vep_cmd.extend(['--format',''])
+      if cache:
+        # Use a local VEP cache
+        self.vep_cmd.extend(['--cache','--dir_cache',cache])
+      if registry:
+        # Use a local Ensembl database
+        self.vep_cmd.extend(['--registry',registry])
+      # Disable the progress bars
+      self.vep_cmd.extend(['--no_progress'])
+      # Specify the species for faster db queries
+      self.vep_cmd.extend(['--species','homo_sapiens'])
+      # Increase buffer size to improve runtime (default 5,000)
+      self.vep_cmd.extend(['--buffer_size','200000']) # ~5GB per 100,000
+      # Annotate with functional info/prediction
+      self.vep_cmd.extend(['--sift','s','--polyphen','s','--regulatory'])
+      # Annotate with variant, gene, protein, and domain identifiers
+      self.vep_cmd.extend(['--check_existing','--symbol','--protein','--domains'])
+      # Annotate transcript with canonical bool and biotype
+      self.vep_cmd.extend(['--canonical','--biotype'])
+      # Retain only nonsynonymous coding variants
+      self.vep_cmd.extend(['--vcf','--filter','coding_change'])
+      # Send to stdout and don't generate a summary stats file
+      self.vep_cmd.extend(['--no_stats'])
+      self.vep_cmd.extend(['-o','stdout'])
+      if j > 1:
+        # Fork to decrease runtime
+        self.vep_cmd.extend(['--fork',str(j)])
 
-  def vep_record_parser(self,record,info_headers,csq_headers):
+  def record_parser(self,record,info_headers,csq_headers):
     
     # Ensure that an end is specified, default to start+1
     if "END" not in record.INFO:
@@ -142,6 +144,7 @@ class PDBMapData():
         record.INFO["%s_Fst"%pop]  = fst  if not np.isnan(fst)  else None
       else:
         pop = pop[:-3] # Remove the FST suffix
+        pop = pop if pop != 'AMREASSASEURAFR' else 'ALLPOP'
         record.INFO["%s_Nhat"%pop] = None
         record.INFO["%s_Dhat"%pop] = None
         record.INFO["%s_Fst"%pop]  = None
@@ -168,34 +171,76 @@ class PDBMapData():
     else:
       record.INFO["DA"] = record.INFO["ALT"]      
     
-    # Extract the consequences
-    record.CSQ = self._parse_csq(csq_headers,record.INFO['CSQ'])
-    # Add some "consequence" info to the variant info
-    record.INFO["EXISTING"] = record.CSQ[0]['Existing_variation']
-    record.INFO["GENE"] = record.CSQ[0]['Gene']
-    if record.CSQ[0]['SYMBOL_SOURCE'] == 'HGNC':
-      record.INFO["HGNC"] = record.CSQ[0]["SYMBOL"]
-    else: record.INFO["HGNC"] = None
-    # Correct missing variant IDs
-    if not record.INFO["ID"]:
-      if record.INFO["EXISTING"]:
-        record.INFO["ID"] = record.INFO["EXISTING"]
-      else:
-        record.INFO["ID"] = "%(CHROM)s:%(START)d-%(END)d"%(record.INFO)
-    # Add some variant info to the consequences
-    for csq in record.CSQ:
-      csq["ID"] = record.INFO["ID"]
-      csq["CHROM"] = record.INFO["CHROM"]
-      csq["START"] = record.INFO["START"]
-      csq["END"] = record.INFO["END"]
+    if not csq_headers:
+      record.CSQ = [{"ID":   record.INFO["ID"],
+                    "CHROM": record.INFO["CHROM"],
+                    "START": record.INFO["START"],
+                    "END":   record.INFO["END"],
+                    "Feature":          None,
+                    "ENSP":             None,
+                    "CANONICAL":        None,
+                    "Allele":           None,
+                    "Consequence":      None,
+                    "cDNA_position":    None,
+                    "CDS_position":     None,
+                    "Protein_position": None,
+                    "Ref_AminoAcid":    None,
+                    "Alt_AminoAcid":    None,
+                    "Ref_Codon":        None,
+                    "Alt_Codon":        None,
+                    "PolyPhen":         None,
+                    "SIFT":             None,
+                    "BIOTYPE":          None,
+                    "DOMAINS":           None}]
+      record.INFO['EXISTING'] = None
+      record.INFO["GENE"] = None
+      record.INFO["HGNC"] = None
+
+      # print "record.INFO:"
+      # for key,val in record.INFO.iteritems():
+      #   print key,val
+      # print ''
+      # print "record.CSQ:"
+      # for key,val in record.CSQ[0].iteritems():
+      #   print key,val
+      # print ''
+      # sys.exit()
+
+    else:
+      # Extract the consequences
+      record.CSQ = self._parse_csq(csq_headers,record.INFO['CSQ'])
+      # Add some "consequence" info to the variant info
+      record.INFO["EXISTING"] = record.CSQ[0]['Existing_variation']
+      record.INFO["GENE"] = record.CSQ[0]['Gene']
+      if record.CSQ[0]['SYMBOL_SOURCE'] == 'HGNC':
+        record.INFO["HGNC"] = record.CSQ[0]["SYMBOL"]
+      else: record.INFO["HGNC"] = None
+      # Correct missing variant IDs
+      if not record.INFO["ID"]:
+        if record.INFO["EXISTING"]:
+          record.INFO["ID"] = record.INFO["EXISTING"]
+        else:
+          record.INFO["ID"] = "%(CHROM)s:%(START)d-%(END)d"%(record.INFO)
+      # Add some variant info to the consequences
+      for csq in record.CSQ:
+        csq["ID"] = record.INFO["ID"]
+        csq["CHROM"] = record.INFO["CHROM"]
+        csq["START"] = record.INFO["START"]
+        csq["END"] = record.INFO["END"]
     return record
 
-  def load_vcf(self,fname):
+  def load_vcf(self,fname,vep=True):
     """ Pipe VCF file through VEP and yield VEP rows """
     print "Initializing VCF generator."
     # Parse the VCF output from VEP, save to cache
     cache  = 'data/cache/%s'%os.path.basename(fname)
-    parser = vcf.Reader(self.load_vep(fname,'vcf',cache),prepend_chr=True)
+    if cache.split('.')[-1] != 'gz':
+      cache += '.gz'
+    if vep:
+      parser = vcf.Reader(self.load_vep(fname,'vcf',cache),prepend_chr=True)
+    else:
+      parser = vcf.Reader(fname,prepend_chr=True)
+      parser.infos['CSQ'] = bed.Consequence() # dummy object
     # Determine Info headers
     info_headers = parser.infos.keys()
     # Determine Consequence headers
@@ -203,7 +248,7 @@ class PDBMapData():
     nscount = 0
     for record in parser:
       nscount += 1
-      # If consequence refers to a haplotype chromosome, ignore
+      # If position refers to a haplotype chromosome, ignore
       if record.CHROM not in ['chr1','chr2','chr3',
                         'chr4','chr5','chr6','chr7','chr8',
                         'chr9','chr10','chr11','chr12','chr13',
@@ -218,23 +263,39 @@ class PDBMapData():
     """ Convert PED/MAP to VCF, pipe VCF through VEP and load VEP output """
     print "load_pedmap not implemented"
 
-  def load_bed(self,fname,id_type="id"):
+  def load_bed(self,fname,id_type="id",vep=True):
     """ Load data from BED """
     print "Initializing BED generator."
     # Parse the VCF output from VEP, save to cache
-    cache  = 'data/cache/%s'%os.path.basename(fname)
-    parser = vcf.Reader(self.load_vep(fname,id_type,cache))
+    cache  = 'data/cache/%s.gz'%os.path.basename(fname)
+    if cache.split('.')[-1] != 'gz':
+      cache += '.gz'
+    if vep:
+      parser = vcf.Reader(self.load_vep(fname,id_type,cache))
+    else:
+      parser = bed.Reader(fname)
     # Determine Info headers
     info_headers = parser.infos.keys()
     # Determine Consequence headers
-    csq_headers  = parser.infos['CSQ'].desc.split(': ')[-1].split('|')
+    if vep:
+      csq_headers  = parser.infos['CSQ'].desc.split(': ')[-1].split('|')
+    else: csq_headers = []
+
     nscount = 0
     for record in parser:
       nscount += 1
-      yield self.vep_record_parser(record,info_headers,csq_headers)
+      # If position refers to a haplotype chromosome, ignore
+      if record.CHROM not in ['chr1','chr2','chr3',
+                        'chr4','chr5','chr6','chr7','chr8',
+                        'chr9','chr10','chr11','chr12','chr13',
+                        'chr14','chr15','chr16','chr17','chr18',
+                        'chr19','chr20','chr21','chr22',
+                        'chrX','chrY','chrMT']:
+        continue
+      yield self.record_parser(record,info_headers,csq_headers)
     print "Nonsynonymous SNPs in %s: %d"%(fname,nscount)
 
-  def load_bedfile(self,fname,io,delim='\t',indexing=None):
+  def load_bedfile(self,fname,io,delim='\t',indexing=None,vepprep=True):
     """ Creates a supplementary table for original datafile """
     print "Uploading original datafile to supplementary database."
     with open(fname,'rb') as fin:
@@ -287,13 +348,14 @@ class PDBMapData():
     elif indexing == 'ensembl':
       query = "UPDATE IGNORE pdbmap_supp.%s SET end=end+1 ORDER BY start,end DESC"%self.dname
       io.secure_command(query)
+    if vepprep:
     # Retain only rsID if not VEP-default format
-    if id_type != 'default':
-      if delim == '\t':
-        os.system("sed '1d' %s | cut -f4 > %sVEPPREP.txt"%(fname,fname.replace('.','_')))
-      else:
-        os.system("sed '1d' %s | cut -d'%s' -f4 > %sVEPPREP.txt"%(fname,delim,fname.replace('.','_')))
-      fname = "%sVEPPREP.txt"%fname.replace('.','_')
+      if id_type != 'default':
+        if delim == '\t':
+          os.system("sed '1d' %s | cut -f4 > %sVEPPREP.txt"%(fname,fname.replace('.','_')))
+        else:
+          os.system("sed '1d' %s | cut -d'%s' -f4 > %sVEPPREP.txt"%(fname,delim,fname.replace('.','_')))
+        fname = "%sVEPPREP.txt"%fname.replace('.','_')
     return fname,id_type
 
   def load_vep(self,fname,intype='vcf',outfile=None):

@@ -124,7 +124,9 @@ class PDBMapIntersect():
     except Exception as e: 
       msg  = "ERROR (PDBMapIntersect) Exception during "
       msg += "%s Intersection of %s and %s: %s"%(dtype,dlabel,slabel,str(e))
-      raise Exception(msg)
+      sys.stderr.write(msg+'\n')
+      raise
+      # raise Exception(msg)
     finally:
       # # Remove temp files
       # sp.check_call(["rm","-f",temp1])
@@ -150,11 +152,16 @@ def parse_intersection(parser):
   for line in parser:
     line = line.strip()
     if not line or line[0] == "#": continue
-    # t_chr,t_start,t_end,pdbid,chain,seqid, \
-    #   d_chr,d_start,d_end,gc_id = line.split('\t')
-    d_chr,d_start,d_end,gc_id,d_trans,t_chr,t_start,t_end, \
-    pdbid,chain,seqid,t_trans = line.split('\t')
-    if d_trans != t_trans: continue # Not the same transcript
+    row = line.split('\t')
+    if len(row) < 12:
+      # No transcript info from GenomicConsequence
+      d_chr,d_start,d_end,gc_id,t_chr,t_start,t_end, \
+      pdbid,chain,seqid,t_trans = row
+    else:
+      # Transcript checks only if transcript info available
+      d_chr,d_start,d_end,gc_id,d_trans,t_chr,t_start,t_end, \
+      pdbid,chain,seqid,t_trans = row
+      if d_trans != t_trans: continue # Not the same transcript
     seqid = int(seqid)
     gc_id = int(gc_id)
     # Return the direct reference

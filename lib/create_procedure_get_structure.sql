@@ -45,6 +45,6 @@ ON a.structid=p.pdbid AND a.chain=p.chain AND a.seqid BETWEEN p.seqstart AND p.s
 AND (f.transcript IS NULL OR f.transcript=h.transcript)
 where a.label=SLABEL and g.label=DLABEL
 and a.structid=STRUCTID AND a.biounit=BIOUNIT
-GROUP BY d.chr,d.start,d.end,d.name,a.structid,a.biounit,a.model,a.chain,a.seqid 
+GROUP BY g.chr,g.start,g.end,g.name,a.structid,a.biounit,a.model,a.chain,a.seqid 
 ORDER BY a.structid,a.biounit,a.model,a.chain,a.seqid;
 END
