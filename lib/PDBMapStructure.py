@@ -15,9 +15,12 @@
 #=============================================================================#
 
 # See main check for cmd line parsing
-import sys,os,csv,copy,time,random
+import sys,os,csv,copy,time,random,tempfile
 import subprocess as sp
 import numpy as np
+import rosetta
+rosetta.init()
+import lib.mutants as mutants
 from Bio.PDB.Structure import Structure
 from Bio.PDB.PDBIO import PDBIO
 from Bio.PDB.PDBParser import PDBParser
@@ -29,11 +32,21 @@ from Bio.PDB.PDBExceptions import PDBConstructionWarning
 
 class PDBMapStructure(Structure):
 
-  def __init__(self,s,quality=-1):
+  def __init__(self,s,quality=-1,pdb2pose={}):
     # Assign the Structure, and quality
     self.structure   = s
     self.quality     = quality
     self.transcripts = []
+    self._pdb2pose    = pdb2pose
+    if not self._pdb2pose:
+      for m in s:
+        self._pdb2pose[m.id] = {}
+        for c in m:
+          self._pdb2pose[m.id][c.id] = {}
+      for i,r in enumerate(s.get_residues()):
+        c = r.get_parent()
+        mid,cid = c.get_parent().id,c.id
+        self._pdb2pose[mid][cid][r.id[1]] = i+1
 
   def __getattr__(self,attr):
     # Defer appropriate calls to the internal structure
@@ -50,6 +63,30 @@ class PDBMapStructure(Structure):
       return hooked
     else:
       return result
+
+  def pose(self):
+    """ Loads the PDBMapStructure as a Rosetta::Pose object """
+    io = PDBIO()
+    io.set_structure(self.structure)
+    with tempfile.NamedTemporaryFile('wrb',suffix='.pdb',delete=False) as tf:
+      io.save(tf.name)
+    pose = rosetta.Pose()
+    rosetta.pose_from_pdb(pose,tf.name)
+    os.remove(tf.name)
+    print pose
+    return pose
+
+  def from_pose(self,pose):
+    """ Updates the PDBMapStructure from a Rosetta::Pose object """
+    with tempfile.NamedTemporaryFile('wrb',suffix='.pdb',delete=False) as tf:
+      pose.dump_pdb(tf.name)
+    p = PDBParser()
+    with open(tf.name,'rb') as fin:
+      filterwarnings('ignore',category=PDBConstructionWarning)
+      s = p.get_structure(self.id,tf.name)
+      resetwarnings()
+    os.remove(tf.name)
+    return PDBMapStructure(s)
 
   def get_transcripts(self,io=None):
     # Retrieve the corresponding transcript for each chain
@@ -142,6 +179,9 @@ class PDBMapStructure(Structure):
           for r in c:
             r.snp = self.snpmapper[c.unp][r.seqid-1]
 
+  def contains(m,c,r):
+    return m in structure and c in s.structure[m] and r in s.structure[m][c]
+
   def snps(self):
     for m in self.structure:
       for c in m:
@@ -149,37 +189,45 @@ class PDBMapStructure(Structure):
           if r.snp[0]:
             yield (c.id,r.seqid,r.snp[1])
 
-  def mutate(self,muts,resmap={}):
-    """ Takes iterable of mutations in the form (mid,cid,rid,a1,a2) """
-    s = copy.deepcopy(self)
-    for c,r,a1,a2 in muts:
-      if resmap:
-        newres = resmap[(c,r)]
-        resi   = s.structure[0][' '][newres]
-      else:
-        resi = s.structure[0][c][r]
-      sys.stderr.write("%s was renumbered to %s. Inserting %s%s%s\n"%(r,resi,a1,r,a2))
-      if resi.rescode == a1:
-        resi.rescode = a2
-      else:
-        raise Exception("Sequence does not contain the reference allele")
-    altseq = ''.join([r.rescode for m in s.structure for c in m for r in c])
-    return s.scwrl(altseq)
-
   def clean(self):
     p  = PDBParser()
     io = PDBIO()
-    cleanfile = "temp/%d.pdb"%multidigit_rand(10)
-    io.set_structure(self.structure)
-    io.save(cleanfile)
-    cmd  = ['lib/clean_pdb.py',cleanfile,'nochain','nopdbout']
+    with tempfile.NamedTemporaryFile('wrb',suffix='.pdb',delete=False) as tf:
+      io.set_structure(self.structure)
+      io.save(tf.name)
+    cmd  = ['lib/clean_pdb.py',tf.name,'ignorechain','nopdbout']
     print "\n%s"%' '.join(cmd)
     proc = sp.Popen(cmd,stdout=sp.PIPE)
     s = p.get_structure(self.get_id(),proc.stdout)
-    s = PDBMapStructure(s)
-    os.remove(cleanfile)
+    s = PDBMapStructure(s,pdb2pose=self._pdb2pose)
+    os.remove(tf.name)
     return s
 
+  def mutate(self,muts,resmap={},strict=True):
+    """ Point mutation """
+    pose = self.pose()
+    for c,m in muts:
+      c = c if c else ' '
+      a1,r,a2 = m[0],int(m[1:-1]),m[-1]
+      r = self._pdb2pose[0][c][r]
+      pose = mutants.mutate_residue(pose,r,a2,pack_radius=10)
+    return self.from_pose(pose)
+
+  def relax(self):
+    """ Apply Rosetta:FastRelax """
+    pose  = self.pose()
+    relax = rosetta.FastRelax()
+    relax.set_scorefxn(rosetta.create_score_function_ws_patch("standard", "score12"))
+    relax.apply(pose)
+    return self.from_pose(pose)
+
+  def score(self):
+    """ Use Rosetta::Score to evaluate a structure """
+    sfxn = rosetta.create_score_function_ws_patch("standard", "score12")
+    p = self.pose()
+    return sfxn(p)
+
+  # DEPRECATED #
   def scwrl(self,altseq):
     """ Repacks sidechains using SCWRL4 and returns a copy """
     io = PDBIO()
@@ -202,34 +250,6 @@ class PDBMapStructure(Structure):
     os.remove(structfile)
     os.remove(scwrlfile)
     os.remove(seqfname)
-    return s
-
-  def relax(self):
-    """ Apply Rosetta:FastRelax """
-    io = PDBIO()
-    os.chdir('temp')
-    structfile = "%d.pdb"%multidigit_rand(10)
-    relaxfile  = "%s_0001.pdb"%('.'.join(structfile.split('.')[:-1]))
-    io.set_structure(self.structure)
-    io.save(structfile)
-    #FIXME: Need to specify Rosetta directory in config and not manually here
-    #FIXME: Figure out how to name the output from FastRelax
-    cmd  = ["relax","-database","/dors/capra_lab/bin/rosetta/main/database"]
-    cmd += ["-in:file:s",structfile,"-out:file:o","-relax:fast","-overwrite"]
-    print "\n%s"%' '.join(cmd)
-    t0 = time.time()
-    sp.Popen(cmd,stdout=sp.PIPE,stderr=sp.PIPE).communicate()
-    with open(relaxfile,'rb') as fin:
-      filterwarnings('ignore',category=PDBConstructionWarning)
-      p = PDBParser()
-      s = p.get_structure(self.get_id(),relaxfile)
-      resetwarnings()
-    s = PDBMapStructure(s)
-    print 'removing temp/%s'%structfile
-    os.remove(structfile)
-    print 'removing temp/%s'%relaxfile
-    os.remove(relaxfile)
-    os.chdir('..')
     return s
 
 ## Copied from biolearn
