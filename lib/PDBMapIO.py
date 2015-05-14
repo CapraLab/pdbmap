@@ -730,10 +730,7 @@ class PDBMapIO(PDBIO):
   def load_unp(self,unpid):
     """ Identifies all associated structures, then pulls those structures. """
     query = PDBMapIO.unp_query
-    #a.slabel=%s AND a.dlabel=%s AND b.label=%s AND c.label=%s AND d.label=%s AND d.unp=%s
-    q = self.secure_query(query,qvars=(self.slabel,self.dlabel,
-                                        self.dlabel,self.slabel,
-                                        self.slabel,unpid),
+    q = self.secure_query(query,qvars=(self.slabel,unpid),
                                         cursorclass='Cursor')
     entities = [r[0] for r in q]
     print "%s found in %d structures/models."%(unpid,len(entities))
@@ -1036,15 +1033,7 @@ class PDBMapIO(PDBIO):
   """
 
   # Queries all structures and models associated with a given UniProt ID
-  unp_query = """SELECT DISTINCT c.structid FROM 
-    GenomicIntersection as a
-    INNER JOIN GenomicConsequence as b
-    ON a.gc_id=b.gc_id
-    INNER JOIN Residue as c
-    ON a.slabel=c.label AND a.structid=c.structid AND a.chain=c.chain AND a.seqid=c.seqid
-    INNER JOIN Chain as d
-    ON c.label=d.label AND c.structid=d.structid AND c.chain=d.chain
-    WHERE a.slabel=%s AND a.dlabel=%s AND b.label=%s AND c.label=%s AND d.label=%s AND d.unp=%s;"""
+  unp_query = """SELECT DISTINCT structid FROM Chain WHERE label=%s AND unp=%s;"""
 
 aa_code_map = {"ala" : "A",
         "arg" : "R",

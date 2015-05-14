@@ -40,8 +40,8 @@ filterwarnings('ignore', category = MySQLdb.Warning)
 
 # Hard code database credentials and connect for intermediate tables
 def connect(cc=MySQLdb.cursors.Cursor):
-  return MySQLdb.connect(host='10.109.20.218',user='mike',
-                  passwd='cheezburger',db='pdbmap_v10',
+  return MySQLdb.connect(host='chgr2.accre.vanderbilt.edu',user='sivleyrm',
+                  passwd='global-trifecta',db='pdbmap_v11',
                   cursorclass=cc)
 
 # Initialize NN dictionary
@@ -74,7 +74,7 @@ for chrom in chroms:
   q  = "SELECT DISTINCT name,chr,start,end FROM GenomicConsequence as a "
   q += "INNER JOIN GenomicIntersection as b "
   q += "ON a.gc_id=b.gc_id " # only include mapped missense SNPs
-  q += "WHERE chr='chr%s' AND start=end-1 AND label='1kg3' "%chrom
+  q += "WHERE chr='chr%s' AND start=end-1 AND label='esp' "%chrom
   q += "AND a.consequence LIKE '%missense_variant%' "
   q += "ORDER BY chr,start,end;"
   c  = con.cursor() # open cursor
@@ -128,18 +128,18 @@ print "Done."
 print "Calculating nearest structural neighbors..."
 
 ## Process all PDB-curated biological assemblies
-with open('../temp/pdbmap_v10_1kg3_biounits.txt','rb') as fin:
+with open('../temp/UNP_Repr_Biounits_PDBONLY.txt','rb') as fin:
   fin.readline() # burn header
   structs = [row.strip().split('\t') for row in fin.readlines()]
 num_biounits = len(structs)
 print "Number of biological assemblies: %d"%num_biounits
 
-## Process all ModBase models
-with open('../temp/pdbmap_v10_1kg3_models.txt','rb') as fin:
-  fin.readline() # burn header
-  structs += [row.strip().split('\t') for row in fin.readlines()]
-num_models = len(structs)-num_biounits
-print "Number of ModBase models: %d"%num_models
+# ## Process all ModBase models
+# with open('../temp/pdbmap_v10_esp_models.txt','rb') as fin:
+#   fin.readline() # burn header
+#   structs += [row.strip().split('\t') for row in fin.readlines()]
+# num_models = len(structs)-num_biounits
+# print "Number of ModBase models: %d"%num_models
 
 singletons = set([])
 singleton  = 0
@@ -148,7 +148,7 @@ all_dup    = 0
 unmapped   = 0
 
 # Process each structure separately to reduce space complexity
-for structid,biounit in structs:
+for label,unp,structid,biounit in structs:
   q  = "SELECT c.name,a.structid,a.biounit,a.model,a.chain,a.seqid,c.chr,c.start,c.end,a.x,a.y,a.z "
   q += "FROM Residue as a "
   q += "INNER JOIN GenomicIntersection as b "
@@ -156,7 +156,7 @@ for structid,biounit in structs:
   q += "INNER JOIN GenomicConsequence as c "
   q += "ON b.dlabel=c.label AND b.gc_id=c.gc_id "
   q += "WHERE a.label='uniprot-pdb' AND b.slabel='uniprot-pdb' "
-  q += "AND b.dlabel='1kg3' AND c.label='1kg3' "
+  q += "AND b.dlabel='esp' AND c.label='esp' "
   q += "AND c.consequence LIKE '%missense_variant%' "
   q += "AND a.structid='%s' "%structid
   q += "AND a.biounit=%s "%int(biounit) # Consider each biological assembly
@@ -198,10 +198,21 @@ for structid,biounit in structs:
     all_dup += 1
     continue
 
+  # For SNPs seen multiple times in a structure, set their
+  # pairwise distances to infinity so that they are not chosen
+  # as their own nearest neighbor
+  for i in range(len(snp_vec)):
+    for j in range(len(snp_vec)):
+      if snp_vec[i] == snp_vec[j]:
+        dist_mat[i,j] = np.inf
+
   # Determine the local SNN for each variant in the structure
   for i,name in enumerate(snp_vec):
     # Determine nearest distance
     nndist = dist_mat[i][dist_mat[i]>0].min()
+    # If the only neighbor is itself, skip
+    if np.isinf(nndist):
+      continue
     # Determine variant at that distance
     nnidx  = np.where(dist_mat[i]==nndist)[0][0]
     nnname = snp_vec[nnidx]
@@ -296,7 +307,7 @@ print "Done."
 #####################################
 
 timestamp = str(time.strftime("%Y%m%d-%H"))
-res_dir   = '../results/pdbmap-1kg3_v10_steve_%s'%timestamp
+res_dir   = '../results/pdbmap-esp_v11_steve_%s'%timestamp
 os.system('mkdir -p %s'%res_dir)
 # Write the GNN and SNN for each variant to file
 with open('%s/nearest_neighbors.txt'%res_dir,'wb') as fout:

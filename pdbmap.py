@@ -329,20 +329,33 @@ class PDBMap():
       # raise Exception(msg)
       raise
 
-  def mutate(self,structid,biounit,muts):
+  def mutate(self,structid,biounit,muts,label=None,strict=True):
+    print "mutating %s.%s"%(structid,biounit)
+    label = label if label else "%s_%s"%(structid,biounit)
     p = PDBParser()
-    if biounit:
+    io = PDBIO()
+    if biounit > 0:
       bio = "%s/biounit/coordinates/all/%s.pdb%d.gz"%(args.pdb_dir,structid.lower(),biounit)
-    else:
+    elif biounit == 0:
       bio = "%s/structures/all/pdb/pdb%s.ent.gz"%(args.pdb_dir,structid.lower())
-    # cmd = ['lib/clean_pdb.py',bio,'nochain','nopdbout']
+    else:
+      bio = "%s/models/model/%s.pdb.gz"%(args.modbase_dir,structid.upper())
+      if not os.path.exists(bio):
+        print "Converting .xz to .gz"
+        cmd = "xz -d %s; gzip %s"%('.'.join(bio.split('.')[:-1])+'.xz','.'.join(bio.split('.')[:-1]))
+        print cmd
+        os.system(cmd)
+      biounit = 0
     print "Reading coordinates for %s.%s from %s"%(structid,biounit,bio)
-    # proc   = sp.Popen(cmd,stdout=sp.PIPE)
-    # s = p.get_structure(structid,proc.stdout)
     with gzip.open(bio,'rb') as fin:
       s = p.get_structure(structid,fin)
+    fin.close()
     s = PDBMapStructure.PDBMapStructure(s)
     s = s.clean()
+    pdb2pose = s._pdb2pose
+    io.set_structure(s)
+    io.save("results/%s/%s_%s.pdb"%(label,structid,biounit))
+    oss = s.score()
     # Atoms are renumbered, build a map
     resmap = {}
     with gzip.open(bio,'rb') as fin:
@@ -360,27 +373,61 @@ class PDBMap():
       r.biounit=biounit
       if r.resname.lower() in PDBMapTranscript.aa_code_map:
         r.rescode = PDBMapTranscript.aa_code_map[r.resname.lower()]
-    io = PDBIO()
-    print "Relaxing original structure with Rosetta::FastRelax...",;sys.stdout.flush()
-    t0 = time.time()
-    sr = s.relax() # relax with Rosetta::FastRelax
-    io.set_structure(sr)
-    io.save("results/%s_%s.relaxed.pdb"%(structid,biounit))
-    print "%.1f minutes"%((time.time()-t0)/60.)
+    if not os.path.exists("results/%s/%s_%s.relaxed.pdb"%(label,structid,biounit)):
+      open("results/%s/%s_%s.relaxed.pdb"%(label,structid,biounit),'w').close() # create file
+      print "Relaxing original structure with Rosetta::FastRelax...",;sys.stdout.flush()
+      t0 = time.time()
+      try:
+        sr = s.relax() # relax with Rosetta::FastRelax
+        io.set_structure(sr)
+        io.save("results/%s/%s_%s.relaxed.pdb"%(label,structid,biounit))
+      except:
+        # Delete the placeholder file if an exception occurs
+        os.remove("results/%s/%s_%s.relaxed.pdb"%(label,structid,biounit))
+        raise
+      print "%.1f minutes"%((time.time()-t0)/60.)
+      print "Scoring the relaxed structure...",;sys.stdout.flush()
+      t0 = time.time()
+      print "%2.4f (%.1f minutes)"%(oss,((time.time()-t0)/60.))
+    while os.path.getsize("results/%s/%s_%s.relaxed.pdb"%(label,structid,biounit)) <= 0:
+      time.sleep(15) # check every 15s
+    # Load the relaxed wild-type structure
+    s = p.get_structure(structid,"results/%s/%s_%s.relaxed.pdb"%(label,structid,biounit))
+    s = PDBMapStructure.PDBMapStructure(s,pdb2pose=pdb2pose)
+    rss = s.score() # RosettaScore of the relaxed WT
+    with open("results/%s/%s_%s.wt.scores"%(label,structid,biounit),'wb') as fout:
+        fout.write("WT\t%2.6f\n"%oss)
+        fout.write("rWT\t%2.6f\n"%rss)
+    mscores,rmscores = [],[]
     for mut in muts:
-      mut = ('A',358,'V','M') # 1FSU mutation
-      # mut = ('A',33,'K','R') # 1A1Z mutation
-      print "Inserting mutation with SCWRL4...";sys.stdout.flush()
-      sm = s.mutate([mut],resmap) # Insert mutation with SCWRL4
+      print "Inserting %s mutation..."%mut[1];sys.stdout.flush()
+      sm = s.mutate([mut],resmap,strict=strict) # Insert mutation
+      mscores.append((':'.join(mut),sm.score()))
+      with open("results/%s/%s_%s.mt.scores"%(label,structid,biounit),'ab') as fout:
+        fout.write("%s\t%2.6f\n"%(mscores[-1]))
+      if not sm: continue
       # sm = PDBMapStructure.PDBMapStructure(sm)
       print "Relaxing mutant with Rosetta::FastRelax...",;sys.stdout.flush()
       t0 = time.time()
       sr = sm.relax() # relax with Rosetta::FastRelax
       # sr = PDBMapStructure.PDBMapStructure(sr)
       io.set_structure(sr)
-      io.save("results/%s_%s_%s%s%s.relaxed.pdb"%(structid,biounit,mut[2],mut[1],mut[3]))
+      io.save("results/%s/%s_%s_%s.relaxed.pdb"%(label,structid,biounit,mut[1]))
       print "%.1f minutes"%((time.time()-t0)/60.)
-
+      print "Scoring the mutant structure...",;sys.stdout.flush()
+      t0 = time.time()
+      rmscores.append(('r'+':'.join(mut),sr.score()))
+      with open("results/%s/%s_%s.mt.relaxed.scores"%(label,structid,biounit),'ab') as fout:
+        fout.write("%s\t%2.6f\n"%(rmscores[-1]))
+      print "%.1f minutes"%((time.time()-t0)/60.)
+    print ''
+    print "Rosetta Scores:"
+    print "WT\t% 2.2f"%oss
+    print "rWT\t% 2.2f"%rss
+    for m,ss in mscores:
+      print "%s\t % 2.2f"%(m,ss)
+    for rm,ss in rmscores:
+      print "%s\t % 2.2f"%(rm,ss)
 
   def network(self,structid,coord_file,backbone=False,pdb_bonds=False):
     """ Returns the residue interaction network for the structure """
@@ -563,6 +610,7 @@ if __name__== "__main__":
   args.create_new_db = bool(args.create_new_db)
   args.force = bool(args.force)
   args.cores = int(args.cores)
+
   if args.create_new_db and not args.force:
     print "You have opted to create a new database."
     if raw_input("Are you sure you want to do this? (y/n):") == 'n':
@@ -774,7 +822,12 @@ if __name__== "__main__":
       print msg; sys.exit(1)
     pdbmap = PDBMap()
     entity = args.args[0]
-    muts   = args.args[1].split(',')
+    label = "%s_mutagenesis_%s"%(entity,str(time.strftime("%Y%m%d-%H")))
+    if not os.path.exists("results/%s"%label):
+      os.mkdir("results/%s"%label)
+    muts   = [m.split(':') for m in args.args[1].split(',')]
+    muts   = [m if len(m)>1 else ['',m[0]] for m in muts]
+    # print "All mutations:",muts
     io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,slabel=args.slabel)
     etype = io.detect_entity_type(entity)
     if etype == 'structure':
@@ -790,24 +843,38 @@ if __name__== "__main__":
     elif etype == 'model':
       biounits = [(entity,-1)]
     elif etype == 'unp':
-      res_list  = self.io.load_unp(unpid)
+      res_list  = io.load_unp(entity)
+      biounits = []
       for etype,entity in res_list:
         if etype == 'structure':
           # Query all biological assemblies, exclude the asymmetric unit
           query = "SELECT DISTINCT biounit FROM Chain WHERE label=%s AND structid=%s AND biounit>0"
           res   = io.secure_query(query,(args.slabel,entity,),cursorclass='Cursor')
-          biounits = [(entity,r[0]) for r in res]
+          biounits += [(entity,r[0]) for r in res]
         elif etype =='model':
           # Query all biological assemblies
-          query = "SELECT DISTINCT biounit FROM Chain WHERE label=%s AND structid=%s"
-          res   = self.io.secure_query(query,(args.slabel,entity),cursorclass='Cursor')
-          biounits = [(entity,r[0]) for r in res]
-    for sid,bio in biounits:
-      for mut in muts:
-        print "\n#####################################\n"
-        print "Modeling mutation %s in %s.%s"%(mut,sid,bio)
-        print "\n#####################################\n"
-        pdbmap.mutate(sid,bio,[mut])
+          # query = "SELECT DISTINCT biounit FROM Chain WHERE label=%s AND structid=%s"
+          # res   = io.secure_query(query,(args.slabel,entity),cursorclass='Cursor')
+          # biounits += [(entity,r[0]) for r in res]
+          biounits += [(entity,-1)]
+    # Manage parallel calls
+    mutations = [(sid,bio,mut) for sid,bio in biounits for mut in muts]
+    print "Total mutations to simulate:",len(mutations)
+    # If multiple mutation specified, do not throw "not found" errors
+    strict = True if len(mutations) < 2 else False
+    if args.ppart != None and args.ppidx != None:
+      psize = len(mutations) / args.ppart # floor
+      if (args.ppart-1) == args.ppidx:
+        mutations = mutations[args.ppidx*psize:]
+        print "Simulating mutations %d to %d"%(args.ppidx*psize,len(mutations))
+      else:
+        mutations = mutations[args.ppidx*psize:(args.ppidx+1)*psize]
+        print "Simulating mutations %d to %d"%(args.ppidx*psize,(args.ppidx+1)*psize-1)
+    for sid,bio,mut in mutations:
+      print "\n#####################################\n"
+      print "Modeling mutation %s in %s[%s].%s"%(mut[1],sid,bio,mut[0])
+      print "\n#####################################\n"
+      pdbmap.mutate(sid,bio,[mut],label=label,strict=strict)
 
   ## filter ##
   elif args.cmd == "filter":

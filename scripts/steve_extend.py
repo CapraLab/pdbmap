@@ -7,11 +7,11 @@
 import sys,os,csv,MySQLdb,math
 
 # Adds GD to SNN and SD to GNN to the provided STEVE results file
-# Uses gwar-dev pdbmap_v10
-steve_finname = sys.argv[0]
-# steve_finname = '../results/pdbmap-v10_steve_20140616-13/nearest_neighbors.txt'
+# Uses chgr2 pdbmap_v11
+steve_finname = sys.argv[1]
+# steve_finname = '../results/pdbmap-v11_steve_20140616-13/nearest_neighbors.txt'
 steve_foutname = "%s.extended.txt"%'.'.join(steve_finname.split('.')[:-1])
-con = MySQLdb.connect(host='10.109.20.218',user='mike',passwd='cheezburger',db='pdbmap_v10')
+con = MySQLdb.connect(host='chgr2.accre.vanderbilt.edu',user='sivleyrm',passwd='global-trifecta',db='pdbmap_v11')
 c = con.cursor()
 fout = open(steve_foutname,'wb')
 writer = csv.writer(fout,delimiter='\t')
@@ -20,6 +20,7 @@ with open(steve_finname,'rb') as fin:
   fout.write(header)
   reader = csv.reader(fin,delimiter='\t')
   for row in reader:
+    print 'row:',row
     VAR,GNN,SNN = row[0],row[2],row[7]
     if not SNN:
       gd2snn = 'NA'
@@ -27,7 +28,7 @@ with open(steve_finname,'rb') as fin:
       # Calculate GD to SNN
       c = con.cursor()
       query  = "SELECT chr,start FROM GenomicData "
-      query += "WHERE label='1kg' AND name=%s LIMIT 1"
+      query += "WHERE label='1kg3' AND start=%s LIMIT 1"
       c.execute(query,(VAR,))
       var_gloc = c.fetchone()
       c.close(); c = con.cursor()
@@ -35,6 +36,8 @@ with open(steve_finname,'rb') as fin:
       snn_gloc = c.fetchone()
       c.close()
       # print VAR,GNN,SNN,var_gloc,snn_gloc
+      if not snn_gloc:
+        print VAR,GNN,SNN
       if var_gloc[0] != snn_gloc[0]:
         gd2snn   = 'NA'
       else:
