@@ -47,7 +47,7 @@ class PDBMapVisualize():
 
     # Convert MAF values into DAF values
     for anno in anno_list:
-      if anno in ['daf','amr_daf','asn_daf','eur_daf','afr_daf']:
+      if anno in ['daf','amr_daf','eas_daf','sas_daf','eur_daf','afr_daf']:
         maf = 'maf' if anno == 'daf' else anno.replace('daf','af')
         res[anno] = [res[maf][i] if not res['anc_allele'][i] or res['anc_allele'][i]==res['ref_allele'][i] else 1.-res[maf][i] for i in range(len(res[maf]))]
 
