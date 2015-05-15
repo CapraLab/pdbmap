@@ -58,7 +58,7 @@ class PDBMapData():
       # Specify the species for faster db queries
       self.vep_cmd.extend(['--species','homo_sapiens'])
       # Increase buffer size to improve runtime (default 5,000)
-      self.vep_cmd.extend(['--buffer_size','200000']) # ~5GB per 100,000
+      self.vep_cmd.extend(['--buffer_size','400000']) # ~5GB per 100,000
       # Annotate with functional info/prediction
       self.vep_cmd.extend(['--sift','s','--polyphen','s','--regulatory'])
       # Annotate with variant, gene, protein, and domain identifiers
@@ -256,7 +256,7 @@ class PDBMapData():
                         'chr19','chr20','chr21','chr22',
                         'chrX','chrY','chrMT']:
         continue
-      yield self.vep_record_parser(record,info_headers,csq_headers)
+      yield self.record_parser(record,info_headers,csq_headers)
     print "Nonsynonymous SNPs in %s: %d"%(fname,nscount)
 
   def load_pedmap(self,fname):

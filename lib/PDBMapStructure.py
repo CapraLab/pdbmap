@@ -18,8 +18,6 @@
 import sys,os,csv,copy,time,random,tempfile
 import subprocess as sp
 import numpy as np
-import rosetta
-rosetta.init()
 import lib.mutants as mutants
 from Bio.PDB.Structure import Structure
 from Bio.PDB.PDBIO import PDBIO
@@ -29,6 +27,13 @@ from lib.PDBMapTranscript import PDBMapTranscript
 from lib.PDBMapAlignment import PDBMapAlignment
 from warnings import filterwarnings,resetwarnings
 from Bio.PDB.PDBExceptions import PDBConstructionWarning
+
+def rosetta_init():
+  if not rosetta_init.loaded:
+    import rosetta
+    rosetta.init()
+    rosetta_init.loaded = True
+rosetta_init.loaded = False
 
 class PDBMapStructure(Structure):
 
@@ -66,6 +71,7 @@ class PDBMapStructure(Structure):
 
   def pose(self):
     """ Loads the PDBMapStructure as a Rosetta::Pose object """
+    rosetta_init()
     io = PDBIO()
     io.set_structure(self.structure)
     with tempfile.NamedTemporaryFile('wrb',suffix='.pdb',delete=False) as tf:
@@ -205,6 +211,7 @@ class PDBMapStructure(Structure):
 
   def mutate(self,muts,resmap={},strict=True):
     """ Point mutation """
+    rosetta_init()
     pose = self.pose()
     for c,m in muts:
       c = c if c else ' '
@@ -215,6 +222,7 @@ class PDBMapStructure(Structure):
 
   def relax(self):
     """ Apply Rosetta:FastRelax """
+    rosetta_init()
     pose  = self.pose()
     relax = rosetta.FastRelax()
     relax.set_scorefxn(rosetta.create_score_function_ws_patch("standard", "score12"))
@@ -223,6 +231,7 @@ class PDBMapStructure(Structure):
 
   def score(self):
     """ Use Rosetta::Score to evaluate a structure """
+    rosetta_init()
     sfxn = rosetta.create_score_function_ws_patch("standard", "score12")
     p = self.pose()
     return sfxn(p)
