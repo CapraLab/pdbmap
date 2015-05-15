@@ -721,7 +721,7 @@ class PDBMapIO(PDBIO):
       if not np.any(s.snpmapper[c.unp][r.seqid-1]):
         snp  = [row['issnp'],row['snpid'],row['chr'],row['start'],row['end'],row['hgnc_gene'],row['ens_gene']]
         snp += [row['anc_allele'],row['ref_allele'],row['alt_allele']]
-        snp += [row['maf'],row['amr_af'],row['asn_af'],row['eur_af'],row['afr_af']]
+        snp += [row['maf'],row['amr_af'],row['asn_af'],row['eas_af'],row['sas_af'],row['eur_af'],row['afr_af']]
         snp += [row['ref_codon'],row['alt_codon'],row['vep_ref_aa'],row['vep_alt_aa']]
         s.snpmapper[c.unp][r.seqid-1] = snp
       r.snp = s.snpmapper[c.unp][r.seqid-1]
