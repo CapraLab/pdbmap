@@ -999,7 +999,7 @@ class PDBMapIO(PDBIO):
   /*TRANS*/i.transcript as enst,i.gene as ensg,i.protein as ens_prot,i.seqid as ens_prot_seqid,i.rescode as ens_prot_aa,
   /*VARIANT*/IF(f.consequence LIKE '%%%%missense_variant%%%%',1,0) as issnp,
   /*DLABEL*/g.label as dlabel,
-  /*VARIANT*/g.name as snpid,g.chr,g.start,g.end,g.hgnc_gene,g.ens_gene,g.aa as anc_allele,g.ref_allele,g.alt_allele,g.maf,g.amr_af,g.asn_af,g.eur_af,g.afr_af,
+  /*VARIANT*/g.name as snpid,g.chr,g.start,g.end,g.hgnc_gene,g.ens_gene,g.aa as anc_allele,g.ref_allele,g.alt_allele,g.maf,g.amr_af,g.asn_af,g.eas_af,g.sas_af,g.eur_af,g.afr_af,
   /*CONSEQUENCE*/f.gc_id,f.transcript as vep_trans,f.protein as vep_prot,f.protein_pos as vep_prot_pos,f.ref_codon,f.alt_codon,f.ref_amino_acid as vep_ref_aa,f.alt_amino_acid as vep_alt_aa,
   /*CONSEQUENCE*/f.consequence,f.polyphen,f.sift,f.biotype
   /*USERANNO*/%s
