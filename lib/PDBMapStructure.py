@@ -18,7 +18,6 @@
 import sys,os,csv,copy,time,random,tempfile
 import subprocess as sp
 import numpy as np
-import lib.mutants as mutants
 from Bio.PDB.Structure import Structure
 from Bio.PDB.PDBIO import PDBIO
 from Bio.PDB.PDBParser import PDBParser
@@ -31,6 +30,7 @@ from Bio.PDB.PDBExceptions import PDBConstructionWarning
 def rosetta_init():
   if not rosetta_init.loaded:
     import rosetta
+    import lib.mutants as mutants
     rosetta.init()
     rosetta_init.loaded = True
 rosetta_init.loaded = False
