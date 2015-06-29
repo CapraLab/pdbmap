@@ -20,7 +20,7 @@ import random
 import rosetta
 from rosetta import Pose
 from rosetta import make_pose_from_sequence
-from rosetta import create_score_function
+from rosetta import create_score_function_ws_patch
 from rosetta import TaskFactory
 from rosetta.utility import vector1_bool
 from rosetta import aa_from_oneletter_code
@@ -31,8 +31,8 @@ from rosetta.core.pose import PDBInfo
 #    earlier that does not optionally repack nearby residues
 
 # replaces the residue at  <resid>  in  <pose>  with  <new_res>  with repacking
-def mutate_residue( pose , mutant_position , mutant_aa ,
-        pack_radius = 0.0 , pack_scorefxn = '' ):
+def mutate_residue(pose,mutant_position,mutant_aa,
+                    pack_radius=0.0,pack_scorefxn=None):
     """
     Replaces the residue at  <mutant_position>  in  <pose>  with  <mutant_aa>
         and repack any residues within  <pack_radius>  Angstroms of the mutating
@@ -40,70 +40,57 @@ def mutate_residue( pose , mutant_position , mutant_aa ,
     note: <mutant_aa>  is the single letter name for the desired ResidueType
 
     example:
-        mutate_residue(pose,30,A)
+        mutate_residue(pose,30,A,10)
     See also:
         Pose
         PackRotamersMover
         MutateResidue
         pose_from_sequence
     """
-    #### a MutateResidue Mover exists similar to this except it does not pack
-    ####    the area around the mutant residue (no pack_radius feature)
-    #mutator = MutateResidue( mutant_position , mutant_aa )
-    #mutator.apply( test_pose )
+    
+    # Operate on (and return) a copy of the pose
+    copypose = Pose()
+    copypose.assign(pose)
+    pose     = copypose
 
     if pose.is_fullatom() == False:
-        IOError( 'mutate_residue only works with fullatom poses' )
+        raise IOError('Mutate_residue only works with fullatom poses')
 
-    test_pose = Pose()
-    test_pose.assign( pose )
-
-    # create a standard scorefxn by default
+    # Create a standard scorefxn by default
     if not pack_scorefxn:
-        pack_scorefxn = create_score_function( 'standard' )
+        pack_scorefxn = create_score_function_ws_patch("standard", "score12")
 
-    task = rosetta.standard_packer_task( test_pose )
+    # Initialize the Rosetta task
+    task = rosetta.standard_packer_task(pose)
 
-    # the Vector1 of booleans (a specific object) is needed for specifying the
-    #    mutation, this demonstrates another more direct method of setting
-    #    PackerTask options for design
-    aa_bool = rosetta.utility.vector1_bool()
-    # PyRosetta uses several ways of tracking amino acids (ResidueTypes)
-    # the numbers 1-20 correspond individually to the 20 proteogenic amino acids
-    # aa_from_oneletter returns the integer representation of an amino acid
-    #    from its one letter code
-    # convert mutant_aa to its integer representation
-    mutant_aa = aa_from_oneletter_code( mutant_aa )
-
-    # mutation is performed by using a PackerTask with only the mutant
-    #    amino acid available during design
-    # to do this, construct a Vector1 of booleans indicating which amino acid
-    #    (by its numerical designation, see above) to allow
-    for i in range( 1 , 21 ):
-        # in Python, logical expression are evaluated with priority, thus the
-        #    line below appends to aa_bool the truth (True or False) of the
-        #    statement i == mutant_aa
-        aa_bool.append( i == mutant_aa )
-
-    # modify the mutating residue's assignment in the PackerTask using the
-    #    Vector1 of booleans across the proteogenic amino acids
-    task.nonconst_residue_task( mutant_position
-        ).restrict_absent_canonical_aas( aa_bool )
-
-    # prevent residues from packing by setting the per-residue "options" of
-    #    the PackerTask
+    # By default, the entire protein is re-designed
+    # Restrict design to residues within the pack_radius
+    # Restrict design to original amino acids (repack only)
     center = pose.residue( mutant_position ).nbr_atom_xyz()
-    for i in range( 1 , pose.total_residue() + 1 ):
-        # only pack the mutating residue and any within the pack_radius
-        if not i == mutant_position or center.distance_squared(
-                test_pose.residue( i ).nbr_atom_xyz() ) > pack_radius**2:
-            task.nonconst_residue_task( i ).prevent_repacking()
+    for i in range(1,pose.total_residue() + 1 ):
+        d = center.distance_squared(pose.residue(i).nbr_atom_xyz()) 
+        # Only pack the mutating residue and any within the pack_radius
+        if d > pack_radius**2:
+            task.nonconst_residue_task(i).prevent_repacking()
+        # Restrict mutated residue to the mutant amino acid
+        elif i == mutant_position:
+            aa_bool = rosetta.utility.vector1_bool()
+            aa      = aa_from_oneletter_code(mutant_aa)
+            for j in range(1,21):
+                aa_bool.append(j == aa)
+            task.nonconst_residue_task(i).restrict_absent_canonical_aas(aa_bool)
+        # Restrict local residues to their original amino acid
+        else:
+            aa_bool = rosetta.utility.vector1_bool()
+            aa      = aa_from_oneletter_code(pose.residue(i).name())
+            for j in range(1,21):
+                aa_bool.append(j == aa)
+            task.nonconst_residue_task(i).restrict_absent_canonical_aas(aa_bool)
 
-    # apply the mutation and pack nearby residues
-    packer = PackRotamersMover( pack_scorefxn , task )
-    packer.apply( test_pose )
-
-    return test_pose
+    # Apply the mutation and pack nearby residues
+    packer = PackRotamersMover(pack_scorefxn,task)
+    packer.apply(pose)
+    return pose
 
 # returns a pose made from seq, all phi/psi/omega set to 180
 def pose_from_sequence( seq , res_type = 'fa_standard' , name = '' , chain_id = 'A' ):

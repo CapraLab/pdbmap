@@ -19,8 +19,10 @@
 
 # See main check for cmd line parsing
 import argparse,ConfigParser
-import sys,os,csv,time,pdb,glob,gzip
+import sys,os,csv,time,pdb,glob,gzip,shutil
 import subprocess as sp
+from multiprocessing import cpu_count
+import numpy as np
 from Bio.PDB.PDBIO import PDBIO
 from Bio.PDB.PDBParser import PDBParser
 from warnings import filterwarnings,resetwarnings
@@ -117,7 +119,7 @@ class PDBMap():
       return 1
     return 0
 
-  def load_model(self,model_summary,model_fname=None,label="",io=None):
+  def load_model(self,model_summary,model_fname=None,label="",io=None,unp=None):
     """ Loads a given ModBase model into the PDBMap database """
     
     if not io:
@@ -146,7 +148,7 @@ class PDBMap():
         return 1
     try:
       p = PDBMapIO.PDBMapParser()
-      m = p.get_model(model_summary,model_fname)
+      m = p.get_model(model_summary,model_fname,unp=unp)
     except Exception as e:
       msg = "ERROR (PDBMap) %s could not be loaded: %s\n"%(modelid,str(e))
       sys.stderr.write(msg)
@@ -200,7 +202,6 @@ class PDBMap():
   
   def intersect_data(self,dname,slabel=None,dtype="Genomic",quick=False):
     """ Intersects a loaded dataset with the PDBMap structural domain """
-    slabel = slabel if slabel else self.slabel
     io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,dlabel=dname,slabel=slabel)
     i = PDBMapIntersect.PDBMapIntersect(io)
     # Note: Only all-structures <-> genomic data intersections supported
@@ -329,33 +330,45 @@ class PDBMap():
       # raise Exception(msg)
       raise
 
-  def mutate(self,structid,biounit,muts,label=None,strict=True):
-    print "mutating %s.%s"%(structid,biounit)
-    label = label if label else "%s_%s"%(structid,biounit)
-    p = PDBParser()
-    io = PDBIO()
-    if biounit > 0:
-      bio = "%s/biounit/coordinates/all/%s.pdb%d.gz"%(args.pdb_dir,structid.lower(),biounit)
-    elif biounit == 0:
-      bio = "%s/structures/all/pdb/pdb%s.ent.gz"%(args.pdb_dir,structid.lower())
+  def mutate(self,structid,biounit,muts,label=None,strict=True,relaxdir=False,refseq=None,sfile=None):
+    if sfile:
+      bio = sfile
+    # If a structid,biounit was specified, load the biological assembly
     else:
-      bio = "%s/models/model/%s.pdb.gz"%(args.modbase_dir,structid.upper())
-      if not os.path.exists(bio):
-        print "Converting .xz to .gz"
-        cmd = "xz -d %s; gzip %s"%('.'.join(bio.split('.')[:-1])+'.xz','.'.join(bio.split('.')[:-1]))
-        print cmd
-        os.system(cmd)
-      biounit = 0
+      label = label if label else "%s_%s"%(structid,biounit)
+      if relaxdir:
+        bio = "results/%s_%s_wt_relaxation/%s_%s.relaxed.pdb.gz"%(structid.upper(),biounit,structid.upper(),biounit)
+        if not os.path.exists(bio):
+          sys.stderr.write("Relaxdir specified, but no relaxed PDB found at %s. Skipping.\n"%bio)
+          return
+      elif biounit > 0:
+        bio = "%s/biounit/coordinates/all/%s.pdb%d.gz"%(args.pdb_dir,structid.lower(),biounit)
+      elif biounit == 0:
+        bio = "%s/structures/all/pdb/pdb%s.ent.gz"%(args.pdb_dir,structid.lower())
+      else:
+        bio = "%s/models/model/%s.pdb.gz"%(args.modbase_dir,structid.upper())
+        if not os.path.exists(bio):
+          print "Converting .xz to .gz"
+          cmd = "xz -d %s; gzip %s"%('.'.join(bio.split('.')[:-1])+'.xz','.'.join(bio.split('.')[:-1]))
+          print cmd
+          os.system(cmd)
+        biounit = 0
+    print "Mutating %s.%s"%(structid,biounit)
     print "Reading coordinates for %s.%s from %s"%(structid,biounit,bio)
+    io = PDBIO()
+    p  = PDBParser()
     with gzip.open(bio,'rb') as fin:
       s = p.get_structure(structid,fin)
-    fin.close()
-    s = PDBMapStructure.PDBMapStructure(s)
-    s = s.clean()
+    p = PDBMapIO.PDBMapParser()
+    s = p.process_structure(s,force=True)
+    s = PDBMapStructure.PDBMapStructure(s,refseq=refseq)
+    if not relaxdir:
+      s = s.clean()
     pdb2pose = s._pdb2pose
     io.set_structure(s)
     io.save("results/%s/%s_%s.pdb"%(label,structid,biounit))
-    oss = s.score()
+    oss  = s.score()  # RosettaScore of the unrelaxed WT
+    orep = s.fa_rep() # Rosetta full-atom repulsion of the unrelaxed WT
     # Atoms are renumbered, build a map
     resmap = {}
     with gzip.open(bio,'rb') as fin:
@@ -373,7 +386,11 @@ class PDBMap():
       r.biounit=biounit
       if r.resname.lower() in PDBMapTranscript.aa_code_map:
         r.rescode = PDBMapTranscript.aa_code_map[r.resname.lower()]
-    if not os.path.exists("results/%s/%s_%s.relaxed.pdb"%(label,structid,biounit)):
+    if relaxdir and not os.path.exists("results/%s/%s_%s.relaxed.pdb"%(label,structid,biounit)):
+      # If relaxation preprocessing performed, do not relax the original WT structure
+      shutil.copy("results/%s/%s_%s.pdb"%(label,structid,biounit),"results/%s/%s_%s.relaxed.pdb"%(label,structid,biounit))
+    elif not os.path.exists("results/%s/%s_%s.relaxed.pdb"%(label,structid,biounit)):
+      # If no relaxation has been performed, relax the original WT structure
       open("results/%s/%s_%s.relaxed.pdb"%(label,structid,biounit),'w').close() # create file
       print "Relaxing original structure with Rosetta::FastRelax...",;sys.stdout.flush()
       t0 = time.time()
@@ -386,48 +403,112 @@ class PDBMap():
         os.remove("results/%s/%s_%s.relaxed.pdb"%(label,structid,biounit))
         raise
       print "%.1f minutes"%((time.time()-t0)/60.)
-      print "Scoring the relaxed structure...",;sys.stdout.flush()
-      t0 = time.time()
-      print "%2.4f (%.1f minutes)"%(oss,((time.time()-t0)/60.))
     while os.path.getsize("results/%s/%s_%s.relaxed.pdb"%(label,structid,biounit)) <= 0:
       time.sleep(15) # check every 15s
     # Load the relaxed wild-type structure
+    p = PDBParser()
     s = p.get_structure(structid,"results/%s/%s_%s.relaxed.pdb"%(label,structid,biounit))
+    p = PDBMapIO.PDBMapParser()
+    s = p.process_structure(s,force=True)
+    s = PDBMapStructure.PDBMapStructure(s,pdb2pose=pdb2pose,refseq=refseq)
+    # Insert mutations
+    sms = s.pmutate(muts,strict=strict)
+    # sms = [sm for sm in sms if sm] # Remove unmapped mutations
+    for i,sm in enumerate(sms):
+      if not sm: continue
+      io.set_structure(sm[0])
+      io.save("results/%s/%s_%s_%s.pdb"%(label,structid,biounit,muts[i][1]))
+    mscores = [(':'.join(m),sm.score())  if sm else (':'.join(m),np.nan) for m,sm in zip(muts,sms)]
+    mreps   = [(':'.join(m),sm.fa_rep()) if sm else (':'.join(m),np.nan) for m,sm in zip(muts,sms)]
+    mrmsds  = [s.rmsd(sm) if sm else np.nan for sm in sms]
+    with open("results/%s/%s_%s.mt.scores"%(label,structid,biounit),'ab') as fout:
+      for score in mscores:
+        fout.write("%s\t%2.6f\n"%score)
+    with open("results/%s/%s_%s.mt.rep"%(label,structid,biounit),'ab') as fout:
+      for rep in mreps:
+        fout.write("%s\t%2.6f\n"%rep)
+    # Relax the mutant models
+    maxproc = max(len(muts)/cpu_count(),1) # balance the mutant relax processes
+    srs = [sm.prelax(iters=1,maxprocs=maxproc) if sm else None for sm in sms]
+    for i,sr in enumerate(srs):
+      if not sr: continue
+      io.set_structure(sr[0])
+      io.save("results/%s/%s_%s_%s.relaxed.pdb"%(label,structid,biounit,muts[i][1]))
+    rmscores = [('r'+':'.join(m),sr[1])  if sr else (':'.join(m),np.nan) for m,sr in zip(muts,srs)]
+    rmreps   = [('r'+':'.join(m),sr[-1]) if sr else (':'.join(m),np.nan) for m,sr in zip(muts,srs)]
+    with open("results/%s/%s_%s.mt.relaxed.scores"%(label,structid,biounit),'ab') as fout:
+      for score in rmscores:
+        fout.write("%s\t%2.6f\n"%score)
+    with open("results/%s/%s_%s.mt.relaxed.rep"%(label,structid,biounit),'ab') as fout:
+      for rep in rmreps:
+        fout.write("%s\t%2.6f\n"%rep)
+    # Relax the WT a second time and score
+    if not os.path.exists("results/%s/%s_%s.twicerelaxed.pdb"%(label,structid,biounit)):
+      open("results/%s/%s_%s.twicerelaxed.pdb"%(label,structid,biounit),'w').close() # create file
+      try:
+        sr = s.relax() # relax with Rosetta::FastRelax
+        io.set_structure(sr)
+        io.save("results/%s/%s_%s.twicerelaxed.pdb"%(label,structid,biounit))
+      except:
+        # Delete the placeholder file if an exception occurs
+        os.remove("results/%s/%s_%s.twicerelaxed.pdb"%(label,structid,biounit))
+        raise
+    while os.path.getsize("results/%s/%s_%s.twicerelaxed.pdb"%(label,structid,biounit)) <= 0:
+      time.sleep(15) # check every 15s
+    # Load the relaxed wild-type structure
+    p = PDBParser()
+    s = p.get_structure(structid,"results/%s/%s_%s.twicerelaxed.pdb"%(label,structid,biounit))
+    p = PDBMapIO.PDBMapParser()
+    s = p.process_structure(s,force=True)
     s = PDBMapStructure.PDBMapStructure(s,pdb2pose=pdb2pose)
-    rss = s.score() # RosettaScore of the relaxed WT
-    with open("results/%s/%s_%s.wt.scores"%(label,structid,biounit),'wb') as fout:
+    rss  = s.score()  # RosettaScore of the twice-relaxed WT
+    rrep = s.fa_rep() # Rosetta full-atom repulsion of the twice-relaxed WT
+    if not os.path.exists("results/%s/%s_%s.wt.scores"%(label,structid,biounit)):
+      with open("results/%s/%s_%s.wt.scores"%(label,structid,biounit),'ab') as fout:
         fout.write("WT\t%2.6f\n"%oss)
         fout.write("rWT\t%2.6f\n"%rss)
-    mscores,rmscores = [],[]
-    for mut in muts:
-      print "Inserting %s mutation..."%mut[1];sys.stdout.flush()
-      sm = s.mutate([mut],resmap,strict=strict) # Insert mutation
-      mscores.append((':'.join(mut),sm.score()))
-      with open("results/%s/%s_%s.mt.scores"%(label,structid,biounit),'ab') as fout:
-        fout.write("%s\t%2.6f\n"%(mscores[-1]))
-      if not sm: continue
-      # sm = PDBMapStructure.PDBMapStructure(sm)
-      print "Relaxing mutant with Rosetta::FastRelax...",;sys.stdout.flush()
-      t0 = time.time()
-      sr = sm.relax() # relax with Rosetta::FastRelax
-      # sr = PDBMapStructure.PDBMapStructure(sr)
-      io.set_structure(sr)
-      io.save("results/%s/%s_%s_%s.relaxed.pdb"%(label,structid,biounit,mut[1]))
-      print "%.1f minutes"%((time.time()-t0)/60.)
-      print "Scoring the mutant structure...",;sys.stdout.flush()
-      t0 = time.time()
-      rmscores.append(('r'+':'.join(mut),sr.score()))
-      with open("results/%s/%s_%s.mt.relaxed.scores"%(label,structid,biounit),'ab') as fout:
-        fout.write("%s\t%2.6f\n"%(rmscores[-1]))
-      print "%.1f minutes"%((time.time()-t0)/60.)
-    print ''
-    print "Rosetta Scores:"
-    print "WT\t% 2.2f"%oss
-    print "rWT\t% 2.2f"%rss
-    for m,ss in mscores:
-      print "%s\t % 2.2f"%(m,ss)
-    for rm,ss in rmscores:
-      print "%s\t % 2.2f"%(rm,ss)
+      with open("results/%s/%s_%s.wt.rep"%(label,structid,biounit),'ab') as fout:
+        fout.write("WT\t%2.6f\n"%orep)
+        fout.write("rWT\t%2.6f\n"%rrep)
+    # Calculate RMSDs
+    rmrmsds = [s.rmsd(sr[0]) if sr else np.nan for sr in srs]
+
+    print "\n############################################\n"
+    print "Wild Type Unrelaxed:"
+    print " Rosetta energy score: % 2.2f"%oss
+    print " Rosetta fa_rep score: % 2.2f"%orep
+    print "Wild Type Twice-Relaxed:"
+    print " Rosetta energy score: % 2.2f"%rss
+    print " Rosetta fa_rep score: % 2.2f"%rrep
+    print "Mutant Unrelaxed:"
+    print "%s"%'\t'.join(["","","Score","fa_rep","RMSD_rWT"])
+    for i,score in enumerate(mscores):
+      print " %10s\t% 2.2f"%score+"\t% 2.2f"%mreps[i][1]+"\t% 2.2f"%mrmsds[i]
+    print "Mutant Relaxed:"
+    print " %s"%'\t'.join(["","","Min","Mean","Std","Min","Mean","Std","FA",""])
+    print " %s"%'\t'.join(["","","Score","Score","Score","RMSD_MT","RMSD","RMSD","REP","RMSD_rWT"])
+    for i,sr in enumerate(srs):
+      if sr:
+        row = ["%10s"%('r'+':'.join(muts[i]))]+[" %2.2f"%v for v in sr[1:]]+[" %2.2f"%rmrmsds[i]]
+      else:
+        row = ["%10s"%('r'+':'.join(muts[i]))]+["nan"]*8
+      print " %s"%'\t'.join(row)
+    print "\n############################################\n"
+
+    # Write the results to file
+    # results = np.array([["%s"%('r'+':'.join(muts[i]))]+[mscores[i][1]]+[mrmsds[i]]+list(sr[1:])+[rmrmsds[i]] for i,sr in enumerate(srs) if sr])
+    results = np.array([["%s"%(':'.join(muts[i]))]+[mscores[i][1]]+[mreps[i][1]]+list(sr[1:])+[rmrmsds[i]] for i,sr in enumerate(srs) if sr])
+    # results = np.array([["%s"%(':'.join(muts[i]))]+[mscores[i][1]]+list(sr[1:])+[rmrmsds[i]] for i,sr in enumerate(srs) if sr])
+    # cols    = ["Mutation","Unrelaxed_Score","Unrelaxed_RMSD_rWT","Min_Score","Mean_Score","Std_Score","Min_MT_RMSD","Mean_MT_RMSD","Std_MT_RMSD","rWT_RMSD"]
+    cols    = ["Mutation","Unrelaxed_Score","Unrelaxed_Rep","Min_Score","Mean_Score","Std_Score","Min_MT_RMSD","Mean_MT_RMSD","Std_MT_RMSD","Relaxed_Rep","rWT_RMSD"]
+    # cols    = ["Mutation","Unrelaxed_Score","Min_Score","Mean_Score","Std_Score","Min_MT_RMSD","Mean_MT_RMSD","Std_MT_RMSD","rWT_RMSD"]
+    header  = not os.path.exists("results/%s/%s_%s.results"%(label,structid,biounit))
+    with open("results/%s/%s_%s.results"%(label,structid,biounit),"ab") as fout:
+      if header:
+        fout.write("# Unrelaxed wild type energy score: %2.2f\n"%oss)
+        fout.write("# Relaxed wild type energy score:   %2.2f\n"%rss)
+        fout.write("%s\n"%'\t'.join(cols))
+      np.savetxt(fout,results,delimiter='\t',fmt='%s')
 
   def network(self,structid,coord_file,backbone=False,pdb_bonds=False):
     """ Returns the residue interaction network for the structure """
@@ -710,6 +791,28 @@ if __name__== "__main__":
         print "\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,unp,i,n)
         pdbmap.load_unp(unp,label=args.slabel)
 
+  ## load_model ##
+  elif args.cmd == "load_model":
+    pdbmap = PDBMap(idmapping=args.idmapping,sec2prim=args.sec2prim,
+                      sprot=args.sprot)
+    if not args.slabel:
+      args.slabel = 'manual'
+    if not len(args.args) > 1:
+      msg = "ERROR (PDBMap): Must include model summary file with load_model"
+      raise Exception(msg)
+    model_summary = args.args[0]
+    if "*" in args.args[1]:
+      models = glob.glob(args.args[1])
+    else:
+      models        = args.args[1:]
+    with open(model_summary,'rb') as fin:
+      fin.readline() # burn the header
+      reader = csv.reader(fin,delimiter='\t')
+      n = len(models)
+      for i,row in enumerate(reader):
+        print "\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,row[1],i,n)
+        pdbmap.load_model(row,model_fname=models[i],label=row[0],io=None,unp=args.unp)
+
   ## load_data ##
   elif args.cmd == "load_data":
     if len(args.args) < 1:
@@ -797,20 +900,17 @@ if __name__== "__main__":
   ## intersect ##
   elif args.cmd == "intersect":
     if len(args.args) < 1:
-      msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> intersect <data_name>\n"
-      msg += "alt:   pdbmap.py -c conf_file --slabel=<slabel> --dlabel=<data_name> intersect\n"
+      msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> --dlabel=<data_name> intersect [quick]\n"
       print msg; sys.exit(1)
     pdbmap = PDBMap()
     # msg  = "WARNING (PDBMap) If loading data, intersections may be automatically applied.\n"
     # sys.stderr.write(msg)
-    if not args.dlabel:
-      dname = args.args[0] # Get the dataset name
-    else:
-      dname = args.dlabel
-    slabel = None if len(args.args) < 2 else args.args[1]
-    nrows = QUICK_THRESH+1 if len(args.args) < 3 else int(args.args[2])
-    print "## Intersecting %s with PDBMap ##"%dname
-    quick = True if nrows < QUICK_THRESH else False
+    dname  = args.dlabel
+    slabel = args.slabel
+    quick  = True if args.args[0].lower() in ['1','true','yes','quick','fast'] else False
+    # nrows = QUICK_THRESH+1 if len(args.args) < 3 else int(args.args[2])
+    print "## Intersecting %s with %s ##"%(dname,slabel)
+    # quick = True if nrows < QUICK_THRESH else False
     print [" # (This may take a while) #"," # Using quick-intersect #"][int(quick)]
     nrows = pdbmap.intersect_data(dname,slabel=slabel,quick=quick)
     print " # %d intersection rows uploaded."%nrows
@@ -818,19 +918,50 @@ if __name__== "__main__":
   ## mutate ##
   elif args.cmd == "mutate":
     if len(args.args) < 1:
-      msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> entity [mut1[,mut2,...]]"
+      msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> mutate entity mut1[,mut2,...] [relaxdir] [fastafile]"
       print msg; sys.exit(1)
     pdbmap = PDBMap()
     entity = args.args[0]
-    label = "%s_mutagenesis_%s"%(entity,str(time.strftime("%Y%m%d-%H")))
+    if os.path.exists(entity):
+      if os.path.isfile(entity):
+        etype = "file"
+        sfile = entity
+        # Use the file name without the .vcf[.gz] extension
+        exts  = 1 + int(os.path.basename(entity).split('.')[-1]=='gz')
+        structid,bio = '.'.join(os.path.basename(entity).split('.')[:-exts]),0
+        label = "%s_mutagenesis_%s"%(structid,str(time.strftime("%Y%m%d")))
+    else:
+      io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,slabel=args.slabel)
+      etype = io.detect_entity_type(entity)
+      sfile = None
+      label = "%s_mutagenesis_%s"%(entity,str(time.strftime("%Y%m%d")))
     if not os.path.exists("results/%s"%label):
       os.mkdir("results/%s"%label)
-    muts   = [m.split(':') for m in args.args[1].split(',')]
+    if os.path.exists(args.args[1]):
+      # Process file with one row per SNP
+      with open(args.args[1],'rb') as fin:
+        muts = [m.strip().split(':') for m in fin]
+    else:
+      # Process comma-separated list of mutations
+      muts   = [m.split(':') for m in args.args[1].split(',')]
     muts   = [m if len(m)>1 else ['',m[0]] for m in muts]
-    # print "All mutations:",muts
-    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,slabel=args.slabel)
-    etype = io.detect_entity_type(entity)
-    if etype == 'structure':
+    # Check for a directory of relaxed WT structures
+    relaxdir  = False if len(args.args) < 3 else args.args[2]=="True"
+    fastafile = None if len(args.args) < 4 else args.args[3]
+    if fastafile:
+      with open(fastafile,'rb') as fin:
+        refseq = ''.join([l.strip() for l in fin.readlines() if l[0]!=">"])
+    else:
+      refseq = None
+    
+    print entity,sfile
+    print etype
+
+    # If a file was specified, process separately
+    if etype == 'file':
+      biounits = [(structid,bio)]
+    # If a PDBMap entity was specified, load and process relevant structures
+    elif etype == 'structure':
       # Query all biological assemblies, exclude the asymmetric unit
       query = "SELECT DISTINCT biounit FROM Chain WHERE label=%s AND structid=%s AND biounit>0"
       res   = io.secure_query(query,(args.slabel,entity,),cursorclass='Cursor')
@@ -841,7 +972,7 @@ if __name__== "__main__":
         res   = io.secure_query(query,(args.slabel,entity,),cursorclass='Cursor')
         biounits = [(entity,r[0]) for r in res]
     elif etype == 'model':
-      biounits = [(entity,-1)]
+      biounits = [(entity,0)]
     elif etype == 'unp':
       res_list  = io.load_unp(entity)
       biounits = []
@@ -852,29 +983,45 @@ if __name__== "__main__":
           res   = io.secure_query(query,(args.slabel,entity,),cursorclass='Cursor')
           biounits += [(entity,r[0]) for r in res]
         elif etype =='model':
-          # Query all biological assemblies
-          # query = "SELECT DISTINCT biounit FROM Chain WHERE label=%s AND structid=%s"
-          # res   = io.secure_query(query,(args.slabel,entity),cursorclass='Cursor')
-          # biounits += [(entity,r[0]) for r in res]
-          biounits += [(entity,-1)]
-    # Manage parallel calls
+          biounits += [(entity,0)]    
+    # If relaxation directory is specified, prune biounits w/o relaxed structures
+    if relaxdir:
+      pbio = []
+      print "Checking for relaxed structures..."
+      for structid,biounit in biounits:
+        biopath = "results/%s_%s_wt_relaxation/%s_%s.relaxed.pdb.gz"%(structid.upper(),biounit,structid.upper(),biounit)
+        if os.path.exists(biopath):
+          pbio.append((structid,biounit))
+        else:
+          print "  %s[%s] has no relaxed structure."%(structid,biounit)
+      print "Pruning %d unrelaxed structures."%(len(biounits)-len(pbio))
+      biounits = pbio
+    
+    # Determine mutations to simulate
     mutations = [(sid,bio,mut) for sid,bio in biounits for mut in muts]
     print "Total mutations to simulate:",len(mutations)
+    # print "Total mutations to simulate:",len(muts)
     # If multiple mutation specified, do not throw "not found" errors
     strict = True if len(mutations) < 2 else False
+    # strict = True if len(muts) < 2 else False
     if args.ppart != None and args.ppidx != None:
       psize = len(mutations) / args.ppart # floor
+      # psize = len(biounits) / args.ppart # floor
       if (args.ppart-1) == args.ppidx:
         mutations = mutations[args.ppidx*psize:]
+        # biounits = biounits[args.ppidx*psize:]
         print "Simulating mutations %d to %d"%(args.ppidx*psize,len(mutations))
       else:
         mutations = mutations[args.ppidx*psize:(args.ppidx+1)*psize]
+        # biounits = biounits[args.ppidx*psize:(args.ppidx+1)*psize]
         print "Simulating mutations %d to %d"%(args.ppidx*psize,(args.ppidx+1)*psize-1)
+
+    # Simulate the mutations
     for sid,bio,mut in mutations:
       print "\n#####################################\n"
       print "Modeling mutation %s in %s[%s].%s"%(mut[1],sid,bio,mut[0])
       print "\n#####################################\n"
-      pdbmap.mutate(sid,bio,[mut],label=label,strict=strict)
+      pdbmap.mutate(sid,bio,[mut],label=label,strict=strict,relaxdir=relaxdir,refseq=refseq,sfile=sfile)
 
   ## filter ##
   elif args.cmd == "filter":

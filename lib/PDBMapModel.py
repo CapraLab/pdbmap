@@ -71,13 +71,14 @@ class PDBMapModel(Structure):
     else:
       self.tvsmod_no35 = 'NULL'
       self.tvsmod_rmsd = 'NULL'
-    self.evalue  = self._sfloat(model_summary[5])
-    self.ga341   = self._sfloat(model_summary[6])
-    self.mpqs    = self._sfloat(model_summary[7])
-    self.zdope   = self._sfloat(model_summary[8])
-    self.pdbid   = model_summary[9]
-    self.chain   = model_summary[10]
-    self.unp     = model_summary[17]
+    self.identity = self._sfloat(model_summary[4])
+    self.evalue   = self._sfloat(model_summary[5])
+    self.ga341    = self._sfloat(model_summary[6])
+    self.mpqs     = self._sfloat(model_summary[7])
+    self.zdope    = self._sfloat(model_summary[8])
+    self.pdbid    = model_summary[9]
+    self.chain    = model_summary[10]
+    self.unp      = model_summary[17]
     
   def __getattr__(self,attr):
     # Defer appropriate calls to the structure
@@ -103,12 +104,13 @@ class PDBMapModel(Structure):
     for chain in self.structure[0]:
       # Query all transcripts associated with the chain's UNP ID
       candidate_transcripts = PDBMapTranscript.query_from_unp(chain.unp)
-      # But limit to those relevant to this model's template ENSP
-      candidate_transcripts = [ct for ct in candidate_transcripts if
+      # But limit to those relevant to this model's template ENSP, if specified
+      if "ENSP" in self.id:
+        candidate_transcripts = [ct for ct in candidate_transcripts if
                                PDBMapProtein.enst2ensp(ct.transcript)==self.id.split('_')[0]]
       if len(candidate_transcripts) < 1:
         return []
-      if len(candidate_transcripts) > 1:
+      if len(candidate_transcripts) > 1 and "ENSP" in self.id:
         msg = "WARNING (PDBMapModel) Too many transcripts for %s. Truncating.\n"%self.id
         sys.stderr.write(msg)
         candidate_transcripts = [candidate_transcripts[0]]
@@ -121,7 +123,7 @@ class PDBMapModel(Structure):
         alignments.append(new_alignment)
         # Determine best alignment
         # if new_alignment.score > alignment.score:
-        #   alignment = new_alignment
+          # alignment = new_alignment
       # Store best transcript alignment as element of chain
       chain.alignments  = alignments
       chain.transcripts = [a.transcript for a in alignments]

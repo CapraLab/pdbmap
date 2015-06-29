@@ -33,7 +33,7 @@ class PDBMapParser(PDBParser):
                                       structure_builder,QUIET)
 
   @classmethod
-  def process_structure(cls,s,biounit=0,dbref={}):
+  def process_structure(cls,s,biounit=0,dbref={},force=False):
     """ The asymmetric unit *must* be processed before any
         biological assemblies, or the additional models
         containing the biological assembly coordinates will
@@ -70,17 +70,20 @@ class PDBMapParser(PDBParser):
         if 'species' not in dir(c):
           c.species = 'UNKNOWN'
         if c.species != 'HUMAN':
-          msg = "WARNING (PDBMapIO) Ignoring non-human chain: %s.%s (%s)\n"%(s.id,c.id,c.species)
-          sys.stderr.write(msg)
-          m.detach_child(c.id)
-          continue
+          if force:
+            c.species = "HUMAN"
+          else:
+            msg = "WARNING (PDBMapIO) Ignoring non-human chain: %s.%s (%s)\n"%(s.id,c.id,c.species)
+            sys.stderr.write(msg)
+            m.detach_child(c.id)
+            continue
         iter_c = [r for r in c] # avoid modification during iteration, shallow
         for r in iter_c:
           if dbref and r in dbref[c.id]['drop_resis']: # If residue outside dbref range
             c.detach_child(r.id) # Remove residue
           if r.id[0].strip():    # If residue is a heteroatom
             c.detach_child(r.id) # Remove residue
-          elif r.id[1] < c.pdbstart or r.id[1] > c.pdbend: # If residue outside chain boundary
+          elif not force and (r.id[1] < c.pdbstart or r.id[1] > c.pdbend): # If residue outside chain boundary
             c.detach_child(r.id)
           elif r.id[1] < 1: # Residue index must be non-negative
             c.detach_child(r.id)
@@ -280,7 +283,7 @@ class PDBMapParser(PDBParser):
         s.add(m)
     return s
 
-  def get_model(self,model_summary,fname):
+  def get_model(self,model_summary,fname,unp=None):
     modelid  = model_summary[1]   # Extract the ModBase model ID
     try:
       ext = os.path.basename(fname).split('.')[-1]
@@ -302,9 +305,12 @@ class PDBMapParser(PDBParser):
     
     s = PDBMapParser.process_structure(m)
     m = s[0]
+    s.unp = unp
+    m.unp = unp
     resinfo = PDBMapIO.dssp(m,fname,dssp='dssp')
     n = 0
     for c in m:
+      c.unp = unp
       for r in c:
         info  = resinfo[(c.id,r.seqid,r.icode)]
         r.ss  = info['ss']
@@ -510,7 +516,7 @@ class PDBMapIO(PDBIO):
     # Upload the alignments
     aquery = "INSERT IGNORE INTO Alignment VALUES "
     for a in s.get_alignments():
-      for c_seqid,t_seqid in a.alignment.iteritems():
+      for c_seqid,t_seqid in a.pdb2seq.iteritems():
         aquery += '("%s","%s","%s",%d,'%(self.slabel,s.id,a.chain.id,c_seqid)
         aquery += '"%s",%d),'%(a.transcript.transcript,t_seqid)
     queries.append(aquery[:-1])
@@ -550,7 +556,7 @@ class PDBMapIO(PDBIO):
     mquery  = 'INSERT IGNORE INTO Model VALUES ('
     mquery += '"%(label)s","%(id)s","%(unp)s","%(tvsmod_method)s",'
     mquery += '%(tvsmod_no35)s,%(tvsmod_rmsd)s,%(mpqs)s,%(evalue)s,%(ga341)f,'
-    mquery += '%(zdope)s,"%(pdbid)s","%(chain)s")'
+    mquery += '%(zdope)s,"%(pdbid)s","%(chain)s",%(identity)f)'
     mfields = dict((key,m.__getattribute__(key)) for key in dir(m) 
                   if isinstance(key,collections.Hashable))
     mfields["label"] = self.slabel

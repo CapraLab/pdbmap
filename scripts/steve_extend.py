@@ -17,31 +17,39 @@ fout = open(steve_foutname,'wb')
 writer = csv.writer(fout,delimiter='\t')
 with open(steve_finname,'rb') as fin:
   header = "%s\tGNN_structid\tGNN_biounit\tGNN_model\tGNN_x\tGNN_y\tGNN_z\tSD2GNN\tSNN_chr\tSNN_start\tGD2SNN\n"%fin.readline().strip()
+  for i,h in enumerate(header.split("\t")[:-10]):
+    print i,h
   fout.write(header)
   reader = csv.reader(fin,delimiter='\t')
+  complexneighbors = 0
   for row in reader:
-    print 'row:',row
-    VAR,GNN,SNN = row[0],row[2],row[7]
-    if not SNN:
-      gd2snn = 'NA'
+    VAR,GNN,SNN = row[0],row[5],row[27]
+    if SNN=='NA':
+      # There is no structural nearest neighbor
+      gd2snn   = 'NA'
+      snn_gloc = ['NA']*3
     else:
       # Calculate GD to SNN
       c = con.cursor()
-      query  = "SELECT chr,start FROM GenomicData "
-      query += "WHERE label='1kg3' AND start=%s LIMIT 1"
+      query  = "SELECT chr,start,hgnc_gene as gene FROM GenomicData "
+      query += "WHERE label='1kg3' AND name=%s LIMIT 1"
       c.execute(query,(VAR,))
       var_gloc = c.fetchone()
+      # print "VAR:",var_gloc
       c.close(); c = con.cursor()
       c.execute(query,(SNN,))
       snn_gloc = c.fetchone()
+      # print "SNN:",snn_gloc
       c.close()
-      # print VAR,GNN,SNN,var_gloc,snn_gloc
-      if not snn_gloc:
-        print VAR,GNN,SNN
-      if var_gloc[0] != snn_gloc[0]:
-        gd2snn   = 'NA'
-      else:
-        gd2snn   = abs(var_gloc[1] - snn_gloc[1])
+      if var_gloc and snn_gloc:
+        if var_gloc[2] != snn_gloc[2]:
+          print "Mismatched genes:",var_gloc,snn_gloc,"cxn=%d"%complexneighbors
+          complexneighbors += 1
+        if var_gloc[0] != snn_gloc[0]:
+          # Structural nearest neighbor is on another chromosome
+          gd2snn   = 'NA'
+        else:
+          gd2snn   = abs(var_gloc[1] - snn_gloc[1])
     # Calculate SD to GNN
     c = con.cursor()
     query  = "SELECT a.structid,biounit,model,x,y,z "
@@ -74,3 +82,4 @@ with open(steve_finname,'rb') as fin:
     row.append(gd2snn)
     writer.writerow(row)
 fout.close()
+print "Number of structural neighbors from different genes:",complexneighbors

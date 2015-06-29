@@ -25,7 +25,7 @@ class PDBMapAlignment():
     self.chain      = chain
     self.transcript = transcript
     try:
-        self.alignment,self.aln_string,self.score,self.perc_aligned,self.perc_identity \
+        self.pdb2seq,self.seq2pdb,self.aln_string,self.score,self.perc_aligned,self.perc_identity \
                     = self.align(chain,transcript,io=io)
     except Exception as e:
         msg = "ERROR (PDBMapAlignment) Error aligning %s to %s: %s\n"%(
@@ -58,16 +58,17 @@ class PDBMapAlignment():
             resis = [r[1] for r in chain.get_residues()]
             n = float(len(resis))
             # Only align residues in the structure
-            alignment     = dict((r[0],r[1]) for r in res if r[0] in resis)
+            pdb2seq       = dict((r[0],r[1]) for r in res if r[0] in resis)
+            seq2pdb       = dict((r[1],r[0]) for r in res if r[0] in resis)
             # Aligned residues over total residues in chain
-            perc_aligned  = min(len(alignment) / n, 1.)
-            perc_identity = min(len([1 for cid,tid in alignment.iteritems() if
+            perc_aligned  = min(len(pdb2seq) / n, 1.)
+            perc_identity = min(len([1 for cid,tid in pdb2seq.iteritems() if
                                     0 < cid < len(c_seq) and 0 < tid < len(t_seq)
                                     and c_seq[cid]==t_seq[tid]]) / n, 
                                 1.)
             aln_string    = "<sifts>"
             score         = -1
-            return alignment,aln_string,score,perc_aligned,perc_identity
+            return pdb2seq,seq2pdb,aln_string,score,perc_aligned,perc_identity
 
     # Determine start indices
     c_start = min([r.seqid for r in chain.get_residues()])
@@ -119,13 +120,15 @@ class PDBMapAlignment():
     # Create a single alignment string
     aln_string = "%s\n%s"%(aln_chain,aln_trans)
     # Determine final alignment from chain -> transcript/protein
-    alignment = dict((c_ind[i],t_ind[i]) for i in 
+    pdb2seq = dict((c_ind[i],t_ind[i]) for i in 
+                  range(len(c_ind)) if c_ind[i] > 0 and t_ind[i])
+    seq2pdb = dict((t_ind[i],c_ind[i]) for i in 
                   range(len(c_ind)) if c_ind[i] > 0 and t_ind[i])
     ## Evaluate the alignment
     # How many chain residues were aligned? (not a gap)
     aligned = sum([1 for i in range(c_start,c_end+1) if i in c_ind])
     # How many chain residues were matched? (matching amino acids)
-    matched = sum([1 for ci,ti in alignment.iteritems() \
+    matched = sum([1 for ci,ti in pdb2seq.iteritems() \
         if ci and ti and c_seq[ci-c_start] == t_seq[ti-t_start]])
     clen = c_end-c_start+1 # Original chain length
     # Percent of the original aligned to transcript
@@ -133,7 +136,7 @@ class PDBMapAlignment():
     # Percent of the original identical to transcript
     perc_identity = float(matched) / clen
 
-    return alignment,aln_string,score,perc_aligned,perc_identity
+    return pdb2seq,seq2pdb,aln_string,score,perc_aligned,perc_identity
 
   def _gap_shift(self,seq,seq_start,gaps=[]):
     """ Support generator function for align """
