@@ -249,12 +249,18 @@ class PDBMapStructure(Structure):
     print "\nSimulating mutation: %s%s%s"%(a1,r,a2)
     # Adjust for alignment between reference and structure
     print "Reference position %d is aligned with PDB position"%r,
-    r = self.structure[0][c].alignment.seq2pdb[r]
-    print r
+    if r in self.structure[0][c].alignment.seq2pdb:
+      r = self.structure[0][c].alignment.seq2pdb[r]
+    else:
+      if strict: raise Exception("Structure does not contain position %d"%r)
+      else: return None
     # Adjust for alignment between structure and pose
     print "Structure position %d is aligned with pose position"%r,
-    r = self._pdb2pose[0][c][r] 
-    print r
+    if r in self._pdb2pose[0][c]:
+      r = self._pdb2pose[0][c][r]
+    else:
+      if strict: raise Exception("Pose does not contain position %d"%r)
+      else: return None
     print "The reference allele is %s"%a1
     print "The observed  allele is %s"%self.structure[0][c][r].rescode
     print "The alternate allele is %s\n"%a2
