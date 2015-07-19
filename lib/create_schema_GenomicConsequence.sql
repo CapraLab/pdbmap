@@ -8,7 +8,8 @@ name VARCHAR(100), # Provided name
 # Consequence data
 transcript VARCHAR(100), # Ensembl transcript ID
 protein VARCHAR(100),    # Ensembl protein ID
-canonical TINYINT, # Canonical transcript?
+uniprot VARCHAR(100),    # UniProt accession ID
+canonical TINYINT,       # Canonical transcript?
 allele VARCHAR(50),
 consequence VARCHAR(100),
 cdna_pos INT,

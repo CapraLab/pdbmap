@@ -24,6 +24,7 @@ from rosetta import create_score_function_ws_patch
 from rosetta import TaskFactory
 from rosetta.utility import vector1_bool
 from rosetta import aa_from_oneletter_code
+from rosetta import aa_from_name
 from rosetta import PackRotamersMover
 from rosetta.core.pose import PDBInfo
 
@@ -69,23 +70,11 @@ def mutate_residue(pose,mutant_position,mutant_aa,
     center = pose.residue( mutant_position ).nbr_atom_xyz()
     for i in range(1,pose.total_residue() + 1 ):
         d = center.distance_squared(pose.residue(i).nbr_atom_xyz()) 
-        # Only pack the mutating residue and any within the pack_radius
+        # Only repack the mutated residue and any within the pack_radius
         if d > pack_radius**2:
             task.nonconst_residue_task(i).prevent_repacking()
-        # Restrict mutated residue to the mutant amino acid
-        elif i == mutant_position:
-            aa_bool = rosetta.utility.vector1_bool()
-            aa      = aa_from_oneletter_code(mutant_aa)
-            for j in range(1,21):
-                aa_bool.append(j == aa)
-            task.nonconst_residue_task(i).restrict_absent_canonical_aas(aa_bool)
-        # Restrict local residues to their original amino acid
         else:
-            aa_bool = rosetta.utility.vector1_bool()
-            aa      = aa_from_oneletter_code(pose.residue(i).name())
-            for j in range(1,21):
-                aa_bool.append(j == aa)
-            task.nonconst_residue_task(i).restrict_absent_canonical_aas(aa_bool)
+            task.nonconst_residue_task(i).restrict_to_repacking()
 
     # Apply the mutation and pack nearby residues
     packer = PackRotamersMover(pack_scorefxn,task)

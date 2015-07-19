@@ -147,9 +147,10 @@ class PDBMapVCF(vcf.Reader):
         # Check the consequence and reformat
         if csq_header[i] == "Consequence":
           cons = field.split('&')
-          if not any([con in self._parse_csq.nonsyn for con in cons]):
-            csq = None
-            break # Ignore this row. Invalid consequence.
+          ## We are now allowing Synonymous SNPs to be mapped ##
+          # if not any([con in self._parse_csq.nonsyn for con in cons]):
+          #   csq = None
+          #   break # Ignore this row. Invalid consequence.
           csq['Consequence'] = ';'.join(cons)
         # Set any empty strings to None and continue
         elif csq[csq_header[i]] == '':

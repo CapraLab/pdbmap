@@ -25,7 +25,7 @@ from lib import bed # PyVCF emulator for BED files
 
 class PDBMapData():
   
-  def __init__(self,vep="",plink="plink",dname='1kg3',j=1):
+  def __init__(self,vep="",plink="plink",dname='1kg3'):
     self.vep = vep
     self.dname=dname
     if self.vep and not os.path.exists(self.vep):
@@ -40,42 +40,37 @@ class PDBMapData():
         msg = "WARNING (PDBMapData) No cache exists. Using network connection.\n"
         sys.stderr.write(msg)
         cache = None
-      if not os.path.exists(registry):
-        msg = "WARNING (PDBMapData) No registry specified. Using Ensembl.\n"
-        sys.stderr.write(msg)
-        registry = None
+      # if not os.path.exists(registry):
+      #   msg = "WARNING (PDBMapData) No registry specified. Using Ensembl.\n"
+      #   sys.stderr.write(msg)
+      #   registry = None
       # Construct the VEP command
-      self.vep_cmd = [self.vep,'-i','','--database']
+      self.vep_cmd = [self.vep,'-i','']
+      # Specify the input type
       self.vep_cmd.extend(['--format',''])
-      if cache:
-        # Use a local VEP cache
-        self.vep_cmd.extend(['--cache','--dir_cache',cache])
-      if registry:
-        # Use a local Ensembl database
-        self.vep_cmd.extend(['--registry',registry])
+      # Use the local VEP cache
+      self.vep_cmd.extend(['--cache','--offline']) # port specifies GRCh37 databases
       # Disable the progress bars
       self.vep_cmd.extend(['--no_progress'])
-      # Specify the species for faster db queries
-      self.vep_cmd.extend(['--species','homo_sapiens'])
       # Increase buffer size to improve runtime (default 5,000)
       self.vep_cmd.extend(['--buffer_size','400000']) # ~5GB per 100,000
       # Annotate with functional info/prediction
-      self.vep_cmd.extend(['--sift','s','--polyphen','s','--regulatory'])
+      self.vep_cmd.extend(['--sift','s','--polyphen','s'])
       # Annotate with variant, gene, protein, and domain identifiers
-      self.vep_cmd.extend(['--check_existing','--symbol','--protein','--domains'])
+      self.vep_cmd.extend(['--check_existing','--symbol','--protein','--uniprot','--domains'])
       # Annotate transcript with canonical bool and biotype
-      self.vep_cmd.extend(['--canonical','--biotype'])
-      # Retain only nonsynonymous coding variants
-      self.vep_cmd.extend(['--vcf','--filter','coding_change'])
+      self.vep_cmd.extend(['--canonical','--biotype','--pubmed'])
+      ## We are now allowing Synonymous SNPs to be mapped ##
+      # Retain only coding-region variants
+      self.vep_cmd.extend(['--coding_only'])
+      # Specify output format
+      self.vep_cmd.extend(['--vcf'])
       # Send to stdout and don't generate a summary stats file
       self.vep_cmd.extend(['--no_stats'])
       self.vep_cmd.extend(['-o','stdout'])
-      if j > 1:
-        # Fork to decrease runtime
-        self.vep_cmd.extend(['--fork',str(j)])
 
   def record_parser(self,record,info_headers,csq_headers):
-    
+
     # Ensure that an end is specified, default to start+1
     if "END" not in record.INFO:
       record.INFO["END"] = int(record.POS) + 1
@@ -193,8 +188,9 @@ class PDBMapData():
                     "BIOTYPE":          None,
                     "DOMAINS":           None}]
       record.INFO['EXISTING'] = None
-      record.INFO["GENE"] = None
-      record.INFO["HGNC"] = None
+      record.INFO["GENE"]     = None
+      record.INFO["HGNC"]     = None
+      record.INFO["UNIPROT"]  = None
 
       # print "record.INFO:"
       # for key,val in record.INFO.iteritems():
@@ -245,9 +241,9 @@ class PDBMapData():
     info_headers = parser.infos.keys()
     # Determine Consequence headers
     csq_headers  = parser.infos['CSQ'].desc.split(': ')[-1].split('|')
-    nscount = 0
+    snpcount = 0
     for record in parser:
-      nscount += 1
+      snpcount += 1
       # If position refers to a haplotype chromosome, ignore
       if record.CHROM not in ['chr1','chr2','chr3',
                         'chr4','chr5','chr6','chr7','chr8',
@@ -257,7 +253,9 @@ class PDBMapData():
                         'chrX','chrY','chrMT']:
         continue
       yield self.record_parser(record,info_headers,csq_headers)
-    print "Nonsynonymous SNPs in %s: %d"%(fname,nscount)
+    ## We are now allowing Synonymous SNPs to be mapped ##
+    print "Total SNPs (syn+nonsyn) in %s: %d"%(fname,snpcount)
+    # print "Nonsynonymous SNPs in %s: %d"%(fname,nscount)
 
   def load_pedmap(self,fname):
     """ Convert PED/MAP to VCF, pipe VCF through VEP and load VEP output """
@@ -281,9 +279,9 @@ class PDBMapData():
       csq_headers  = parser.infos['CSQ'].desc.split(': ')[-1].split('|')
     else: csq_headers = []
 
-    nscount = 0
+    snpcount = 0
     for record in parser:
-      nscount += 1
+      snpcount += 1
       # If position refers to a haplotype chromosome, ignore
       if record.CHROM not in ['chr1','chr2','chr3',
                         'chr4','chr5','chr6','chr7','chr8',
@@ -293,7 +291,7 @@ class PDBMapData():
                         'chrX','chrY','chrMT']:
         continue
       yield self.record_parser(record,info_headers,csq_headers)
-    print "Nonsynonymous SNPs in %s: %d"%(fname,nscount)
+    print "Total SNPs (syn+nonsyn) in %s: %d"%(fname,snpcount)
 
   def load_bedfile(self,fname,io,delim='\t',indexing=None,vepprep=True):
     """ Creates a supplementary table for original datafile """
@@ -365,21 +363,25 @@ class PDBMapData():
     cmd[2] = fname
     if intype == 'default':
       # No format specification required
-      cmd = cmd[0:4]+cmd[6:]
+      cmd = cmd[0:3]+cmd[5:]
     else:
       # Provide the correct format argument (vcf;id;hgvs)
-      cmd[5] = intype
+      cmd[4] = intype
     print ' '.join(cmd)
     try:
       # Call VEP and capture stdout in realtime
       p = sp.Popen(cmd,stdout=sp.PIPE)
+      # Filter variants without consequence annotations
+      p1 = p
+      p = sp.Popen(["grep","^#\|CSQ"],stdin=p1.stdout,stdout=sp.PIPE)
       if self.dname == '1kg3':
         # Pipe output to vcf_fst for Fst calculations
-        p1 = p
-        p = sp.Popen(["bash","lib/vcf_fst.sh"],stdin=p1.stdout,stdout=sp.PIPE)
+        p2 = p
+        p = sp.Popen(["bash","lib/vcf_fst.sh"],stdin=p2.stdout,stdout=sp.PIPE)
       if outfile:
         fout = gzip.open(outfile,'wb') # Open cache for writing
       for line in iter(p.stdout.readline,b''):
+        print line
         if outfile: # Write to cache before yielding
           fout.write(line)
         yield line
@@ -409,9 +411,10 @@ class PDBMapData():
         # Check the consequence and reformat
         if csq_header[i] == "Consequence":
           cons = field.split('&')
-          if not any([con in self._parse_csq.nonsyn for con in cons]):
-            csq = None
-            break # Ignore this row. Invalid consequence.
+          ## We are now allowing Synonymous SNPs to be mapped ##
+          # if not any([con in self._parse_csq.nonsyn for con in cons]):
+          #   csq = None
+          #   break # Ignore this row. Invalid consequence.
           csq['Consequence'] = ';'.join(cons)
         # Set any empty strings to None and continue
         elif csq[csq_header[i]] == '':

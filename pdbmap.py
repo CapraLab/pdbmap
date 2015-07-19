@@ -353,7 +353,7 @@ class PDBMap():
           print cmd
           os.system(cmd)
         biounit = 0
-    print "Mutating %s.%s"%(structid,biounit)
+    print "\nMutating %s.%s"%(structid,biounit)
     print "Reading coordinates for %s.%s from %s"%(structid,biounit,bio)
     io = PDBIO()
     p  = PDBParser()
@@ -1005,17 +1005,18 @@ if __name__== "__main__":
     strict = True if len(mutations) < 2 else False
     # strict = True if len(muts) < 2 else False
     if args.ppart != None and args.ppidx != None:
-      psize = len(mutations) / args.ppart # floor
+      psize = len(mutations) / args.ppart if args.ppart<len(mutations) else 1 # floor
       # psize = len(biounits) / args.ppart # floor
       if (args.ppart-1) == args.ppidx:
         mutations = mutations[args.ppidx*psize:]
         # biounits = biounits[args.ppidx*psize:]
-        print "Simulating mutations %d to %d"%(args.ppidx*psize,len(mutations))
+        if len(mutations):
+          print "Simulating mutations %d to %d"%(args.ppidx*psize,len(mutations))
       else:
         mutations = mutations[args.ppidx*psize:(args.ppidx+1)*psize]
         # biounits = biounits[args.ppidx*psize:(args.ppidx+1)*psize]
-        print "Simulating mutations %d to %d"%(args.ppidx*psize,(args.ppidx+1)*psize-1)
-
+        if len(mutations):
+          print "Simulating mutations %d to %d"%(args.ppidx*psize,(args.ppidx+1)*psize-1)
     # Simulate the mutations
     for sid,bio,mut in mutations:
       print "\n#####################################\n"
