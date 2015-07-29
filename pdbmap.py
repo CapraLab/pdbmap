@@ -899,7 +899,7 @@ if __name__== "__main__":
 
   ## intersect ##
   elif args.cmd == "intersect":
-    if len(args.args) < 1:
+    if not (args.slabel and args.dlabel):
       msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> --dlabel=<data_name> intersect [quick]\n"
       print msg; sys.exit(1)
     pdbmap = PDBMap()
@@ -907,7 +907,7 @@ if __name__== "__main__":
     # sys.stderr.write(msg)
     dname  = args.dlabel
     slabel = args.slabel
-    quick  = True if args.args[0].lower() in ['1','true','yes','quick','fast'] else False
+    quick  = True if len(args.args)>0 and args.args[0].lower() in ['1','true','yes','quick','fast'] else False
     # nrows = QUICK_THRESH+1 if len(args.args) < 3 else int(args.args[2])
     print "## Intersecting %s with %s ##"%(dname,slabel)
     # quick = True if nrows < QUICK_THRESH else False

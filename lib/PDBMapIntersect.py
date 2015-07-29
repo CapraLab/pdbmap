@@ -68,8 +68,8 @@ class PDBMapIntersect():
       if dtype == 'Genomic':
         query  = "SELECT a.chr,a.start-1,a.end-1,a.gc_id,a.transcript FROM "
         query += "GenomicConsequence as a INNER JOIN GenomicData as b "
-        query += "ON a.label=b.label AND a.chr=b.chr AND a.start=b.start AND a.end=b.end "
-        query += "WHERE b.label=%s"
+        query += "ON a.label=%s AND a.label=b.label AND a.chr=b.chr AND a.start=b.start AND a.end=b.end "
+        query += "WHERE (a.consequence LIKE '%%missense_variant' OR a.consequence LIKE '%%synonymous_variant')"
       elif dtype == 'Protein':
         msg = "ERROR (PDBMapIntersect) Protein intersection not implemented."
         raise Exception(msg)
