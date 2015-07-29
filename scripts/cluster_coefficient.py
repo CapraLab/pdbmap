@@ -340,3 +340,8 @@ if __name__ == '__main__':
   open('../results/cluster_coefficient_%s/%s_silhouette_coefficients_p%s.txt'%(datname,datname,ppidx),'wb').close()
   open('../results/cluster_coefficient_%s/%s_pairwise_coefficients_p%s.txt'%(datname,datname,ppidx),'wb').close()
   main(datname,ppart,ppidx,structid=structid)
+
+
+
+
+  
