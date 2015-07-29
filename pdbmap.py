@@ -293,7 +293,7 @@ class PDBMap():
       anno_list += ['daf','amr_daf','eas_daf','sas_daf','afr_daf','eur_daf']
       sr = spectrum_range[idx]
       spectrum_range = spectrum_range[0:idx]+spectrum_range[idx+1:]
-      spectrum_range += [sr for i in range(5)]
+      spectrum_range += [sr for i in range(6)]
     if 'popmaf' in anno_list:
       idx = anno_list.index('popmaf')
       anno_list  = anno_list[0:idx]+anno_list[idx+1:]
