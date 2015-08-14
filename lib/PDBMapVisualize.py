@@ -444,13 +444,6 @@ if __name__ == '__main__':
     rc("rangecolor %(anno)s,a %(minval)0.6f blue %(maxval)0.6f red"%params)
     rc("color green,a :/%(anno)s=%(maxval)s"%params)
     rc("color gray,a :/%(anno)s=%(minval)s"%params)
-  # Orient the image
-  # FIXME: Orientation is inconsistent between datasets
-  # It also does not do a very good job of orienting the image
-  # Removed for consistency until a better solution can be found
-  # rc("define plane name p1 @ca:/%(anno)s>=%(minval)0.6f"%params)
-  # rc("align p1")
-  # rc("~define")
   # Export the scene
   rc("save %(res_dir)s/%(structid)s_biounit%(biounit)d_%(anno)s.py"%params)
   # Export the image

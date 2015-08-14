@@ -717,7 +717,7 @@ if __name__== "__main__":
     pdbmap = PDBMap(idmapping=args.idmapping,sec2prim=args.sec2prim,
                     pdb_dir=args.pdb_dir)
     if len(args.args) < 1:
-      msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> load_pdb pdb_file [data_file data_name] ...\n"
+      msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> load_pdb pdb_file [pdb_file,...]\n"
       print msg; sys.exit(1)
     elif args.args[0] == 'all':
       # All structures in the PDB mirror
