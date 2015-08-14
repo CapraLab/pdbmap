@@ -136,6 +136,8 @@ class PDBMapVisualize():
         # use the highest value of the annotation (and hope its not pvalues)
         redout,prevrow = [],[]
         for row in out:
+          if ('maf' in anno or 'daf' in anno) and float(row[-1])>0.5:
+            row[-1] = 1-float(row[-1]) # convert ref/alt to major/minor
           if row[:-1] == prevrow[:-1]:
             if float(row[-1]) > float(prevrow[-1]):
               redout[-1] = row
