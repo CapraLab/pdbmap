@@ -131,6 +131,20 @@ class PDBMapVisualize():
       cols = ['model','seqid','chain',anno]
       out  = [res[col] for col in cols if res[anno]] # Extract columns as rows
       out  = [list(i) for i in zip(*out)]            # Transpose back to columns
+      try:
+        # For duplicate residues (multi-transcripts, multi-snp codons, etc)
+        # use the highest value of the annotation (and hope its not pvalues)
+        redout,prevrow = [],[]
+        for row in out:
+          if row[:-1] == prevrow[:-1]:
+            if float(row[-1]) > float(prevrow[-1]):
+              redout[-1] = row
+          else:
+            redout.append(row)
+          prevrow = row
+        out = redout
+      except:
+        pass
       minval,maxval = (999,-999)
       attrf = "%(res_dir)s/%(structid)s_biounit%(biounit)s_vars_%%s.attr"%params%anno
       # Write the mappings to a temp file
