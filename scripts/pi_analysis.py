@@ -29,11 +29,11 @@
 # Genotypes      : Sample genotypes for this variant (no spaces)
 #=============================================================================#
 ## Package Dependenecies ##
-import pandas as pd, numpy as np
-import time,os,sys,random,argparse,itertools
+import pandas as pd, numpy as np, subprocess as sp
+import time,os,sys,random,argparse,itertools,csv
 from collections import OrderedDict
 from scipy.spatial import KDTree
-from scipy.stats import chisquare
+from scipy.stats import fisher_exact,chisquare
 from warnings import filterwarnings,resetwarnings
 ## Configuration and Initialization ##
 filterwarnings('ignore', category = RuntimeWarning)
@@ -107,8 +107,8 @@ def maf_filter(pop1,pop2,maf=0.05):
   for snp in pop1.ix[(pop1["maf"]>maf) | (pop2["maf"]>maf),"name"]:
     if snp:
       print "Filtered (Common):\t%s"%snp
-  pop1.ix[(pop1["maf"]>maf) & (pop2["maf"]>maf),"csq"] = "common"
-  pop2.ix[(pop1["maf"]>maf) & (pop2["maf"]>maf),"csq"] = "common"
+  pop1.ix[(pop1["maf"]>maf) | (pop2["maf"]>maf),"csq"] = "common"
+  pop2.ix[(pop1["maf"]>maf) | (pop2["maf"]>maf),"csq"] = "common"
   return pop1,pop2
 
 def prune_mono(pop1,pop2):
@@ -126,8 +126,8 @@ def gen2mat(genos):
     return np.array([])
   """ Converts a series of genotype strings to a sample x genotype matrix """
   def str2lst(s):
-    return list(np.int8(x) for x in s)
-  return np.array(list(genos.apply(str2lst).values),dtype=np.int8)
+    return list(np.uint8(x) for x in s)
+  return np.array(list(genos.apply(str2lst).values),dtype=np.uint8)
 
 def pi(genos):
   """ Calculates nucleotide diversity for a set of polymorphic sequences """
@@ -137,17 +137,43 @@ def pi(genos):
   s = g.shape[0]
   # Reduce to unique rows and calculate frequencies
   g,c = np.unique([''.join(gt.astype(str)) for gt in g],return_counts=True)
-  g = np.array([list(gt) for gt in g],dtype=np.int8)
+  g = np.array([list(gt) for gt in g],dtype=np.uint8)
   f = c.astype(np.float64) / s
   return np.mean([f[i]*f[j]*(g[i]!=g[j]).sum() for i,j in itertools.combinations(xrange(g.shape[0]),2)])
 
-def safe_chisquare(obs,exp):
-  """ Only calculates Chi Square for valid contingency tables """
-  return chisquare(obs+5,exp+5)
-  # if obs[0]<5 or obs[1]<5 or exp[0]<5 or exp[0]<5:
-  #   return np.nan,np.nan
-  # else:
-  #   return chisquare(obs,exp)
+# def safe_chisquare(obs,exp):
+#   """ Only calculates Chi Square for valid contingency tables """
+#   from scipy.stats import chisquare
+#   return chisquare(obs,exp)
+#   # if obs[0]<5 or obs[1]<5 or exp[0]<5 or exp[0]<5:
+#   #   return np.nan,np.nan
+#   # else:
+#   #   return chisquare(obs,exp)
+
+def multidigit_rand(digits):
+  randlist = [random.randint(1,10) for i in xrange(digits)]
+  multidigit_rand = int(''.join([str(x) for x in randlist]))
+  return multidigit_rand
+
+# def cfet(tables):
+#   """ External call to continuous Fisher's Exact Test (cfet) """
+#   ids = np.zeros((tables.shape[0],1))
+#   tables = np.c_[ids,tables]
+#   tname = "%s.cfet"%multidigit_rand(10)
+#   with open(tname,'wb') as fout:
+#     writer = csv.writer(fout,delimiter='\t')
+#     writer.writerows(tables)
+#   p = sp.Popen(["cfet","-s","-i",tname],stdout=sp.PIPE,stderr=sp.PIPE)
+#   out,err = p.communicate()
+#   try:
+#     os.remove(tname)
+#   except:
+#     pass
+#   if "error" in out:
+#     sys.stderr.write("Error in CFET:\n")
+#     sys.stderr.write(out)
+#     raise Exception("Error in CFET")
+#   return np.array([[float(col) for col in row.split()[1:]] for row in out.strip().split('\n')],dtype=np.float64)
 
 def def_spheres(df,csq=('m','s'),r=10.):
   """ Identifies all SNPs within a radius around each residue """
@@ -184,13 +210,14 @@ if args.ppart > 1:
     structs = structs[args.ppidx*psize:]
   else:
     structs = structs[args.ppidx*psize:(args.ppidx+1)*psize]
+  print "Partition %d contains %d structures."%(args.ppidx,len(structs))
   # Stagger process start times
   time.sleep(args.ppidx%50)
 #=============================================================================#
 ## Begin Analysis ##
 for s1,s2 in structs:
   try:
-    print "\n###########################\nEvaluating %s and %s..."%(s1,s2)
+    print "\n###########################\nEvaluating %s and %s...\n"%(s1,s2)
     # Read the data for each population
     pop1  = read_structfile(s1)
     pop2  = read_structfile(s2)
@@ -222,12 +249,13 @@ for s1,s2 in structs:
     gen2  = [gen2mat(sph2.loc[sph["nbridx"]]["geno"]) for _,sph in sph2.iterrows()]
     # Calculate overall alternate allele counts for each population
     print "Geno1 shape: %s"%len(gen1)
-    cnt1 = np.array([gt.sum() for gt in gen1],dtype=np.int16)
-    cnt2 = np.array([gt.sum() for gt in gen2],dtype=np.int16)
+    cnt1 = np.array([gt.sum() for gt in gen1],dtype=np.uint16)
+    cnt2 = np.array([gt.sum() for gt in gen2],dtype=np.uint16)
     # Calculate overall nucelotide diversity for each population and take the difference
     print "Calculating nucleotide diversity within each sphere..."
     pi1   = np.array([pi(gen) for gen in gen1]) / nres
     pi2   = np.array([pi(gen) for gen in gen2]) / nres
+    print "Minimum Pi:",min(pi1.min(),pi2.min())
     dpi   = pi1 - pi2
     pimat = np.vstack((pop1.iloc[:,:6].values.T,pi1,pi2,dpi)).T
     print "\nMinimum deltaPi: %s"%pimat[np.nanargmin(pimat[:,-1].astype(np.float64)),:]
@@ -237,34 +265,41 @@ for s1,s2 in structs:
     gen1  = [gen2mat(sph1.loc[sph["outidx"]]["geno"]) for _,sph in sph1.iterrows()]
     gen2  = [gen2mat(sph2.loc[sph["outidx"]]["geno"]) for _,sph in sph2.iterrows()]
     # Calculate overall alternate allele counts for each population
-    Ocnt1 = np.array([gt.sum() for gt in gen1],dtype=np.int16)
-    Ocnt2 = np.array([gt.sum() for gt in gen2],dtype=np.int16)
+    Ocnt1 = np.array([gt.sum() for gt in gen1],dtype=np.uint32)
+    Ocnt2 = np.array([gt.sum() for gt in gen2],dtype=np.uint32)
     # Calculate overall nucelotide diversity for each population [O]utside the sphere
     print "Calculating nucleotide diversity outside of each sphere..."
     Opi1  = np.array([pi(gen) for gen in gen1]) / (tres-nres)
     Opi2  = np.array([pi(gen) for gen in gen2]) / (tres-nres)
-    # # Calculate a between-pop, within-without sphere chi-square for each sphere
-    # print "Calculating nucleotide diversity ChiSquare and p-values..."
-    # chisq = np.array([chisquare([pi1[i],pi2[i]],[Opi1[i],Opi2[i]]) for i in xrange(len(pi1))])
-    # res   = np.vstack((pop1.iloc[:,:6].values.T,sph1["nbrsnps"].T,sph2["nbrsnps"].T,pi1,pi2,dpi,Opi1,Opi2,chisq.T)).T
-    # Calculate a between-pop, within-without sphere chi-square for each sphere
-    print "Calculating ChiSquare and p-values for alternate allele count..."
-    chisq = np.array([safe_chisquare([cnt1[i],cnt2[i]],[Ocnt1[i],Ocnt2[i]]) for i in xrange(len(cnt1))])
-    res   = np.vstack((pop1.iloc[:,:6].values.T,sph1["nbrsnps"].T,sph2["nbrsnps"].T,cnt1,cnt2,pi1,pi2,dpi,Ocnt1,Ocnt2,Opi1,Opi2,chisq.T)).T
-    print "res:"
-    for row in res:
-      print row
+    print "Calculating Fisher Exact Test and p-values for alternate allele count..."
+    fet   = np.array([fisher_exact([[cnt1[i],Ocnt1[i]],[cnt2[i],Ocnt2[i]]]) for i in xrange(len(cnt1))])
+    print "Calculating continuous Fisher's Exact p-values for nucleotide diversity..."
+    # cfetp = cfet(np.vstack((pi1,Opi1,pi2,Opi2)).T)
+    print "Calculating continuous ChiSquare test of questionable validity..."
+    chisq   = np.array([chisquare([pi1[i],pi2[i]],[Opi1[i],Opi2[i]]) for i in xrange(len(cnt1))])
+    print "Pi1:   %.1e %.1e %.1e %.1e %.1e"%tuple(np.percentile(pi1,[0,25,50,75,100]))
+    print "Pi2:   %.1e %.1e %.1e %.1e %.1e"%tuple(np.percentile(pi2,[0,25,50,75,100]))
+    print "Opi2:  %.1e %.1e %.1e %.1e %.1e"%tuple(np.percentile(Opi1,[0,25,50,75,100]))
+    print "Opi2:  %.1e %.1e %.1e %.1e %.1e"%tuple(np.percentile(Opi2,[0,25,50,75,100]))
+    print "FET:   %.1e %.1e %.1e %.1e %.1e"%tuple(np.percentile(fet[:,0],[0,25,50,75,100]))
+    print "FETp:  %.1e %.1e %.1e %.1e %.1e"%tuple(np.percentile(fet[:,1],[0,25,50,75,100]))
+    # print "CFETp: %.1e %.1e %.1e %.1e %.1e"%tuple(np.percentile(cfetp,[0,25,50,75,100]))
+    print "ChiSq: %.1e %.1e %.1e %.1e %.1e"%tuple(np.percentile(chisq[:,0],[0,25,50,75,100]))
+    print "Chip:  %.1e %.1e %.1e %.1e %.1e"%tuple(np.percentile(chisq[:,1],[0,25,50,75,100]))
+    res   = np.vstack((pop1.iloc[:,1:7].values.T,sph1["nbrsnps"].T,sph2["nbrsnps"].T,cnt1,cnt2,pi1,pi2,dpi,Ocnt1,Ocnt2,Opi1,Opi2,fet.T,chisq.T)).T
     if not np.isnan(res[:,-2].astype(np.float64)).all():
-      print "\nMinimum ChiSquare: %s"%res[np.nanargmin(res[:,-2].astype(np.float64)),:]
-      print "Maximum ChiSquare: %s\n"%res[np.nanargmax(res[:,-2].astype(np.float64)),:]
+      print "\nMinimum FET: %s"%res[np.nanargmin(res[:,-2].astype(np.float64)),:]
+      print "Maximum FET: %s\n"%res[np.nanargmax(res[:,-2].astype(np.float64)),:]
     else:
-      print "\nAll-NaN ChiSquare:"
+      print "\nAll-NaN FET:"
       np.savetxt(sys.stdout,res[~np.isnan(res[:,-1].astype(np.float64))],fmt="%s",delimiter=' ')
-    names  = ["index","structid","biounit","model","chain","seqid","icode","nbrsnps1","nbrsnps2","cnt1","cnt2","pi1","pi2","dpi","Ocnt1","Ocnt2","Opi1","Opi2","chisq","p-value"]
-    np.savetxt("%s/%s_%s_pi.txt"%(args.prefix,pop1.ix[0,"structid"],pop1.ix[0,"biounit"]),res[~np.isnan(res[:,-1].astype(np.float64))],fmt="%s",delimiter='\t',header='\t'.join(names),comments="#")
+    names  = ["structid","biounit","model","chain","seqid","icode","nbrsnps1","nbrsnps2","cnt1","cnt2","pi1","pi2","dpi","Ocnt1","Ocnt2","Opi1","Opi2","fet_or","fetp","chisq","chip"]
+    np.savetxt("%s%s_%s_pi.txt"%(args.prefix,pop1.ix[0,"structid"],pop1.ix[0,"biounit"]),res[~np.isnan(res[:,-1].astype(np.float64))],fmt="%s",delimiter='\t',header='\t'.join(names),comments="#")
   except Exception as e:
+    print "Error in %s,%s"%(s1,s2)
     print str(e)
     print e
-    raise
-    import pdb
+    # continue    # continue to next structure
+    raise       # raise exception
+    import pdb  # drop into debugger
     pdb.set_trace()
