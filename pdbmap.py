@@ -300,7 +300,7 @@ class PDBMap():
       anno_list += ['maf','amr_af','eas_af','sas_af','afr_af','eur_af']
       sr = spectrum_range[idx]
       spectrum_range = spectrum_range[0:idx]+spectrum_range[idx+1:]
-      spectrum_range += [sr for i in range(5)]
+      spectrum_range += [sr for i in range(6)]
     if 'dbscan' in anno_list:
       idx = anno_list.index('dbscan')
       anno_list = anno_list[0:idx]+anno_list[idx+1:]
