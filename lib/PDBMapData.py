@@ -236,7 +236,9 @@ class PDBMapData():
       parser = vcf.Reader(self.load_vep(fname,'vcf',cache),prepend_chr=True)
     else:
       parser = vcf.Reader(fname,prepend_chr=True)
-      parser.infos['CSQ'] = bed.Consequence() # dummy object
+      if not parser.infos['CSQ']: # CSQ may be pre-computed
+        # If no CSQ present, insert dummy structure
+        parser.infos['CSQ'] = bed.Consequence() # dummy object
     # Determine Info headers
     info_headers = parser.infos.keys()
     # Determine Consequence headers
