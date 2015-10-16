@@ -62,6 +62,22 @@ class PDBMapStructure(Structure):
           c = r.get_parent()
           mid,cid = c.get_parent().id,c.id
           self._pdb2pose[mid][cid][r.id[1]] = i+1
+      else:
+        # Revert indexing to original PDB indexing per pdb2pose
+        for mid,d1 in pdb2pose.iteritems():
+          for cid,d2 in d1.iteritems():
+            # The pose ID should always be less than the PDB ID
+            for rid,pose_id in sorted(d2.iteritems(),reverse=True):
+              # Isolate the residue
+              res = self.structure[mid][cid][pose_id]
+              # Detach from the chain
+              self.structure[mid][cid].detach_child(res.id)
+              # Update residue's position in the chain
+              resid = list(res.id)
+              resid[1] = rid
+              res.id = tuple(resid)
+              # Add residue back to the chain
+              self.structure[mid][cid].add(res)
       # Align to reference sequence if one is provided
       self.refseq = refseq
       if self.refseq:
