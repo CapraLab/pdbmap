@@ -78,7 +78,7 @@ def check_and_print_pdb(count, residue_buffer, residue_letter):
 
 
 def print_help():
-    print "clean_pdb.py <pdb> <chain id>"
+    print "clean_pdb.py <pdb> <chain id> [nopdbout]"
 
     print "pdb = file name of the file. Can be with or without the .pdb file handle"
     print "chain id = The chain id you are interested in. If more than one chain, "
@@ -175,7 +175,7 @@ for i in range(len(lines)):
     if len(line) > 5 and line[:6] == 'ENDMDL':
         model += 1
     chainid = [i for i in chainid]
-    if len(line) < 21:
+    if len(line) < 22 or line[:4]!="ATOM":
         continue
     if (line[21] in chainid or ignorechain or removechain or rechain):
         line_edit = line
