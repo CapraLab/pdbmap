@@ -96,7 +96,7 @@ def read_structfile(sfile):
                         ("name",str),("csq",str),("aa",str),("ref",str),
                         ("pmaf",float),("geno",str)])
   df = pd.read_csv(sfile,sep='\t',header=None,names=dtypes.keys(),
-                    dtype=dtypes,na_values=[""],index_col=False)
+                    dtype=dtypes,na_values=["NULL"],index_col=False)
 
   df.ix[df["csq"].str.contains("missense_variant",na=False).astype(bool),"csq"] = "m"
   # Convert NaN genotypes to empty strings
@@ -309,5 +309,5 @@ for s1,s2 in structs:
 if args.structure:
   names  = ["structid","biounit","snpcnt1","snpcnt2","ac1","ac2","cmaf1","cmaf2","pi1","pi2","dpi"]
   # Save the final results to file
-  np.savetxt("%sstructure_pi.txt"%args.prefix,np.array(res),fmt="%s",
+  np.savetxt("%spi.txt"%args.prefix,np.array(res),fmt="%s",
             delimiter='\t',header='\t'.join(names),comments="")

@@ -353,8 +353,6 @@ class PDBMap():
           print cmd
           os.system(cmd)
         biounit = 0
-    print "\nMutating %s.%s"%(structid,biounit)
-    print "Reading coordinates for %s.%s from %s"%(structid,biounit,bio)
     io = PDBIO()
     p  = PDBParser()
     with gzip.open(bio,'rb') as fin:
@@ -985,7 +983,7 @@ if __name__== "__main__":
         elif etype =='model':
           biounits += [(entity,0)]    
     # If relaxation directory is specified, prune biounits w/o relaxed structures
-    if relaxdir:
+    if relaxdir and etype!='file':
       pbio = []
       print "Checking for relaxed structures..."
       for structid,biounit in biounits:

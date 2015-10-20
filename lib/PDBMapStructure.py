@@ -78,6 +78,9 @@ class PDBMapStructure(Structure):
               res.id = tuple(resid)
               # Add residue back to the chain
               self.structure[mid][cid].add(res)
+            # Reverse the residue list to correct for backward algorithm
+            cl = self.structure[mid][cid].child_list
+            self.structure[mid][cid].child_list = cl[::-1]
       # Align to reference sequence if one is provided
       self.refseq = refseq
       if self.refseq:
@@ -113,7 +116,7 @@ class PDBMapStructure(Structure):
     for c in self.get_chains():
       refseq = dict((i+1,(r,"NA",0,0,0)) for i,r in enumerate(refseq))
       c.transcript = PDBMapTranscript("ref","ref","ref",refseq)
-      c.alignment = PDBMapAlignment(c,c.transcript)
+      c.alignment  = PDBMapAlignment(c,c.transcript)
       self.transcripts.append(c.transcript)
       self.alignments.append(c.alignment)
 
