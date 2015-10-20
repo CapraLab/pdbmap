@@ -26,6 +26,7 @@ from rosetta.utility import vector1_bool
 from rosetta import aa_from_oneletter_code
 from rosetta import aa_from_name
 from rosetta import PackRotamersMover
+from rosetta import MutateResidue
 from rosetta.core.pose import PDBInfo
 
 # a different version of mutate_residue is provided in PyRosetta v2.0 and
@@ -49,13 +50,17 @@ def mutate_residue(pose,mutant_position,mutant_aa,
         pose_from_sequence
     """
     
+    if pose.is_fullatom() == False:
+        raise IOError('Mutate_residue only works with fullatom poses')
+
     # Operate on (and return) a copy of the pose
     copypose = Pose()
     copypose.assign(pose)
     pose     = copypose
 
-    if pose.is_fullatom() == False:
-        raise IOError('Mutate_residue only works with fullatom poses')
+    # Insert the mutation
+    mutate = MutateResidue(mutant_position,mutant_aa)
+    mutate.apply(pose)
 
     # Create a standard scorefxn by default
     if not pack_scorefxn:
