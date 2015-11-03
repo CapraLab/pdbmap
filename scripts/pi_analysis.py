@@ -61,8 +61,10 @@ parser.add_argument("--ppidx",type=int,default=0,
                     help="Assigned partition")
 parser.add_argument("--radius",type=float,default=10.,
                     help="Sphere radius")
-parser.add_argument("--maf",type=float,default=1.,
-                    help="Allele frequency threshold (less-frequent population)")
+parser.add_argument("--minaf",type=float,default=0.,
+                    help="Minimum allele frequency threshold")
+parser.add_argument("--maxaf",type=float,default=1.,
+                    help="Maximum allele frequency threshold")
 parser.add_argument("--structure",action="store_true",default=False,
                     help="Computes Pi using all missense SNPs in the structure")
 args = parser.parse_args()
@@ -74,7 +76,7 @@ for arg in vars(args):
     print "  %s:\t%s"%(arg,getattr(args,arg))
 print ""
 prepath = '/'.join(args.prefix.split('/')[:-1])
-if not os.path.exists(prepath):
+if prepath and not os.path.exists(prepath):
   print "Prefix path does not exist, creating..."
   os.makedirs(prepath)
 #=============================================================================#
@@ -118,13 +120,24 @@ def maf(genstr):
   """ Calculates allele frequency over observed genotypes """
   return 0. if not genstr else genstr.count("1") / float(len(genstr))
 
-def maf_filter(pop1,pop2,maf=0.05):
-  """ Reclassify sites that are common in either population """
-  for snp in pop1.ix[(pop1["maf"]>maf) | (pop2["maf"]>maf),"name"]:
+def ac(genstr):
+  """ Calculates allele counts over observed genotypes """
+  return 0. if not genstr else genstr.count("1")
+
+def maf_filter(pop1,pop2,minaf=0.,maxaf=1.):
+  """ Filter if either population exceeds max, or both beneath min """
+  # Report SNPs beneath minimum allele frequency
+  for snp in pop1.ix[(pop1["maf"]<minaf) & (pop2["maf"]<minaf),"name"]:
+    if snp:
+      print "Filtered (Rare):\t%s"%snp
+  # Report SNPs exceeding maximum allele frequency
+  for snp in pop1.ix[(pop1["maf"]>maxaf) | (pop2["maf"]>maxaf),"name"]:
     if snp:
       print "Filtered (Common):\t%s"%snp
-  pop1.ix[(pop1["maf"]>maf) | (pop2["maf"]>maf),"csq"] = "common"
-  pop2.ix[(pop1["maf"]>maf) | (pop2["maf"]>maf),"csq"] = "common"
+  pop1.ix[(pop1["maf"]>maxaf) | (pop2["maf"]>maxaf),"csq"] = "common"
+  pop2.ix[(pop1["maf"]>maxaf) | (pop2["maf"]>maxaf),"csq"] = "common"
+  pop1.ix[(pop1["maf"]>minaf) & (pop2["maf"]>minaf),"csq"] = "rare"
+  pop2.ix[(pop1["maf"]>minaf) & (pop2["maf"]>minaf),"csq"] = "rare"
   return pop1,pop2
 
 def prune_mono(pop1,pop2):
@@ -134,6 +147,17 @@ def prune_mono(pop1,pop2):
       print "Filtered (Monomorphic):\t%s"%snp
   pop1.ix[(pop1["maf"]<TOL) & (pop2["maf"]<TOL),"csq"] = "monomorphic"
   pop2.ix[(pop1["maf"]<TOL) & (pop2["maf"]<TOL),"csq"] = "monomorphic"
+  return pop1,pop2
+
+def prune_singleton(pop1,pop2):
+  """ Reclassify sites that are singletons or missing in both populations """
+  # prune_singleton is more strict than prune_mono
+  # it isn't necessary to apply prune_mono if prune_singleton is applied
+  for snp in pop1.ix[(pop1["ac"]<2) & (pop2["ac"]<2),"name"]:
+    if snp:
+      print "Filtered (Singleton):\t%s"%snp
+  pop1.ix[(pop1["ac"]<2) & (pop2["ac"]<2),"csq"] = "singleton"
+  pop2.ix[(pop1["ac"]<2) & (pop2["ac"]<2),"csq"] = "singleton"
   return pop1,pop2
 
 def gen2mat(genos):
@@ -182,7 +206,7 @@ def def_spheres(df,csq=('m','s'),r=10.):
   dft["nbrsnps"] = [','.join([str(n) for n in dft.loc[x["nbridx"],"name"][dft.loc[x["nbridx"],"maf"]>0]]) for \
                       _,x in dft.iterrows()]
   # Count the number of SNPs in each sphere
-  dft["snpcnt"]  = dft["nbridx"].apply(lambda x: 0 if not x else len(x))
+  dft["snpcnt"]  = dft["nbrsnps"].apply(lambda x: 0 if not x.strip() else len(set(x.split(','))))
   # Identify all SNPs residing outside the sphere
   dft["outidx"] = [[i for i in idx if i not in x["nbridx"]] for _,x in dft.iterrows()]
   return dft
@@ -214,21 +238,25 @@ for s1,s2 in structs:
     pop2  = read_structfile(s2)
     # Record the total number of residues in the structure
     tres  = pop1.shape[0]
-    # Recalculate minor allele frequencies over observed genotypes
+    # Recalculate minor allele countsand frequencies over observed genotypes
     pop1["maf"] = pop1["geno"].apply(maf)
+    pop1["ac"]  = pop1["geno"].apply(ac)
     print "\n1: Reported and observed allele frequency differs by >5%% at %d sites."%(abs(pop1["pmaf"]-pop1["maf"])>0.05).sum()
     pop2["maf"] = pop2["geno"].apply(maf)
+    pop2["ac"]  = pop2["geno"].apply(ac)
     print "\n2: Reported and observed allele frequency differs by >5%% at %d sites."%(abs(pop2["pmaf"]-pop2["maf"])>0.05).sum()
     # Identifying population-monorphic sites
-    pop1,pop2 = prune_mono(pop1,pop2)
+    # pop1,pop2 = prune_mono(pop1,pop2)
+    # Identifying singletons (includes monomorphic filtering)
+    pop1,pop2 = prune_singleton(pop1,pop2)
     # Identifying shared common sites (default 1.0 - no filter)
-    pop1,pop2 = maf_filter(pop1,pop2,args.maf)
+    pop1,pop2 = maf_filter(pop1,pop2,args.minaf,args.maxaf)
     # Verify that the structure contains polymorphic residues
     if pop1[pop1["csq"]=='m'].empty:
       if pop1[pop1["csq"]=='common'].empty:
         print "Skipped %s,%s: Structure contains no polymorphic residues"%(s1,s2)
       else:
-        print "Skipped %s,%s: All polymorphic sites exceed MAF threshold"%(s1,s2)
+        print "Skipped %s,%s: All polymorphic sites outside MAF thresholds"%(s1,s2)
       continue
 
     if not args.structure:
@@ -237,12 +265,22 @@ for s1,s2 in structs:
       print "Defining spheres..."
       sph1 = def_spheres(pop1,'m',args.radius)
       sph2 = def_spheres(pop2,'m',args.radius)
+      sphcnt = len(sph1)
+      nbrvec = [nbrs1.split(',')+nbrs2.split(',') for nbrs1,nbrs2 in zip(sph1["nbrsnps"].values,sph2["nbrsnps"].values)]
+      snpcnt = np.array([len(set([nbr for nbr in vec if nbr])) for vec in nbrvec])
+      # Remove spheres containing less than three SNPs
+      sph1 = sph1[snpcnt>2]
+      sph2 = sph2[snpcnt>2]
+      print "%d of %d spheres with <3 SNPs pruned."%(sphcnt-len(sph1),sphcnt)
+      if not len(sph1):
+        print "Skipped %s,%s: All spheres contain fewer than 3 valid SNPs"%(s1,s2)
+        continue
       # Record the number of residues within each sphere (equal across populations)
       nres  = sph1["nres"].astype(np.float64).values
       # Initialize the genotype matrix for all spheres
       print "Defining genotype matrices for each sphere..."
-      gen1  = [gen2mat(sph1.loc[sph["nbridx"]]["geno"]) for _,sph in sph1.iterrows()]
-      gen2  = [gen2mat(sph2.loc[sph["nbridx"]]["geno"]) for _,sph in sph2.iterrows()]
+      gen1  = [gen2mat(pop1.loc[sph["nbridx"]]["geno"]) for _,sph in sph1.iterrows()]
+      gen2  = [gen2mat(pop2.loc[sph["nbridx"]]["geno"]) for _,sph in sph2.iterrows()]
       # Calculate overall alternate allele counts for each population
       print "Analyzing distribution of %d missense variants..."%len(gen1)
       cnt1  = np.array([gt.sum() for gt in gen1],dtype=np.uint16)
@@ -260,25 +298,27 @@ for s1,s2 in structs:
       ## Calculate outside-sphere values
       # Initialize "outside sphere" genotype matrices for each sphere
       print "Defining genotype matrices outside each sphere..."
-      gen1  = [gen2mat(sph1.loc[sph["outidx"]]["geno"]) for _,sph in sph1.iterrows()]
-      gen2  = [gen2mat(sph2.loc[sph["outidx"]]["geno"]) for _,sph in sph2.iterrows()]
+      gen1  = [gen2mat(pop1.loc[sph["outidx"]]["geno"]) for _,sph in sph1.iterrows()]
+      gen2  = [gen2mat(pop2.loc[sph["outidx"]]["geno"]) for _,sph in sph2.iterrows()]
       # Calculate overall alternate allele counts for each population
       Ocnt1 = np.array([gt.sum() for gt in gen1],dtype=np.uint32)
       Ocnt2 = np.array([gt.sum() for gt in gen2],dtype=np.uint32)
       # Calculate FET for the allelic imbalance inside and outside the sphere
-      print "Calculating Fisher Exact Test and p-values for alternate allele count..."
-      fet   = np.array([fisher_exact([[cnt1[i],Ocnt1[i]],[cnt2[i],Ocnt2[i]]]) for i in xrange(len(cnt1))])
+      print "Calculating One-Tailed Fisher Exact Test for greater allelic imbalance..."
+      fet   = np.array([fisher_exact([[cnt1[i],Ocnt1[i]],[cnt2[i],Ocnt2[i]]],"greater") for i in xrange(len(cnt1))])
       print "Calculating FDR (BH) adjusted p-values..."
       adjp  = fdr(fet[:,1],alpha=0.01,method='fdr_bh')[1] # index only the adjp array
+      # Sync the pop tables with the sphere tables
+      pop1 = pop1[snpcnt>2]
+      pop2 = pop2[snpcnt>2]
+      # Report results for this structure
       res   = np.vstack((pop1.iloc[:,1:9].values.T,sph1["nbrsnps"].T,sph2["nbrsnps"].T,sph1["snpcnt"].T,sph2["snpcnt"].T,cnt1,cnt2,cmaf1,cmaf2,pi1,pi2,dpi,fet.T,adjp)).T
       names = ["structid","biounit","model","chain","seqid","icode","pfam_acc","pfam_domain","nbrsnps1","nbrsnps2","snpcnt1","snpcnt2","ac1","ac2","cmaf1","cmaf2","pi1","pi2","dpi","fet_or","fetp","fet_padj"]
       print "\nTotal spheres: %d"%res.shape[0]
-      print "\nFiltering %d spheres with <2 SNPs..."%((res[:,10]<2) & (res[:,11]<2)).sum()
-      print "Retaining %d populated spheres..."%((res[:,10]>1) | (res[:,11]>1)).sum()
-      print "\nWriting results to %s..."%"%s%s_%s_pi.txt"%(args.prefix,pop1.ix[0,"structid"],pop1.ix[0,"biounit"])
-      np.savetxt("%s%s_%s_pi.txt"%(args.prefix,pop1.ix[0,"structid"],pop1.ix[0,"biounit"]),
-                res[(res[:,10]>1) | (res[:,11]>1)],
-                fmt="%s",delimiter='\t',header='\t'.join(names),comments="")
+      sid,bio = pop1["structid"].head(1).values[0],pop1["biounit"].head(1).values[0]
+      print "\nWriting results to %s..."%"%s%s_%s_pi.txt"%(args.prefix,sid,bio)
+      np.savetxt("%s%s_%s_pi.txt"%(args.prefix,sid,bio),
+                res,fmt="%s",delimiter='\t',header='\t'.join(names),comments="")
     else:
       # Calculate nucleotide diversity over missense SNPs in the structure
       pop1  = pop1[pop1["csq"]=='m']

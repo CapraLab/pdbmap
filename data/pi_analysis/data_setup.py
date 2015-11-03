@@ -37,7 +37,7 @@ import argparse,MySQLdb,csv,subprocess as sp,os,glob,shutil
 #=============================================================================#
 ## Parse Command Line Options ##
 desc  = "Generates data for the nucleotide diversity project for a given "
-desc += "1000 Genomes super-population. Data generated is rady for input "
+desc += "1000 Genomes super-population. Data generated is ready for input "
 desc += "into pi_analyis.py. Requires 1000 Genomes VCF data."
 parser = argparse.ArgumentParser(description=desc)
 parser.add_argument("population",type=str,

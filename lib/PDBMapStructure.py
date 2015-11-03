@@ -340,7 +340,7 @@ class PDBMapStructure(Structure):
     sc   = sfxn(p)
     if norm:
       return sc / p.n_residue()
-    return sfxn(p)
+    return sc
 
   def fa_rep(self,norm=False):
     sfxn   = rosetta.create_score_function_ws_patch("standard", "score12")

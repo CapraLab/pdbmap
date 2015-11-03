@@ -455,11 +455,15 @@ if __name__ == '__main__':
   elif params['minval'] > params['maxval']:
     rc("rangecolor %(anno)s,a %(maxval)0.6f red %(minval)0.6f blue"%params)
     rc("color green,a :/%(anno)s=%(minval)s"%params)
+    rc("color green,a :/%(anno)s>%(minval)s"%params)
     rc("color grey,a :/%(anno)s=%(maxval)s"%params)
+    rc("color grey,a :/%(anno)s<%(maxval)s"%params)
   else:
     rc("rangecolor %(anno)s,a %(minval)0.6f blue %(maxval)0.6f red"%params)
     rc("color green,a :/%(anno)s=%(maxval)s"%params)
+    rc("color green,a :/%(anno)s>%(maxval)s"%params)
     rc("color gray,a :/%(anno)s=%(minval)s"%params)
+    rc("color gray,a :/%(anno)s<%(minval)s"%params)
   # Export the scene
   rc("save %(res_dir)s/%(structid)s_biounit%(biounit)d_%(anno)s.py"%params)
   # Export the image
