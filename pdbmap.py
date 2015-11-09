@@ -566,7 +566,7 @@ class PDBMap():
       if not mtime or mtime != os.stat(args.sifts)[-2]:
         print "  Updating SIFTS in PDBMap...",
         sys.stdout.flush() # flush buffer before long query
-        rc = io.load_sifts(args.sifts,args.sprot)
+        rc = io.load_sifts(args.sifts,args.conf_file)
         print rc
         print "%d rows added"%"{:,}".format(int(rc))
 
@@ -581,8 +581,8 @@ def multidigit_rand(digits):
 if __name__== "__main__":
 
   # Print the ASCII header
-  header = \
-""" __  __  __            
+  header = """ \
+ __  __  __            
 |__)|  \|__)|\/| _  _  
 |   |__/|__)|  |(_||_) 
                    |   """
@@ -939,6 +939,10 @@ if __name__== "__main__":
       # Process file with one row per SNP
       with open(args.args[1],'rb') as fin:
         muts = [m.strip().split(':') for m in fin]
+    elif args.dlabel:
+      # Pull variants associated with the data label
+      print "Not yet implemented: Mutate Variants w/ Data Label"
+      sys.exit() 
     else:
       # Process comma-separated list of mutations
       muts   = [m.split(':') for m in args.args[1].split(',')]

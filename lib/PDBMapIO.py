@@ -618,7 +618,7 @@ class PDBMapIO(PDBIO):
       query += "alt_amino_acid,ref_codon,alt_codon,polyphen,sift,biotype,"
       query += "domains) VALUES "
       query += "(%(LABEL)s,%(CHROM)s,%(START)s,%(END)s,%(ID)s,"
-      query += "%(Feature)s,%(ENSP)s,%(UNIPROT)s,%(CANONICAL)s,%(Allele)s,"
+      query += "%(Feature)s,%(ENSP)s,%(SWISSPROT)s,%(CANONICAL)s,%(Allele)s,"
       query += "%(Consequence)s,%(cDNA_position)s,%(CDS_position)s,"
       query += "%(Protein_position)s,%(Ref_AminoAcid)s,%(Alt_AminoAcid)s,"
       query += "%(Ref_Codon)s,%(Alt_Codon)s,%(PolyPhen)s,%(SIFT)s,"
@@ -809,45 +809,48 @@ class PDBMapIO(PDBIO):
         return unp
     return None
 
-  def load_sifts(self,fname,sprot=None):
-    if sprot:
-      PDBMapProtein.load_sprot(sprot)
-      humansp = PDBMapProtein.sprot
-    else:
-      humansp = None
-    rc = 0
-    with open(fname,'rb') as fin:
-      fin.readline(); fin.readline() # skip first two lines
-      reader = csv.reader(fin,delimiter='\t')
-      for row in reader:
-        q  = "INSERT IGNORE INTO sifts "
-        q += "(pdbid,chain,sp,pdb_seqid,sp_seqid) VALUES "
-        v = []
-        pdbid,chain,sp = row[0:3]
-        pdbid = pdbid.strip()
-        if humansp and row[2] not in humansp:
-          continue # not a human protein
-        try:
-          res_beg,res_end,pdb_beg,pdb_end,sp_beg,sp_end = [int(x) for x in row[3:]]
-        except:
-          # msg  = "WARNING (PDBMapIO) SIFTS icode error: "
-          # msg += "%s,%s,%s\n"%(pdbid,chain,sp)
-          # sys.stderr.write(msg)
-          continue
-        res_range = range(res_beg,res_end+1)
-        pdb_range = range(pdb_beg,pdb_end+1)
-        sp_range  = range(sp_beg,sp_end+1)
-        if len(res_range) != len(pdb_range) or len(pdb_range) != len(sp_range):
-          # msg  = "WARNING (PDBMapIO) SIFTS range mismatch: "
-          # msg += "%s,%s,%s\n"%(pdbid,chain,sp)
-          # sys.stderr.write(msg) 
-          continue
-        for i,seqid in enumerate(pdb_range):
-          v.append("('%s','%s','%s',%d,%d)"%(pdbid,chain,sp,seqid,sp_range[i]))
-        # Upload after each row
-        q = q+','.join(v)
-        rc += self.secure_command(q)
-    return rc
+  def load_sifts(self,fdir,conf_file):
+    """ Given a SIFTS XML directory, uploads to PDBmap """
+    cmd = "scripts/sifts_parser.py -c %s %s"%(conf_file,fdir)
+    os.system(cmd)
+    # if sprot:
+    #   PDBMapProtein.load_sprot(sprot)
+    #   humansp = PDBMapProtein.sprot
+    # else:
+    #   humansp = None
+    # rc = 0
+    # with open(fname,'rb') as fin:
+    #   fin.readline(); fin.readline() # skip first two lines
+    #   reader = csv.reader(fin,delimiter='\t')
+    #   for row in reader:
+    #     q  = "INSERT IGNORE INTO sifts "
+    #     q += "(pdbid,chain,sp,pdb_seqid,sp_seqid) VALUES "
+    #     v = []
+    #     pdbid,chain,sp = row[0:3]
+    #     pdbid = pdbid.strip()
+    #     if humansp and row[2] not in humansp:
+    #       continue # not a human protein
+    #     try:
+    #       res_beg,res_end,pdb_beg,pdb_end,sp_beg,sp_end = [int(x) for x in row[3:]]
+    #     except:
+    #       # msg  = "WARNING (PDBMapIO) SIFTS icode error: "
+    #       # msg += "%s,%s,%s\n"%(pdbid,chain,sp)
+    #       # sys.stderr.write(msg)
+    #       continue
+    #     res_range = range(res_beg,res_end+1)
+    #     pdb_range = range(pdb_beg,pdb_end+1)
+    #     sp_range  = range(sp_beg,sp_end+1)
+    #     if len(res_range) != len(pdb_range) or len(pdb_range) != len(sp_range):
+    #       # msg  = "WARNING (PDBMapIO) SIFTS range mismatch: "
+    #       # msg += "%s,%s,%s\n"%(pdbid,chain,sp)
+    #       # sys.stderr.write(msg) 
+    #       continue
+    #     for i,seqid in enumerate(pdb_range):
+    #       v.append("('%s','%s','%s',%d,%d)"%(pdbid,chain,sp,seqid,sp_range[i]))
+    #     # Upload after each row
+    #     q = q+','.join(v)
+    #     rc += self.secure_command(q)
+    # return rc
 
   def load_pfam(self,fname):
     query  = "LOAD DATA LOCAL INFILE %s "

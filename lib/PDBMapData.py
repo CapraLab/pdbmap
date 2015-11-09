@@ -187,21 +187,10 @@ class PDBMapData():
                     "SIFT":             None,
                     "BIOTYPE":          None,
                     "DOMAINS":           None}]
-      record.INFO['EXISTING'] = None
-      record.INFO["GENE"]     = None
-      record.INFO["HGNC"]     = None
-      record.INFO["UNIPROT"]  = None
-
-      # print "record.INFO:"
-      # for key,val in record.INFO.iteritems():
-      #   print key,val
-      # print ''
-      # print "record.CSQ:"
-      # for key,val in record.CSQ[0].iteritems():
-      #   print key,val
-      # print ''
-      # sys.exit()
-
+      record.INFO['EXISTING']  = None
+      record.INFO["GENE"]      = None
+      record.INFO["HGNC"]      = None
+      record.INFO["SWISSPROT"] = None
     else:
       # Extract the consequences
       record.CSQ = self._parse_csq(csq_headers,record.INFO['CSQ'])
