@@ -197,6 +197,7 @@ class PDBMap():
     else:
       msg = "ERROR (PDBMap) Unsupported file type: %s"%ext
       raise Exception(msg)
+    print "Uploading genomic data to PDBMap via generator..."
     nrows = io.upload_genomic_data(generator,dname)
     return(nrows)
   
@@ -553,7 +554,7 @@ class PDBMap():
       if not mtime or mtime != os.stat(args.pfam)[-2]:
         print "  Updating PFAM in PDBMap...",
         rc = io.load_pfam(args.pfam)
-        print "%d rows added"%"{:,}".format(int(rc))
+        print "%s rows added"%"{:,}".format(int(rc))
     if args.sifts:
       print "Refreshing local SIFTS cache..."
       if os.path.exists(args.sifts):
@@ -568,7 +569,7 @@ class PDBMap():
         sys.stdout.flush() # flush buffer before long query
         rc = io.load_sifts(args.sifts,args.conf_file)
         print rc
-        print "%d rows added"%"{:,}".format(int(rc))
+        print "%s rows added"%"{:,}".format(int(rc))
 
 ## Copied from biolearn
 def multidigit_rand(digits):

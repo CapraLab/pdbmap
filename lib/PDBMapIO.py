@@ -797,11 +797,11 @@ class PDBMapIO(PDBIO):
   def detect_entity_type(self,entity):
     """ Given an entity ID, attempts to detect the entity type """
     if self.model_in_db(entity,label=None):
-      return 'model'
+      return "model"
     elif self.structure_in_db(entity,label=None):
-      return 'structure'
+      return "structure"
     elif self.unp_in_db(entity,label=None):
-      return 'unp'
+      return "unp"
     else:
       isgene,unp = self.gene_in_db(entity,label=None)
       # If a gene, return the associated UniProt ID
@@ -813,6 +813,12 @@ class PDBMapIO(PDBIO):
     """ Given a SIFTS XML directory, uploads to PDBmap """
     cmd = "scripts/sifts_parser.py -c %s %s"%(conf_file,fdir)
     os.system(cmd)
+    return -1
+    ## This code used to have to do range-inferences to derive
+    ## 1-to-1 mappings from start-end mappings. We're now using
+    ## the 1-to-1 XML files from SIFTS, so this preprocessing
+    ## is no longer necessary and the data can be loaded directly
+    ## from the XML file via a simple sifts XML parser.
     # if sprot:
     #   PDBMapProtein.load_sprot(sprot)
     #   humansp = PDBMapProtein.sprot

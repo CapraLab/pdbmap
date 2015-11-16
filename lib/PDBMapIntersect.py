@@ -42,7 +42,7 @@ class PDBMapIntersect():
     query += "SELECT a.label,c.label,c.structid,c.chain,c.chain_seqid,a.gc_id "
     query += "FROM GenomicConsequence as a "
     query += "INNER JOIN Transcript as b "
-    query += "ON a.transcript=b.transcript AND a.chr=b.chr "
+    query += "ON (a.transcript='' OR a.transcript=b.transcript) AND a.chr=b.chr "
     query += "AND a.start >= b.start AND a.end <= b.end "
     query += "INNER JOIN Alignment as c "
     query += "ON b.transcript=c.transcript AND b.seqid=c.trans_seqid "

@@ -49,11 +49,11 @@ class PDBMapData():
       # Specify the input type
       self.vep_cmd.extend(['--format',''])
       # Use the local VEP cache
-      self.vep_cmd.extend(['--cache','--offline']) # port specifies GRCh37 databases
+      self.vep_cmd.extend(['--cache','--offline'])
       # Disable the progress bars
       self.vep_cmd.extend(['--no_progress'])
       # Increase buffer size to improve runtime (default 5,000)
-      self.vep_cmd.extend(['--buffer_size','400000']) # ~5GB per 100,000
+      self.vep_cmd.extend(['--buffer_size','500000']) # ~5GB per 100,000
       # Annotate with functional info/prediction
       self.vep_cmd.extend(['--sift','s','--polyphen','s'])
       # Annotate with variant, gene, protein, and domain identifiers
@@ -186,7 +186,8 @@ class PDBMapData():
                     "PolyPhen":         None,
                     "SIFT":             None,
                     "BIOTYPE":          None,
-                    "DOMAINS":           None}]
+                    "DOMAINS":          None,
+                    "SWISSPROT":        None}]
       record.INFO['EXISTING']  = None
       record.INFO["GENE"]      = None
       record.INFO["HGNC"]      = None

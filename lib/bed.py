@@ -13,7 +13,7 @@ import sys,io,csv,gzip
 
 class Reader:
   def __init__(self,fsock=None,filename=None,compressed=False,indexing='ucsc',
-                prepend_chr=False,delimiter='\t',header=False):
+                prepend_chr=False,delimiter='\t',header=True):
     self.prepend_chr = prepend_chr
     self.indexing    = indexing
     if fsock and filename:
@@ -32,7 +32,8 @@ class Reader:
     self.peek = self.reader.next()
     if header:
         self.header = self.peek
-        self.NCOLS  = len(row)
+        self.NCOLS  = len(self.peek)
+        self.peek    = None # drop the header
     else:
         self.header = ["CHROM","START","END","ID"]
         self.NCOLS  = len(self.peek)

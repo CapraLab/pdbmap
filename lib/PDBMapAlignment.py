@@ -47,8 +47,8 @@ class PDBMapAlignment():
 
     # If an io object was provided, first check for SIFTS alignment
     if io:
-        q  = "SELECT pdb_seqid,sp_seqid,sp FROM sifts WHERE pdbid=%s "
-        q += "AND chain=%s AND sp=%s ORDER BY pdb_seqid"
+        q  = "SELECT resnum,uniprot_resnum,uniprot_acc FROM sifts WHERE pdbid=%s "
+        q += "AND chain=%s AND uniprot_acc=%s ORDER BY resnum"
         res = io.secure_query(q,
             (chain.get_parent().get_parent().id,chain.id,transcript.protein),
             cursorclass='Cursor')
@@ -70,22 +70,7 @@ class PDBMapAlignment():
             score         = -1
             return pdb2seq,seq2pdb,aln_string,score,perc_aligned,perc_identity
 
-    ###########################################################################
-    #FIXME: I think the two lines marked below are causing the alignment issue
-    # The way they're written, they're throwing away the pre-adjusted sequence
-    # indices specified in the chain. i.e. if the chain starts at the 20th
-    # residue in the structure, *and is labeled as such*, it is treated by
-    # this alignment as if it were labed residue 1. This means that the
-    # resultant sequence index map doesn't use the correct "original"
-    # sequence index.
-    #
-    # I don't know if this is causing an issue with the mutate functionality,
-    # but is critical for another component to work. Need to check into how
-    # other modules interact with the information before a change is made
-    ###########################################################################
-
     # Determine start indices
-    ##FIXME: Line 1 of the problem lines
     c_start = min([r.seqid for r in chain.get_residues()])
     t_start = min(transcript.sequence.keys())
     c_end   = max([r.seqid for r in chain.get_residues()])
@@ -95,8 +80,6 @@ class PDBMapAlignment():
     c_seq = ['-' for i in range(c_end+1)]
     for r in chain.get_residues():
         c_seq[r.seqid] = r.rescode
-    #BUG negative start indices break this line
-    ##FIXME: Line 2 of the problem lines
     c_seq = c_seq[c_start:] # Remove leading gaps for alignment
     # Record the gaps
     gaps = [i+c_start for i,r in enumerate(c_seq) if r == '-']
@@ -114,7 +97,6 @@ class PDBMapAlignment():
     alignment  = alignments[0] # best alignment
     aln_chain, aln_trans, score, begin, end = alignment
     # Create an alignment map from chain to transcript
-    ##FIXME: Line 3, Looks like c_start is corrected by _gap_shift
     c_ind = [x for x in self._gap_shift(aln_chain,c_start,gaps)]
     t_ind = [x for x in self._gap_shift(aln_trans,t_start)]
 
