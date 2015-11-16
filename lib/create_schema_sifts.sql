@@ -14,7 +14,7 @@ CREATE TABLE `sifts` (
   `interpro` varchar(200) DEFAULT NULL,
   `sscode` varchar(50) DEFAULT NULL,
   `ssname` varchar(50) DEFAULT NULL,
-  `sft_id MEDIUMINT NOT NULL AUTO_INCREMENT, # Unique, direct-reference key
+  `sft_id` MEDIUMINT NOT NULL AUTO_INCREMENT,
   PRIMARY KEY (`pdbid`,`chain`,`resnum`,`icode`),
   KEY (`sft_id`)
 )

@@ -37,8 +37,18 @@ if not all(vars(args)):
   print "Must provide database information and XML directory."
   sys.exit()
 
+# Connect to the databsae
+import MySQLdb
+con = MySQLdb.connect(host=args.dbhost,user=args.dbuser,
+                      passwd=args.dbpass,db=args.dbname)
+# Increase maximum packet size for this connection
+c = con.cursor()
+c.execute("SET GLOBAL max_allowed_packet=512000000")
+c.close()
+
 # Parse the XML files
 for xmlfile in glob.glob("%s/*.xml.gz"%args.xmldir.rstrip('/')):
+  print "Parsing %s..."%xmlfile,
   parser = etree.XMLParser(remove_blank_text=True)
   tree   = etree.parse(xmlfile,parser)
   root   = tree.getroot()
@@ -104,27 +114,24 @@ for xmlfile in glob.glob("%s/*.xml.gz"%args.xmldir.rstrip('/')):
           # Add residue to list of parsed residues
           rlist.append(res)
 
-## Upload to database
-import MySQLdb
-con = MySQLdb.connect(host=args.dbhost,user=args.dbuser,
-                      passwd=args.dbpass,db=args.dbname)
-c   = con.cursor()
-sql = """insert into sifts2
-  (pdbid,chain,resnum,icode,resname,uniprot_acc,uniprot_resnum,
-   uniprot_resname,ncbi,pfam,cath,scop,interpro,sscode,ssname)
-  values 
-  (%(pdbid)s,%(chain)s,%(resnum)s,%(icode)s,%(resname)s,
-   %(uniprot_acc)s,%(uniprot_resnum)s,%(uniprot_resname)s,
-   %(ncbi)s,%(pfam)s,%(cath)s,%(scop)s,%(interpro)s,
-   %(sscode)s,%(ssname)s);"""
+  ## Upload to database
+  c   = con.cursor()
+  sql = """insert ignore into sifts
+    (pdbid,chain,resnum,icode,resname,uniprot_acc,uniprot_resnum,
+     uniprot_resname,ncbi,pfam,cath,scop,interpro,sscode,ssname)
+    values 
+    (%(pdbid)s,%(chain)s,%(resnum)s,%(icode)s,%(resname)s,
+     %(uniprot_acc)s,%(uniprot_resnum)s,%(uniprot_resname)s,
+     %(ncbi)s,%(pfam)s,%(cath)s,%(scop)s,%(interpro)s,
+     %(sscode)s,%(ssname)s);"""
 
-try:
-  c.executemany(sql,rlist)
-  con.commit()
-  print "Successfully uploaded rows"
-except:
-  con.rollback()
-  print "Failed to upload rows"
-  print c._last_executed
-  raise
-con.close()
+  try:
+    c.executemany(sql,rlist)
+    con.commit()
+    print "Uploaded!"
+  except:
+    con.rollback()
+    print "Failed to upload rows."
+    print c._last_executed
+    raise
+  c.close()

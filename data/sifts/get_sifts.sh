@@ -13,5 +13,5 @@
 #wget -q -N --reject -nH -nd --timeout=100000 ftp://ftp.ebi.ac.uk/pub/databases/msd/sifts/flatfiles/tsv/pdb_chain_uniprot.tsv.gz
 #gunzip -c pdb_chain_uniprot.tsv.gz > pdb_chain_uniprot.tsv
 
-wget -q -N --reject -nH -nd --timeout=100000 ftp://ftp.ebi.ac.uk/pub/databases/msd/sifts/xml/*.xml.gz
+wget -r -N --no-parent --reject -nH -nd --timeout=100000 --tries=100 -P xml ftp://ftp.ebi.ac.uk/pub/databases/msd/sifts/xml
 
