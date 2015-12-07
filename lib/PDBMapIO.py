@@ -122,7 +122,7 @@ class PDBMapParser(PDBParser):
       filterwarnings('ignore',category=PDBConstructionWarning)
       s = p.get_structure(pdbid,fin)
       resetwarnings()
-      s = PDBMapStructure(s,quality)
+      s = PDBMapStructure(s,quality,pdb2pose={})
       fin.close()
     except Exception as e:
       msg = "ERROR (PDBMapIO) Error while parsing %s: %s"%(pdbid,str(e).replace('\n',' '))
@@ -264,7 +264,7 @@ class PDBMapParser(PDBParser):
         filterwarnings('ignore',category=PDBConstructionWarning)
         biounit = p.get_structure(pdbid,fin)
         resetwarnings()
-        biounit = PDBMapStructure(biounit)
+        biounit = PDBMapStructure(biounit,pdb2pose={})
         fin.close()
       except Exception as e:
         msg = "ERROR (PDBMapIO) Error while parsing %s biounit %d: %s"%(pdbid,bioid,str(e).replace('\n',' '))
@@ -442,7 +442,9 @@ class PDBMapIO(PDBIO):
     # Upload the structure if skip not specified
     if not model:
       h = s.header
-      squery  = 'INSERT IGNORE INTO Structure VALUES ('
+      squery  = 'INSERT IGNORE INTO Structure '
+      squery += '(label,pdbid,method,quality,resolution,`name`,author,deposition,`release`,compound,keywords,reference,structure_reference) '
+      squery += 'VALUES ('
       squery += '"%(label)s","%(id)s","%(structure_method)s",%(quality)f,'
       squery += '%(resolution)f,"%(name)s","%(author)s","%(deposition_date)s",'
       squery += '"%(release_date)s","%(compound)s","%(keywords)s",'
@@ -466,7 +468,9 @@ class PDBMapIO(PDBIO):
         mfields['id'] = int(mfields['id'].split('.')[-1])
         mfields['id'] += 1 # correct indexing
       for c in m:
-        cquery  = "INSERT IGNORE INTO Chain VALUES "
+        cquery  = "INSERT IGNORE INTO Chain "
+        cquery += "(label,structid,biounit,model,chain,unp,offset,hybrid,sequence) "
+        cquery += "VALUES "
         cquery += '("%(label)s","%(id)s",'%sfields # structure id
         cquery += '%(biounit)d,%(id)d,'%mfields # model id
         cquery += '"%(id)s","%(unp)s",%(offset)d,%(hybrid)d,"%(sequence)s")'
@@ -475,7 +479,9 @@ class PDBMapIO(PDBIO):
         cfields["label"] = self.slabel
         cquery = cquery%cfields
         queries.append(cquery)
-        rquery  = "INSERT IGNORE INTO Residue VALUES "
+        rquery  = "INSERT IGNORE INTO Residue "
+        rquery += "(label,structid,biounit,model,chain,resname,rescode,seqid,icode,x,y,z,ss,rsa,phi,psi,tco,kappa,alpha) "
+        rquery += "VALUES "
         for r in c:
           rquery += '("%(label)s","%(id)s",'%sfields # structure id
           rquery += '%(biounit)d,%(id)d,'%mfields # model id
@@ -487,7 +493,7 @@ class PDBMapIO(PDBIO):
           rfields = dict((key,r.__getattribute__(key)) for key in dir(r) 
                           if isinstance(key,collections.Hashable))
           for key,val in rfields.iteritems():
-            if val == None:
+            if val is None:
               if key == 'ss':
                 rfields[key] = '?'
               else:
@@ -498,9 +504,11 @@ class PDBMapIO(PDBIO):
 
     # Upload the transcripts
     try:
-      tquery = "INSERT IGNORE INTO Transcript VALUES "
+      tquery  = "INSERT IGNORE INTO Transcript "
+      tquery += "(label,transcript,protein,gene,seqid,rescode,chr,start,end,strand) "
+      tquery += "VALUES "
       if not len(s.get_transcripts(io=self)):
-        raise Exception("No transcripts for structure %s"%s.id)
+        raise Exception("No transcripts for structure %s, proteins: %s"%(s.id,','.join([c.unp for m in s for c in m])))
       for t in s.get_transcripts(io=self):
         for seqid,(rescode,chr,start,end,strand) in t.sequence.iteritems():
           # tquery += '("%s","%s","%s",'%(self.slabel,t.transcript,t.gene)
@@ -514,7 +522,9 @@ class PDBMapIO(PDBIO):
       raise
 
     # Upload the alignments
-    aquery = "INSERT IGNORE INTO Alignment VALUES "
+    aquery  = "INSERT IGNORE INTO Alignment "
+    aquery += "(label,structid,chain,chain_seqid,transcript,trans_seqid) "
+    aquery += "VALUES "
     for a in s.get_alignments():
       for c_seqid,t_seqid in a.pdb2seq.iteritems():
         aquery += '("%s","%s","%s",%d,'%(self.slabel,s.id,a.chain.id,c_seqid)
@@ -522,7 +532,9 @@ class PDBMapIO(PDBIO):
     queries.append(aquery[:-1])
 
     # Upload the alignment scores
-    asquery = "INSERT IGNORE INTO AlignmentScore VALUES "
+    asquery = "INSERT IGNORE INTO AlignmentScore "
+    asquery += "(label,structid,chain,transcript,score,perc_aligned,perc_identity,alignment) "
+    asquery += "VALUES "
     for a in s.get_alignments():
       asquery += '("%s","%s","%s","%s",%f,%f,%f,"%s"),'% \
                   (self.slabel,s.id,a.chain.id,a.transcript.transcript,
@@ -534,10 +546,12 @@ class PDBMapIO(PDBIO):
       self._connect()
       for q in queries[::-1]:
         self._c.execute(q)
+      self._con.commit()
     except:
       msg  = "ERROR (PDBMapIO) Query failed for %s: "%s.id
       msg += "%s\n"%self._c._last_executed
       sys.stderr.write(msg)
+      self._con.rollback()
       raise
     
     self._close()
@@ -553,7 +567,9 @@ class PDBMapIO(PDBIO):
       return(1)
 
     # Upload the Model summary information
-    mquery  = 'INSERT IGNORE INTO Model VALUES ('
+    mquery  = 'INSERT IGNORE INTO Model '
+    mquery += '(label,modelid,unp,method,no35,rmsd,mpqs,evalue,ga341,zdope,pdbid,chain,identity)'
+    mquery += 'VALUES ('
     mquery += '"%(label)s","%(id)s","%(unp)s","%(tvsmod_method)s",'
     mquery += '%(tvsmod_no35)s,%(tvsmod_rmsd)s,%(mpqs)s,%(evalue)s,%(ga341)f,'
     mquery += '%(zdope)s,"%(pdbid)s","%(chain)s",%(identity)f)'
@@ -575,6 +591,7 @@ class PDBMapIO(PDBIO):
     filterwarnings('ignore', category = MySQLdb.Warning)
     i=0 # ensure initialization
     for i,record in enumerate(dstream):
+      sys.stdout.write("\rRecord %4d"%i)
       # Upload all but the consequences to GenomicData
       record.INFO['LABEL'] = dname
       query  = "INSERT IGNORE INTO GenomicData "
@@ -600,7 +617,9 @@ class PDBMapIO(PDBIO):
       query += "%(AMREAS_Fst)s,%(AMRSAS_Fst)s,%(AMREUR_Fst)s,%(AMRAFR_Fst)s,%(EASSAS_Fst)s,"
       query += "%(EASEUR_Fst)s,%(EASAFR_Fst)s,%(SASEUR_Fst)s,%(SASAFR_Fst)s,%(EURAFR_Fst)s,"
       query += "%(ALLPOP_Nhat)s,%(ALLPOP_Dhat)s,%(ALLPOP_Fst)s,%(SNPSOURCE)s,%(FORMAT)s,%(GT)s)"
-      try: self._c.execute(query,record.INFO)
+      try: 
+        self._c.execute(query,record.INFO)
+        self._con.commit()
       except Exception as e:
         if "_last_executed" in dir(self._c):
           msg = self._c._last_executed.replace('\n',';')
@@ -609,6 +628,7 @@ class PDBMapIO(PDBIO):
           msg  = str(e).replace('\n',';')
           msg += "WARNING (PDBMapIO) MySQL query failed, exception: %s\n"%msg
           sys.stderr.write(msg)
+        self._con.rollback()
       self._close()
       self._connect(cursorclass=MySQLdb.cursors.Cursor)
       # Upload each consequence to GenomicConsequence
@@ -625,7 +645,9 @@ class PDBMapIO(PDBIO):
       query += "%(BIOTYPE)s,%(DOMAINS)s)"
       for csq in record.CSQ:
         csq["LABEL"] = self.dlabel
-        try: self._c.execute(query,csq)
+        try: 
+          self._c.execute(query,csq)
+          self._con.commit()
         except Exception as e:
           if "_last_executed" in dir(self._c):
             msg = self._c._last_executed.replace('\n',';')
@@ -869,13 +891,26 @@ class PDBMapIO(PDBIO):
   def show(self):
     return(self.__dict__['structure'])
 
+  def _alive(self,con):
+    try:
+      c = con.cursor()
+      c.execute("SELECT 1")
+      return True
+    except:
+      return False
+
   def _connect(self,usedb=True,cursorclass=MySQLdb.cursors.DictCursor,retry=True):
     # Search for existing connection with desired cursorclass
     self._con = None
     for con in self._cons:
       if con.cursorclass == cursorclass:
-        # Set as active connection
-        self._con = con
+        if self._alive(con):
+          # Set as active connection
+          self._con = con
+        else:
+          # Remove dead connection
+          con.close()
+          self._cons.remove(con)
     # If none was found, open a new connection with desired cursorclass
     if not self._con:
       try:
@@ -980,6 +1015,7 @@ class PDBMapIO(PDBIO):
                 'lib/create_schema_GenomicIntersection.sql',
                 'lib/create_schema_sifts.sql',
                 'lib/create_schema_pfam.sql',
+                'lib/create_procedure_assign_foreign_keys.sql',
                 'lib/create_procedure_get_protein.sql',
                 'lib/create_procedure_get_structure.sql',
                 'lib/create_procedure_get_full_structure.sql',

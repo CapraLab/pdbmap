@@ -522,6 +522,21 @@ class PDBMap():
 
   def refresh_cache(self,args,io,force=False):
     """ Refreshes all mirrored data """
+    if args.sifts:
+      print "Refreshing local SIFTS cache..."
+      if os.path.exists(args.sifts):
+        mtime = os.stat(args.sifts)[-2]
+      else:
+        mtime = None
+      script_path   = os.path.dirname(os.path.realpath(args.sifts))
+      get_sifts     = "cd %s; ./get_sifts.sh"%(script_path)
+      os.system(get_sifts)
+      if not mtime or mtime != os.stat(args.sifts)[-2]:
+        print "  Updating SIFTS in PDBMap...",
+        sys.stdout.flush() # flush buffer before long query
+        rc = io.load_sifts(args.sifts,args.conf_file)
+        print rc
+        print "%s rows added"%"{:,}".format(int(rc))
     if args.sprot:
       print "Refreshing local SwissProt cache..."
       script_path   = os.path.dirname(os.path.realpath(args.sprot))
@@ -555,21 +570,6 @@ class PDBMap():
         print "  Updating PFAM in PDBMap...",
         rc = io.load_pfam(args.pfam)
         print "%s rows added"%"{:,}".format(int(rc))
-    if args.sifts:
-      print "Refreshing local SIFTS cache..."
-      if os.path.exists(args.sifts):
-        mtime = os.stat(args.sifts)[-2]
-      else:
-        mtime = None
-      script_path   = os.path.dirname(os.path.realpath(args.sifts))
-      get_sifts     = "cd %s; ./get_sifts.sh"%(script_path)
-      os.system(get_sifts)
-      if not mtime or mtime != os.stat(args.sifts)[-2]:
-        print "  Updating SIFTS in PDBMap...",
-        sys.stdout.flush() # flush buffer before long query
-        rc = io.load_sifts(args.sifts,args.conf_file)
-        print rc
-        print "%s rows added"%"{:,}".format(int(rc))
 
 ## Copied from biolearn
 def multidigit_rand(digits):
@@ -583,7 +583,7 @@ if __name__== "__main__":
 
   # Print the ASCII header
   header = """ \
- __  __  __            
+__  __  __            
 |__)|  \|__)|\/| _  _  
 |   |__/|__)|  |(_||_) 
                    |   """
@@ -699,9 +699,10 @@ if __name__== "__main__":
       print "Creating database tables..."
       io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,
                             args.dbpass,args.dbname,createdb=True)
-      print "Refreshing remote data cache and populating tables..."
-      PDBMap().refresh_cache(args,io)
+      # print "Refreshing remote data cache and populating tables..."
+      # PDBMap().refresh_cache(args,io)
       print "Database created. Please set create_new_db to False."
+      print "It is strongly recommended that you now refresh the local resource cache."
     sys.exit(0)
   # Initialize PDBMap, refresh mirrored data if specified
   if args.cmd=="refresh":
@@ -717,17 +718,35 @@ if __name__== "__main__":
                     pdb_dir=args.pdb_dir)
     if len(args.args) < 1:
       msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> load_pdb pdb_file [pdb_file,...]\n"
-      print msg; sys.exit(1)
+      msg += "   or: pdbmap.py -c conf_file --slabel=<slabel> all"
+      print msg; sys.exit(0)
     elif args.args[0] == 'all':
+      args.slabel = args.slabel if args.slabel else "pdb"
       # All structures in the PDB mirror
       all_pdb_files = glob.glob("%s/structures/all/pdb/*.ent.gz"%args.pdb_dir)
       msg = "WARNING (PDBMap) Uploading all %d mirrored RCSB PDB structures.\n"%len(all_pdb_files)
       sys.stderr.write(msg)
       n = len(all_pdb_files)
-      for i,pdb_files in enumerate(all_pdb_files):
-        pdbid = os.path.basename(pdb_file).split('.')[0][-4:].upper()
-        print "\n## Processing (pdb) %s (%d/%d) ##"%(pdbid,i,n)
-        pdbmap.load_pdb(pdbid,pdb_file,label="pdb")
+      # If this is a parallel command with partition parameters
+      if args.ppart != None and args.ppidx != None:
+        psize = n / args.ppart # floor
+        if (args.ppart-1) == args.ppidx:
+          all_pdb_files = all_pdb_files[args.ppidx*psize:]
+        else:
+          all_pdb_files = all_pdb_files[args.ppidx*psize:(args.ppidx+1)*psize]
+        msg = "WARNING(PDBMap) Subprocess uploading partition %d/%d of RCSB PDB\n"%(args.ppidx+1,args.ppart)
+        sys.stderr.write(msg)
+        for i,pdb_file in enumerate(all_pdb_files):
+          pdbid = os.path.basename(pdb_file).split('.')[0][-4:].upper()
+          print "\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,pdbid,i+(args.ppidx*psize)+1,n)
+          pdbmap.load_pdb(pdbid,pdb_file,label=args.slabel)
+      else:
+        msg = "WARNING(PDBMap) Uploading all %d PDB IDs.\n"%n
+        sys.stderr.write(msg)
+        for i,pdb_file in enumerate(all_pdb_files):
+          pdbid = os.path.basename(pdb_file).split('.')[0][-4:].upper()
+          print "\n## Processing (pdb) %s (%d/%d) ##"%(pdbid,i,n)
+          pdbmap.load_pdb(pdbid,pdb_file,label=args.slabel)
     elif len(args.args) == 1:
       # Process one PDB
       pdb_file = args.args[0]
@@ -755,7 +774,11 @@ if __name__== "__main__":
                     modbase_summary=args.modbase_summary)
     if not args.slabel:
       args.slabel = "uniprot-pdb"
-    if len(args.args) < 1:
+    if len(args.args)<1: 
+      msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> load_unp pdb_file [pdb_file,...]\n"
+      msg += "   or: pdbmap.py -c conf_file --slabel=<slabel> all"
+      print msg; sys.exit(0)
+    elif args.args[0] == 'all':
       # All PDB-mapped UniProt IDs (later expand to all UniProt IDs)
       all_pdb_unp = PDBMapProtein.PDBMapProtein.sprot
       n = len(all_pdb_unp)
@@ -776,7 +799,7 @@ if __name__== "__main__":
         msg = "WARNING (PDBMap) Uploading all %d Swiss-Prot UniProt IDs.\n"%n
         sys.stderr.write(msg)
         for i,unp in enumerate(all_pdb_unp):
-          print "\n## Processing (%s) %s (%d/%d) ##"%(args.slabelunp,i,n)
+          print "\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,unp,i,n)
           pdbmap.load_unp(unp,label=args.slabel)
     elif len(args.args) == 1:
       # Process one UniProt ID

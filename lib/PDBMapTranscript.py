@@ -73,13 +73,12 @@ class PDBMapTranscript():
       return trans
     # Query the Ensembl API for the transcript
     cmd = "perl lib/transcript_to_genomic.pl %s"%transid
-    print cmd
     status, output = commands.getstatusoutput(cmd)
     if status > 0:
       msg = "WARNING (transcript_to_genomic.pl) Non-zero exit status for %s: %s\n"%(transid,output)
       sys.stderr.write(msg)
       PDBMapTranscript.cache_transcript(transid,None)
-      sys.exit(1)
+      # sys.exit(1)
       return None
     sequence = {} # store sequence keyed on seqid
     for line in output.split('\n'):

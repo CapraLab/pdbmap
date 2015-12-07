@@ -66,7 +66,7 @@ allpop_Fst DOUBLE, # Fst: All Continental Populations
 snpsource VARCHAR(50), # Low coverage or Exome?
 format VARCHAR(50), # Genotype Format
 gt TEXT, # Genotypes
-gd_id MEDIUMINT NOT NULL AUTO_INCREMENT, # Unique, direct-reference key
+gd_id BIGINT NOT NULL AUTO_INCREMENT, # Unique, direct-reference key
 PRIMARY KEY(label,name,chr,start,end),
 KEY(gd_id),
 KEY(label,chr,start,end),

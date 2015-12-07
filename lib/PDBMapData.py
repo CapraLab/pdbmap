@@ -120,6 +120,10 @@ class PDBMapData():
     if 'ERATE'   not in record.INFO: record.INFO['ERATE']   = None
     if 'THETA'   not in record.INFO: record.INFO['THETA']   = None
     if 'LDAF'    not in record.INFO: record.INFO['LDAF']    = None
+
+    # Reformat the variant-type value
+    if type(record.INFO["VT"]) == type(tuple()):
+      record.INFO["VT"] = ','.join(vt for vt in list(record.INFO["VT"]))
     
     # Ensure 1000 Genomes Fst fields are populated or None
     popfst  = ['AMREASFST','AMRSASFST','AMREURFST','AMRAFRFST','EASSASFST']
@@ -373,7 +377,6 @@ class PDBMapData():
       if outfile:
         fout = gzip.open(outfile,'wb') # Open cache for writing
       for line in iter(p.stdout.readline,b''):
-        print line
         if outfile: # Write to cache before yielding
           fout.write(line)
         yield line
@@ -416,7 +419,7 @@ class PDBMapData():
         elif csq_header[i] == "Amino_acids":
           if not field: # No Value
             ref,alt = None,None
-          elif len(field) < 2: # Only one value
+          elif type(field)==str or len(field.split('/')) < 2: # Only one value
             ref,alt = field,field
           else: # Both specified
             ref,alt = field.split('/')[0:2]
@@ -426,7 +429,7 @@ class PDBMapData():
         elif csq_header[i] == "Codons":
           if not field: # No value
             ref,alt = None,None
-          elif len(field) < 2: # Only one value
+          elif type(field)==str or len(field) < 2: # Only one value
             ref,alt = field,field
           else: # Both specified
             ref,alt = field.split('/')[0:2]

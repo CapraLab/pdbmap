@@ -38,7 +38,7 @@ ON h.label=j.label AND h.structid=j.structid AND h.chain=j.chain AND h.transcrip
 LEFT JOIN pfam as p
 ON a.structid=p.pdbid AND a.chain=p.chain AND a.seqid BETWEEN p.seqstart AND p.seqend
 AND (f.transcript IS NULL OR f.transcript=h.transcript)
-where a.label=SLABEL and g.label=DLABEL
+where a.label=SLABEL
 and a.structid=STRUCTID AND a.biounit=BIOUNIT
 GROUP BY g.chr,g.start,g.end,g.name,a.structid,a.biounit,a.model,a.chain,a.seqid 
 ORDER BY a.structid,a.biounit,a.model,a.chain,a.seqid;

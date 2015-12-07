@@ -7,7 +7,7 @@ score REAL,
 perc_aligned REAL,
 perc_identity REAL,
 alignment TEXT,
-as_id MEDIUMINT NOT NULL AUTO_INCREMENT, # Unique, direct-reference key
+as_id BIGINT NOT NULL AUTO_INCREMENT, # Unique, direct-reference key
 PRIMARY KEY(label,structid,chain,transcript),
 KEY(as_id),
 KEY(label,structid,chain),

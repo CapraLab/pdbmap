@@ -55,7 +55,7 @@ class PDBMapAlignment():
         res = [r for r in res] # convert generator to list
         if len(res) > 0:
             # A SIFTS alignment is available
-            resis = [r[1] for r in chain.get_residues()]
+            resis = [r.id[1] for r in chain.get_residues()]
             n = float(len(resis))
             # Only align residues in the structure
             pdb2seq       = dict((r[0],r[1]) for r in res if r[0] in resis)
@@ -68,7 +68,13 @@ class PDBMapAlignment():
                                 1.)
             aln_string    = "<sifts>"
             score         = -1
-            return pdb2seq,seq2pdb,aln_string,score,perc_aligned,perc_identity
+            if perc_identity > 0.9:
+                return pdb2seq,seq2pdb,aln_string,score,perc_aligned,perc_identity
+            else:
+                msg  = "WARNING (PDBMapAlignment) Error in SIFTS alignment. "
+                msg += "Manually re-aligning sequences.\n"
+                sys.stderr.write(msg)
+
 
     # Determine start indices
     c_start = min([r.seqid for r in chain.get_residues()])

@@ -9,8 +9,8 @@ chr VARCHAR(50),
 start BIGINT,
 end BIGINT,
 strand INT,
-tr_id MEDIUMINT NOT NULL AUTO_INCREMENT, # Unique, direct-reference key
-gc_id MEDIUMINT, # GenomicIntersection direct-reference key
+tr_id BIGINT NOT NULL AUTO_INCREMENT, # Unique, direct-reference key
+gc_id BIGINT, # GenomicIntersection direct-reference key
 PRIMARY KEY(label,transcript,seqid),
 KEY(tr_id),
 KEY(gc_id),

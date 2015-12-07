@@ -12,7 +12,7 @@ compound TEXT,
 keywords TEXT,
 reference TEXT,
 structure_reference TEXT,
-str_id MEDIUMINT NOT NULL AUTO_INCREMENT, # Unique, direct-reference key
+str_id BIGINT NOT NULL AUTO_INCREMENT, # Unique, direct-reference key
 PRIMARY KEY(label,pdbid),
 KEY(str_id),
 KEY(label,quality),

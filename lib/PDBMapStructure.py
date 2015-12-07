@@ -64,7 +64,7 @@ class PDBMapStructure(Structure):
           self._pdb2pose[mid][cid][r.id[1]] = i+1
       else:
         # Revert indexing to original PDB indexing per pdb2pose
-        for mid,d1 in pdb2pose.iteritems():
+        for mid,d1 in self._pdb2pose.iteritems():
           for cid,d2 in d1.iteritems():
             # The pose ID should always be less than the PDB ID
             for rid,pose_id in sorted(d2.iteritems(),reverse=True):
@@ -162,7 +162,6 @@ class PDBMapStructure(Structure):
         # Align chains candidate transcripts
         alignments = {}
         for trans in candidate_transcripts:
-          print trans
           alignment = PDBMapAlignment(chain,trans,io=io)
           # Exclude alignments with <90% identity, likely bad matches
           if alignment.perc_identity >= 0.9:

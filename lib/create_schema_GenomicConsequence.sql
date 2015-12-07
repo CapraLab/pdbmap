@@ -23,8 +23,8 @@ polyphen DOUBLE, # Score only
 sift DOUBLE,     # Score only
 biotype VARCHAR(100), # of transcript
 domains TEXT, # formatted list as string
-gc_id MEDIUMINT NOT NULL AUTO_INCREMENT, # Unique, direct-reference key
-gd_id MEDIUMINT, # GenomicData direct-reference key
+gc_id BIGINT NOT NULL AUTO_INCREMENT, # Unique, direct-reference key
+gd_id BIGINT, # GenomicData direct-reference key
 PRIMARY KEY(label,transcript,chr,start,end),
 KEY(gc_id),
 KEY(gd_id),
