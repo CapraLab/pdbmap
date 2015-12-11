@@ -65,18 +65,18 @@ class PDBMapParser(PDBParser):
           c.pdbstart = dbref[c.id]['pdbstart']
           c.pdbend   = dbref[c.id]['pdbend']
           c.offset   = dbref[c.id]['offset']
-          c.species  = dbref[c.id]['species']
+          # c.species  = dbref[c.id]['species']
           c.hybrid   = dbref[c.id]['hybrid']
         if 'species' not in dir(c):
           c.species = 'UNKNOWN'
-        if c.species != 'HUMAN':
-          if force:
-            c.species = "HUMAN"
-          else:
-            msg = "WARNING (PDBMapIO) Ignoring non-human chain: %s.%s (%s)\n"%(s.id,c.id,c.species)
-            sys.stderr.write(msg)
-            m.detach_child(c.id)
-            continue
+        # if c.species != 'HUMAN':
+        #   if force:
+        #     c.species = "HUMAN"
+          # else:
+          #   msg = "WARNING (PDBMapIO) Ignoring non-human chain: %s.%s (%s)\n"%(s.id,c.id,c.species)
+          #   sys.stderr.write(msg)
+          #   m.detach_child(c.id)
+          #   continue
         iter_c = [r for r in c] # avoid modification during iteration, shallow
         for r in iter_c:
           if dbref and r in dbref[c.id]['drop_resis']: # If residue outside dbref range
@@ -164,18 +164,31 @@ class PDBMapParser(PDBParser):
               line[26:32].strip() == "UNP"]
     fin.close()
     if len(dbref_fields) < 1:
-      msg = "ERROR (PDBMapIO) No DBREF fields in %s."%s.id
-      raise Exception(msg)
+      msg = "WARNING (PDBMapIO) No DBREF fields in %s, using SIFTS."%s.id
+      sys.stderr.write("%s\n"%msg)
+      q  = "SELECT chain,uniprot_acc,min(resnum),max(resnum), "
+      q += "min(uniprot_resnum),max(uniprot_resnum) FROM sifts "
+      q += "WHERE pdbid=%s AND uniprot_acc!='' group by chain,uniprot_acc"
+      res = self.secure_query(q,(chain.get_parent().get_parent().id),cursorclass='Cursor')
+      dbref_fields = [list(r) for r in res]
+      # raise Exception(msg)
     dbref = {}
     for ref in dbref_fields:
-      chain    = ref[12:14].strip()
-      unp      = ref[33:41].strip()
-      species  = ref[42:54].strip().split('_')[-1]
-      pdbstart = int(ref[14:18])
-      pdbend   = int(ref[20:24])
-      dbstart  = int(ref[55:60])
-      dbend    = int(ref[62:67])
-      hybrid   = 0
+      if type(ref)==str:
+        # PDB/ENT file
+        chain    = ref[12:14].strip()
+        unp      = ref[33:41].strip()
+        species  = ref[42:54].strip().split('_')[-1]
+        pdbstart = int(ref[14:18])
+        pdbend   = int(ref[20:24])
+        dbstart  = int(ref[55:60])
+        dbend    = int(ref[62:67])
+        hybrid   = 0
+      else:
+        # SIFTS query, species lookup in SwissProt
+        chain,unp,pdbstart,pdbend,dbstart,dbend = ref
+        species = PDBMapProtein.unp2species[unp]
+        hybrid  = 0
       # Documented offset between PDB and canonical sequence
       offset   = dbstart - pdbstart
       # Handle split chains

@@ -122,15 +122,21 @@ class PDBMapProtein():
     # Method to load all SwissProt IDs
     with open(sprot_fname) as fin:
       sprot = []
+      unp2species = {}
       for line in fin:
         # Extract the field ID, always [0:2]
         # Trim to AC list (AC field assumed)
         row = [line[0:2],line.rstrip()[2:-1].lstrip()]
-        if row[0] == 'AC':
+        if row[0] == 'ID':
+          species = row[1].split()[0].split('_')[-1]
+        elif row[0] == 'AC':
           ac_list = row[1].split('; ')
           sprot.append(ac_list[0]) # Most up to date AC
+          for ac in ac_list:
+            unp2species[ac] = species
     sprot.sort()
     PDBMapProtein.sprot = sprot
+    PDBMapProtein.unp2species = unp2species
 
   @classmethod
   def check_loaded(cls):
