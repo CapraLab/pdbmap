@@ -112,7 +112,7 @@ class PDBMapParser(PDBParser):
       s = None # Return a None object to indicate invalid structure
     return s
 
-  def get_structure(self,pdbid,fname,biounit_fnames=[],quality=-1):
+  def get_structure(self,pdbid,fname,biounit_fnames=[],quality=-1,io=None):
     try:
       if os.path.basename(fname).split('.')[-1] == 'gz':
         fin = gzip.open(fname,'rb')
@@ -153,25 +153,28 @@ class PDBMapParser(PDBParser):
       s.header['compound'] = ''
     if not s.header['resolution']:
       s.header['resolution'] = -1.0
-
-    # Parse DBREF
-    ext = os.path.basename(fname).split('.')[-1]
-    if ext == 'gz':
-      fin = gzip.open(fname,'rb')
-    else:
-      fin = open(fname,'rb')
-    dbref_fields = [line for line in fin if line[0:6]=="DBREF " and
-              line[26:32].strip() == "UNP"]
-    fin.close()
-    if len(dbref_fields) < 1:
-      msg = "WARNING (PDBMapIO) No DBREF fields in %s, using SIFTS."%s.id
-      sys.stderr.write("%s\n"%msg)
+ 
+    dbref_fields = []
+    if io:
+      # Query structure-protein alignment information from SIFTS
       q  = "SELECT chain,uniprot_acc,min(resnum),max(resnum), "
       q += "min(uniprot_resnum),max(uniprot_resnum) FROM sifts "
       q += "WHERE pdbid=%s AND uniprot_acc!='' group by chain,uniprot_acc"
       res = self.secure_query(q,(chain.get_parent().get_parent().id),cursorclass='Cursor')
       dbref_fields = [list(r) for r in res]
-      # raise Exception(msg)
+    if len(dbref_fields) < 1:
+      # Attempt to parse DBREF fields if SIFTS unavailable
+      ext = os.path.basename(fname).split('.')[-1]
+      if ext == 'gz':
+        fin = gzip.open(fname,'rb')
+      else:
+        fin = open(fname,'rb')
+      dbref_fields = [line for line in fin if line[0:6]=="DBREF " and
+                line[26:32].strip() == "UNP"]
+      fin.close()
+    if len(dbref_fields) < 1:
+      msg = "ERROR (PDBMapIO) No DBREF or SIFTS available for %s."%s.id
+      raise Exception(msg)
     dbref = {}
     for ref in dbref_fields:
       if type(ref)==str:

@@ -102,7 +102,7 @@ class PDBMap():
     biounit_fnames = glob.glob("%s/biounit/coordinates/all/%s.pdb*.gz"%(self.pdb_dir,pdbid.lower()))
     try: # Load the structure
       p  = PDBMapIO.PDBMapParser()
-      s  = p.get_structure(pdbid,pdb_fname,biounit_fnames=biounit_fnames)
+      s  = p.get_structure(pdbid,pdb_fname,biounit_fnames=biounit_fnames,io=io)
       if not s:
         msg = "Invalid structure"
         raise Exception(msg)
