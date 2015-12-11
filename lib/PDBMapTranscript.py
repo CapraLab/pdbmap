@@ -62,6 +62,9 @@ class PDBMapTranscript():
       trans = PDBMapTranscript.query_from_trans(transid)
       if trans:
         res.append(trans)
+      else:
+        error_msg = "Transcript query failed for %s"%transid
+        raise Exception("ERROR (PDBMapTranscript) %s\n"%error_msg)
     return res
 
   @classmethod
@@ -78,7 +81,6 @@ class PDBMapTranscript():
       msg = "WARNING (transcript_to_genomic.pl) Non-zero exit status for %s: %s\n"%(transid,output)
       sys.stderr.write(msg)
       PDBMapTranscript.cache_transcript(transid,None)
-      # sys.exit(1)
       return None
     sequence = {} # store sequence keyed on seqid
     for line in output.split('\n'):
@@ -101,6 +103,8 @@ class PDBMapTranscript():
                       'chr9','chr10','chr11','chr12','chr13','chr14','chr15',
                       'chr16','chr17','chr18','chr19','chr20','chr21','chr22',
                       'chrX','chrY','chrMT']:
+        msg = "WARNING (transcript_to_genomic.pl) Ignoring non-standard chromosome %s\n"%chrom
+        sys.stderr.write(msg)
         return None
       strand     = int(fields[8])
       sequence[seqid] = (rescode,chrom,start,end,strand)

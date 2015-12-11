@@ -749,7 +749,7 @@ __  __  __
           pdbmap.load_pdb(pdbid,pdb_file,label=args.slabel)
     elif len(args.args) == 1:
       # Process one PDB
-      pdb_file = args.args[0]
+      pdb_file = args.args[0].strip()
       if not args.pdbid:
         args.pdbid = os.path.basename(pdb_file).split('.')[0][-4:].upper()
       if not args.slabel:

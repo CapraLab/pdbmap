@@ -146,6 +146,7 @@ class PDBMapStructure(Structure):
   def get_transcripts(self,io=None):
     # Retrieve the corresponding transcript for each chain
     # Check if transcripts have been previously identified
+    error_msg = ""
     if self.transcripts:
       return self.transcripts
     # Identify and align corresponding transcripts
@@ -158,7 +159,8 @@ class PDBMapStructure(Structure):
         # Query all transcripts associated with the chain's UNP ID
         candidate_transcripts = PDBMapTranscript.query_from_unp(chain.unp)
         if len(candidate_transcripts) < 1:
-          return []
+          error_msg = "UniProt indicates no EnsEMBL transcripts for %s"%chain.unp
+          raise Exception("ERROR (PDBMapStructure): %s\n"%error_msg)
         # Align chains candidate transcripts
         alignments = {}
         for trans in candidate_transcripts:
@@ -170,6 +172,9 @@ class PDBMapStructure(Structure):
               alignments[alignment.transcript.gene] = [(len(alignment.transcript.sequence),alignment.transcript.transcript,alignment)]
             else:
               alignments[alignment.transcript.gene].append((len(alignment.transcript.sequence),alignment.transcript.transcript,alignment))
+          else:
+            # Note that at least one transcript was dropped due to low alignment quality
+            error_msg += "%s dropped due to low alignment quality (%.2f); "%(trans,alignment.perc_identity)
         # Store canonical transcript for each gene alignment as element of chain
         chain.alignments = []
         prot2chain[chain.unp] = []
@@ -187,6 +192,8 @@ class PDBMapStructure(Structure):
     except:
       self.transcripts = []
       self.alignments  = []
+    if not self.transcripts:
+      raise Exception("ERROR (PDBMapStructure): %s"%error_msg)
     return self.transcripts
 
   def get_alignments(self):

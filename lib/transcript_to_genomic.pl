@@ -18,8 +18,8 @@ $transcript = $transcript_adaptor->fetch_by_stable_id($transcript_id);
 
 # Check that the transcript query was successful
 if (!defined $transcript) {
-  print STDERR "No transcript found for ID: $transcript_id\n";
-  exit 1;
+  print STDERR "No transcript found for ID (Non-Human or Non-Existant): $transcript_id\n";
+  exit 0;
 }
 
 # Extract general transcript data

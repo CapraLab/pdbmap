@@ -265,9 +265,9 @@ class PDBMapData():
     if cache.split('.')[-1] != 'gz':
       cache += '.gz'
     if vep:
-      parser = vcf.Reader(self.load_vep(fname,id_type,cache))
+      parser = vcf.Reader(self.load_vep(fname,id_type,cache),prepend_chr=True)
     else:
-      parser = bed.Reader(fname,indexing=indexing)
+      parser = bed.Reader(fname,indexing=indexing,prepend_chr=True)
     # Determine Info headers
     info_headers = parser.infos.keys()
     # Determine Consequence headers

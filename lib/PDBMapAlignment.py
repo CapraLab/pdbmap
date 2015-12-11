@@ -68,7 +68,7 @@ class PDBMapAlignment():
                                 1.)
             aln_string    = "<sifts>"
             score         = -1
-            if perc_identity > 0.9:
+            if perc_identity >= 0.9:
                 return pdb2seq,seq2pdb,aln_string,score,perc_aligned,perc_identity
             else:
                 msg  = "WARNING (PDBMapAlignment) Error in SIFTS alignment. "
