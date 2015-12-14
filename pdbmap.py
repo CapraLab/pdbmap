@@ -89,6 +89,8 @@ class PDBMap():
                             args.dbpass,args.dbname,slabel=label)
     # Check if PDB is already in the database
     if io.structure_in_db(pdbid,label):
+      msg = "VALID (PDBMap) %s already in database.\n"%pdbid
+      sys.stderr.write(msg)
       return 0
     # Load the PDB structure
     if not pdb_fname:
@@ -103,20 +105,14 @@ class PDBMap():
     try: # Load the structure
       p  = PDBMapIO.PDBMapParser()
       s  = p.get_structure(pdbid,pdb_fname,biounit_fnames=biounit_fnames,io=io)
-      if not s:
-        msg = "Invalid structure"
-        raise Exception(msg)
-    except Exception as e:
-      msg = "ERROR (PDBMap) %s could not be loaded: %s\n"%(pdbid,str(e))
-      sys.stderr.write(msg)
-      return 1
-    try: # Upload the structure
       io.set_structure(s)
       io.upload_structure()
     except Exception as e:
-      msg = "ERROR (PDBMap) %s could not be uploaded: %s\n"%(pdbid,str(e))
+      msg = "ERROR (PDBMap) %s: %s\n"%(pdbid,str(e))
       sys.stderr.write(msg)
       return 1
+    msg = "VALID (PDBMap) %s complete.\n"%pdbid
+    sys.stderr.write(msg)
     return 0
 
   def load_model(self,model_summary,model_fname=None,label="",io=None,unp=None):
@@ -133,7 +129,8 @@ class PDBMap():
       # msg  = "WARNING (PDBMapIO) Model %s "%modelid
       # msg += "already in database. Skipping.\n"
       # sys.stderr.write(msg)
-      return 1
+      msg = "VALID (PDBMap) %s already in database.\n"%pdbid
+      return 0
 
     # Load the ModBase model
     if not model_fname:
@@ -143,23 +140,20 @@ class PDBMap():
       if not os.path.exists(model_fname):
         model_fname += '.gz' # check for compressed copy
       if not os.path.exists(model_fname):
-        msg = "ERROR (PDBMap) Cannot fetch %s. Not in ModBase mirror.\n"%modelid
+        msg = "ERROR (PDBMap) %s not in ModBase mirror.\n"%modelid
         sys.stderr.write(msg)
         return 1
     try:
       p = PDBMapIO.PDBMapParser()
       m = p.get_model(model_summary,model_fname,unp=unp)
-    except Exception as e:
-      msg = "ERROR (PDBMap) %s could not be loaded: %s\n"%(modelid,str(e))
-      sys.stderr.write(msg)
-      return 1
-    try:
       io.set_structure(m)
       io.upload_model()
     except Exception as e:
-      msg = "ERROR (PDBMap) %s could not be uploaded: %s\n"%(modelid,str(e))
+      msg = "ERROR (PDBMap) %s: %s\n"%(modelid,str(e))
       sys.stderr.write(msg)
       return 1
+    msg = "VALID (PDBMap) %s complete.\n"%pdbid
+    sys.stderr.write(msg)
     return 0
 
   def load_data(self,dname,dfile,indexing=None,usevep=True):
@@ -715,7 +709,7 @@ __  __  __
   ## load_pdb ##
   elif args.cmd == "load_pdb":
     pdbmap = PDBMap(idmapping=args.idmapping,sec2prim=args.sec2prim,
-                    pdb_dir=args.pdb_dir)
+                    pdb_dir=args.pdb_dir,sprot=args.sprot)
     if len(args.args) < 1:
       msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> load_pdb pdb_file [pdb_file,...]\n"
       msg += "   or: pdbmap.py -c conf_file --slabel=<slabel> all"
@@ -738,32 +732,38 @@ __  __  __
         sys.stderr.write(msg)
         for i,pdb_file in enumerate(all_pdb_files):
           pdbid = os.path.basename(pdb_file).split('.')[0][-4:].upper()
-          print "\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,pdbid,i+(args.ppidx*psize)+1,n)
+          print "## Processing (%s) %s (%d/%d) ##"%(args.slabel,pdbid,i+(args.ppidx*psize)+1,n)
           pdbmap.load_pdb(pdbid,pdb_file,label=args.slabel)
       else:
         msg = "WARNING(PDBMap) Uploading all %d PDB IDs.\n"%n
         sys.stderr.write(msg)
         for i,pdb_file in enumerate(all_pdb_files):
           pdbid = os.path.basename(pdb_file).split('.')[0][-4:].upper()
-          print "\n## Processing (pdb) %s (%d/%d) ##"%(pdbid,i,n)
+          print "## Processing (pdb) %s (%d/%d) ##"%(pdbid,i,n)
           pdbmap.load_pdb(pdbid,pdb_file,label=args.slabel)
     elif len(args.args) == 1:
       # Process one PDB
       pdb_file = args.args[0].strip()
-      if not args.pdbid:
+      if not os.path.exists(pdb_file):
+        # Not a file, its a PDB ID
+        args.pdbid = pdb_file
+        pdb_file   = None
+      elif not args.pdbid:
         args.pdbid = os.path.basename(pdb_file).split('.')[0][-4:].upper()
       if not args.slabel:
         args.slabel = "manual"
-      print "\n## Processing (%s) %s ##"%(args.slabel,args.pdbid)
+      print "## Processing (%s) %s ##"%(args.slabel,args.pdbid)
       pdbmap.load_pdb(args.pdbid,pdb_file,label=args.slabel)
     else:
       # Process many PDB IDs
       pdbs = [(os.path.basename(pdb_file).split('.')[0][-4:].upper(),pdb_file) for pdb_file in args.args]
       n = len(pdbs)
       for i,(pdbid,pdb_file) in enumerate(pdbs):
+        if not os.path.exists(pdb_file):
+          pdb_file = None # Not a file, its a PDB ID
         if not args.slabel:
           args.slabel = "manual"
-        print "\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,pdbid,i,n)
+        print "## Processing (%s) %s (%d/%d) ##"%(args.slabel,pdbid,i,n)
         pdbmap.load_pdb(pdbid,pdb_file,label=args.slabel)
 
   ## load_unp ##
@@ -792,25 +792,25 @@ __  __  __
         msg = "WARNING(PDBMap) Subprocess uploading partition %d/%d of Swiss-Prot\n"%(args.ppidx+1,args.ppart)
         sys.stderr.write(msg)
         for i,unp in enumerate(all_pdb_unp):
-          print "\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,unp,i+(args.ppidx*psize)+1,n)
+          print "## Processing (%s) %s (%d/%d) ##"%(args.slabel,unp,i+(args.ppidx*psize)+1,n)
           pdbmap.load_unp(unp,label=args.slabel)
       # This is a standard, full-set load_unp command
       else:
         msg = "WARNING (PDBMap) Uploading all %d Swiss-Prot UniProt IDs.\n"%n
         sys.stderr.write(msg)
         for i,unp in enumerate(all_pdb_unp):
-          print "\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,unp,i,n)
+          print "## Processing (%s) %s (%d/%d) ##"%(args.slabel,unp,i,n)
           pdbmap.load_unp(unp,label=args.slabel)
     elif len(args.args) == 1:
       # Process one UniProt ID
       unp = args.args[0]
-      print "\n## Processing (%s) %s ##"%(args.slabel,unp)
+      print "## Processing (%s) %s ##"%(args.slabel,unp)
       pdbmap.load_unp(unp,label=args.slabel)
     else:
       # Process many UniProt IDs
       n = len(args.args)
       for i,unp in enumerate(args.args):
-        print "\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,unp,i,n)
+        print "## Processing (%s) %s (%d/%d) ##"%(args.slabel,unp,i,n)
         pdbmap.load_unp(unp,label=args.slabel)
 
   ## load_model ##
@@ -832,7 +832,7 @@ __  __  __
       reader = csv.reader(fin,delimiter='\t')
       n = len(models)
       for i,row in enumerate(reader):
-        print "\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,row[1],i,n)
+        print "## Processing (%s) %s (%d/%d) ##"%(args.slabel,row[1],i,n)
         pdbmap.load_model(row,model_fname=models[i],label=row[0],io=None,unp=args.unp)
 
   ## load_data ##

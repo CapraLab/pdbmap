@@ -53,7 +53,8 @@ class PDBMapParser(PDBParser):
           r.biounit = biounit
           for a in r:
             a.biounit = biounit
-    for m in s:
+    iter_s = [m for m in s]
+    for m in iter_s:
       iter_m = [c for c in m] # avoid modification during iteration, shallow
       for c in iter_m:
         if dbref:
@@ -65,18 +66,18 @@ class PDBMapParser(PDBParser):
           c.pdbstart = dbref[c.id]['pdbstart']
           c.pdbend   = dbref[c.id]['pdbend']
           c.offset   = dbref[c.id]['offset']
-          # c.species  = dbref[c.id]['species']
+          c.species  = dbref[c.id]['species']
           c.hybrid   = dbref[c.id]['hybrid']
         if 'species' not in dir(c):
           c.species = 'UNKNOWN'
-        # if c.species != 'HUMAN':
-        #   if force:
-        #     c.species = "HUMAN"
-          # else:
-          #   msg = "WARNING (PDBMapIO) Ignoring non-human chain: %s.%s (%s)\n"%(s.id,c.id,c.species)
-          #   sys.stderr.write(msg)
-          #   m.detach_child(c.id)
-          #   continue
+        if c.species != 'HUMAN':
+          if force:
+            c.species = "HUMAN"
+          else:
+            # msg = "WARNING (PDBMapIO) Ignoring non-human chain: %s.%s (%s)\n"%(s.id,c.id,c.species)
+            # sys.stderr.write(msg)
+            m.detach_child(c.id)
+            continue
         iter_c = [r for r in c] # avoid modification during iteration, shallow
         for r in iter_c:
           if dbref and r in dbref[c.id]['drop_resis']: # If residue outside dbref range
@@ -98,18 +99,17 @@ class PDBMapParser(PDBParser):
             # Save the structural coordinate independently
             r.x,r.y,r.z = r.coord
             # Save the sequence coordinates independently
-            dummy,r.seqid,r.icode = r.id
+            _,r.seqid,r.icode = r.id
         if not len(c): # If chain contained only heteroatoms
-            m.detach_child(c.id) # Remove chain
+          m.detach_child(c.id) # Remove chain
         else:
           # Parse the chain sequence and store as string within the chain
           c.sequence = ''.join([r.rescode for r in c])
       if not len(m): # If the model only contained non-human species
         s.detach_child(m.id)
     if not len(s):
-      msg = "ERROR (PDBMapIO) %s contains no human protein chains.\n"%s.id
-      sys.stderr.write(msg)
-      s = None # Return a None object to indicate invalid structure
+      msg = "ERROR (PDBMapIO) %s contains no human protein chains."%s.id
+      raise Exception(msg)
     return s
 
   def get_structure(self,pdbid,fname,biounit_fnames=[],quality=-1,io=None):
@@ -160,7 +160,7 @@ class PDBMapParser(PDBParser):
       q  = "SELECT chain,uniprot_acc,min(resnum),max(resnum), "
       q += "min(uniprot_resnum),max(uniprot_resnum) FROM sifts "
       q += "WHERE pdbid=%s AND uniprot_acc!='' group by chain,uniprot_acc"
-      res = self.secure_query(q,(chain.get_parent().get_parent().id),cursorclass='Cursor')
+      res = io.secure_query(q,(pdbid,),cursorclass='Cursor')
       dbref_fields = [list(r) for r in res]
     if len(dbref_fields) < 1:
       # Attempt to parse DBREF fields if SIFTS unavailable
@@ -190,7 +190,10 @@ class PDBMapParser(PDBParser):
       else:
         # SIFTS query, species lookup in SwissProt
         chain,unp,pdbstart,pdbend,dbstart,dbend = ref
-        species = PDBMapProtein.unp2species[unp]
+        if unp in PDBMapProtein.unp2species:
+          species = PDBMapProtein.unp2species[unp]
+        else:
+          species = "UNKNOWN"
         hybrid  = 0
       # Documented offset between PDB and canonical sequence
       offset   = dbstart - pdbstart
@@ -244,11 +247,13 @@ class PDBMapParser(PDBParser):
     s.header["structure_method"]    = str(s.header["structure_method"]).translate(None,"'\"")
     s.header["structure_reference"] = str(s.header["structure_reference"]).translate(None,"'\"")
 
-    # Preprocess the asymmetric and biological units for this protein
-    s = PDBMapParser.process_structure(s) # *must* occur before biounits
-    # If the structure is empty, return immediately
-    if not s:
-      return s
+    try:
+      # Preprocess the asymmetric and biological units for this protein
+      print "Processing the asymmetric unit"
+      s = PDBMapParser.process_structure(s) # *must* occur before biounits
+    except Exception as e:
+      # If the structure is invalid (non-human, empty, errors, etc) pass along exception
+      raise Exception("ERROR (PDBMapIO): %s"%str(e))
     m = s[0]
     # Calculate relative solvent accessibility for this model
     ssrsa = {}
@@ -280,18 +285,19 @@ class PDBMapParser(PDBParser):
         filterwarnings('ignore',category=PDBConstructionWarning)
         biounit = p.get_structure(pdbid,fin)
         resetwarnings()
-        biounit = PDBMapStructure(biounit,pdb2pose={})
+        biounit = PDBMapStructure(biounit,pdb2pose={}) # must pass empty dictionary: python bug
         fin.close()
       except Exception as e:
         msg = "ERROR (PDBMapIO) Error while parsing %s biounit %d: %s"%(pdbid,bioid,str(e).replace('\n',' '))
         raise Exception(msg)
+      print "\nProcessing biounit %d"%bioid
       biounit = PDBMapParser.process_structure(biounit,biounit=bioid,dbref=dbref)
       if not biounit:
         msg = "ERROR (PDBMapIO) Biological assembly %s.%d contains no human protein chains.\n"%(pdbid,bioid)
         sys.stderr.write(msg)
         continue
       # Add the models for this biological assembly to the PDBMapStructure
-      for i,m in enumerate(biounit):
+      for m in biounit:
         m.id = "%d.%d"%(m.biounit,m.id)
         for c in m:
           for r in c:
@@ -525,17 +531,17 @@ class PDBMapIO(PDBIO):
       tquery += "VALUES "
       if not len(s.get_transcripts(io=self)):
         raise Exception("No transcripts for structure %s, proteins: %s"%(s.id,','.join([c.unp for m in s for c in m])))
+      seen = set([])
       for t in s.get_transcripts(io=self):
-        for seqid,(rescode,chr,start,end,strand) in t.sequence.iteritems():
-          # tquery += '("%s","%s","%s",'%(self.slabel,t.transcript,t.gene)
-          tquery += '("%s","%s","%s","%s",'%(self.slabel,t.transcript,t.protein,t.gene)
-          tquery += '%d,"%s",'%(seqid,rescode)
-          tquery += '"%s",%d,%d,%d),'%(chr,start,end,strand)
+        if t.transcript not in seen or seen.add(t.transcript):
+          for seqid,(rescode,chr,start,end,strand) in t.sequence.iteritems():
+            tquery += '("%s","%s","%s","%s",'%(self.slabel,t.transcript,t.protein,t.gene)
+            tquery += '%d,"%s",'%(seqid,rescode)
+            tquery += '"%s",%d,%d,%d),'%(chr,start,end,strand)
       queries.append(tquery[:-1])
     except Exception as e:
-      msg = "ERROR (PDBMapIO) Failed to get transcripts for %s: %s.\n"%(s.id,str(e))
-      sys.stderr.write(msg)
-      raise
+      msg = "ERROR (PDBMapIO) Failed to get transcripts for %s: %s"%(s.id,str(e).rstrip('\n'))
+      raise Exception(msg)
 
     # Upload the alignments
     aquery  = "INSERT IGNORE INTO Alignment "
@@ -1147,7 +1153,8 @@ solv_acc = {"A" : 115,
         "T" : 140,
         "W" : 255,
         "Y" : 230,
-        "V" : 155}
+        "V" : 155,
+        "X" : 180} # Undetermined amino acid SA taken from Sander 1994
 
 ## Copied from biolearn
 def multidigit_rand(digits):

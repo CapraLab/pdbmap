@@ -150,39 +150,43 @@ class PDBMapStructure(Structure):
     if self.transcripts:
       return self.transcripts
     # Identify and align corresponding transcripts
-    prot2chain = {}
+    # prot2chain = {}
     for chain in self.structure[0]:
-      # If a chain of the same protein has already been solved, use solution
-      if chain.unp in prot2chain:
-        chain.alignments = prot2chain[chain.unp]
-      else:
-        # Query all transcripts associated with the chain's UNP ID
-        candidate_transcripts = PDBMapTranscript.query_from_unp(chain.unp)
-        if len(candidate_transcripts) < 1:
-          error_msg = "UniProt indicates no EnsEMBL transcripts for %s"%chain.unp
-          raise Exception("ERROR (PDBMapStructure): %s\n"%error_msg)
-        # Align chains candidate transcripts
-        alignments = {}
-        for trans in candidate_transcripts:
-          alignment = PDBMapAlignment(chain,trans,io=io)
-          # Exclude alignments with <90% identity, likely bad matches
-          if alignment.perc_identity >= 0.9:
-            # Setup tuples for primary sort on length, secondary sort on transcript name (for tie-breaking consistency)
-            if alignment.transcript.gene not in alignments:
-              alignments[alignment.transcript.gene] = [(len(alignment.transcript.sequence),alignment.transcript.transcript,alignment)]
-            else:
-              alignments[alignment.transcript.gene].append((len(alignment.transcript.sequence),alignment.transcript.transcript,alignment))
+      # # If a chain of the same protein has already been solved, use solution
+      # # BUT NOTE: do not use the object itself, backreferences will be wrong
+      # if chain.unp in prot2chain:
+      #   chain.alignments = [copy.deepcopy(a) for a in prot2chain[chain.unp]]
+      #   # Update the back-reference on the copied Alignment to point to this chain
+      #   for a in chain.alignments:
+      #     a.chain = chain
+      # else:
+      # Query all transcripts associated with the chain's UNP ID
+      candidate_transcripts = PDBMapTranscript.query_from_unp(chain.unp)
+      if len(candidate_transcripts) < 1:
+        error_msg = "UniProt indicates no EnsEMBL transcripts for %s"%chain.unp
+        raise Exception("ERROR (PDBMapStructure): %s\n"%error_msg)
+      # Align chains candidate transcripts
+      alignments = {}
+      for trans in candidate_transcripts:
+        alignment = PDBMapAlignment(chain,trans,io=io)
+        # Exclude alignments with <90% identity, likely bad matches
+        if alignment.perc_identity >= 0.9:
+          # Setup tuples for primary sort on length, secondary sort on transcript name (for tie-breaking consistency)
+          if alignment.transcript.gene not in alignments:
+            alignments[alignment.transcript.gene] = [(len(alignment.transcript.sequence),alignment.transcript.transcript,alignment)]
           else:
-            # Note that at least one transcript was dropped due to low alignment quality
-            error_msg += "%s dropped due to low alignment quality (%.2f); "%(trans,alignment.perc_identity)
-        # Store canonical transcript for each gene alignment as element of chain
-        chain.alignments = []
-        prot2chain[chain.unp] = []
-        for gene in alignments:
-          alignments[gene].sort() # ascending by transcript length, then name
-          if len(alignments[gene]) > 0:
-            chain.alignments.append(alignments[gene][-1][-1]) # last alignment (longest) length
-        prot2chain[chain.unp] = chain.alignments
+            alignments[alignment.transcript.gene].append((len(alignment.transcript.sequence),alignment.transcript.transcript,alignment))
+        else:
+          # Note that at least one transcript was dropped due to low alignment quality
+          error_msg += "%s dropped due to low alignment quality (%.2f); "%(trans,alignment.perc_identity)
+      # Store canonical transcript for each gene alignment as element of chain
+      chain.alignments = []
+      # prot2chain[chain.unp] = []
+      for gene in alignments:
+        alignments[gene].sort() # ascending by transcript length, then name
+        if len(alignments[gene]) > 0:
+          chain.alignments.append(alignments[gene][-1][-1]) # last alignment (longest) length
+      # prot2chain[chain.unp] = chain.alignments
       # Recover transcripts from alignments
       chain.transcripts = [a.transcript for a in chain.alignments]
     # Return the matched transcripts
