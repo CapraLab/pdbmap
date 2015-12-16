@@ -34,9 +34,9 @@ snpsource VARCHAR(50), # Low coverage or Exome?
 format VARCHAR(50), # Genotype Format
 gt TEXT, # Genotypes
 gd_id BIGINT NOT NULL AUTO_INCREMENT, # Unique, direct-reference key
-PRIMARY KEY(label,name,chr,start,end),
+PRIMARY KEY(label,chr,start,end,name),
 KEY(gd_id),
-KEY(label,chr,start,end),
+KEY(label,name),
 KEY(label,maf),
 KEY(label,amr_af),
 KEY(label,asn_af),

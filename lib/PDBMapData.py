@@ -336,9 +336,10 @@ class PDBMapData():
     table_def = ["%s %s DEFAULT %s %s"%(header[i].lower(),types[i],defaults[types[i]],
                   "NOT NULL" if types[i] in notnull else "") \
                   for i in range(len(header))]
-    query = "DROP TABLE IF EXISTS pdbmap_supp.%s"
-    query = query%self.dname
-    io.secure_command(query)
+    #REALLY bad idea for parallel calls
+    # query = "DROP TABLE IF EXISTS pdbmap_supp.%s"
+    # query = query%self.dname
+    # io.secure_command(query)
     # Include as many non-TEXT columns in primary key as allowed (16)
     # Additional INFO (like END) may justify duplicates within the standard VCF fields
     query = "CREATE TABLE IF NOT EXISTS pdbmap_supp.%s (%s, PRIMARY KEY(%s))"
