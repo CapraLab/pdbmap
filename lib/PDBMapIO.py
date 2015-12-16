@@ -366,7 +366,7 @@ class PDBMapIO(PDBIO):
     if label == -1:
       label=self.slabel
     self._connect()
-    query  = "SELECT * FROM Structure WHERE pdbid=%s and method like '%nmr%' "
+    query  = "SELECT * FROM Structure WHERE pdbid=%s and method like '%%nmr%%' "
     if label:
       query += "AND label=%s "
     query += "LIMIT 1"
