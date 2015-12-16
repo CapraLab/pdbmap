@@ -18,7 +18,8 @@ SELECT
 /*TRANS*/i.transcript as ens_trans,i.gene as ens_gene,i.protein as ens_prot,i.seqid as ens_prot_seqid,i.rescode as ens_prot_aa,
 /*VARIANT*/IF(f.consequence LIKE '%missense_variant%', 1, 0) as issnp,
 /*DLABEL*/g.label as dlabel,
-/*VARIANT*/g.name as snpid,g.chr,g.start,g.end,g.hgnc_gene,g.ens_gene,g.ac,g.aa as anc_allele,g.ref_allele,g.alt_allele,g.maf,g.amr_af,g.eas_af,g.sas_af,g.eur_af,g.afr_af,g.allpop_Fst,
+/*VARIANT*/g.name as snpid,g.chr,g.start,g.end,g.hgnc_gene,g.ens_gene,g.ac,g.aa as anc_allele,g.ref_allele,g.alt_allele,g.maf,g.amr_af,g.eas_af,g.sas_af,g.eur_af,g.afr_af,
+/*POPFST*/h.allpop_Fst,
 /*CONSEQUENCE*/f.gc_id,f.transcript as vep_trans,f.protein as vep_prot,f.protein_pos as vep_prot_pos,f.ref_codon,f.alt_codon,f.ref_amino_acid as vep_ref_aa,f.alt_amino_acid as vep_alt_aa,
 /*CONSEQUENCE*/f.consequence,f.polyphen,f.sift,f.biotype
 FROM Residue as a
@@ -43,6 +44,8 @@ ON e.dlabel=f.label AND e.gc_id=f.gc_id
 AND (f.transcript IS NULL OR f.transcript=h.transcript)
 LEFT JOIN GenomicData as g
 ON f.label=g.label AND f.chr=g.chr AND f.start=g.start AND f.end=g.end AND f.name=g.name
+LEFT JOIN PopulationFst as h
+ON g.label=h.label and g.chr=h.chr and g.start=h.start and g.end=h.end and g.name=h.name
 where a.label=SLABEL
 and a.structid=STRUCTID AND a.biounit=BIOUNIT
 GROUP BY g.chr,g.start,g.end,g.name,a.structid,a.biounit,a.model,a.chain,a.seqid 

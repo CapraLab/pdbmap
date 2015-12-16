@@ -636,44 +636,64 @@ class PDBMapIO(PDBIO):
     i=0 # ensure initialization
     for i,record in enumerate(dstream):
       sys.stdout.write("\rRecord %4d"%i)
-      # Upload all but the consequences to GenomicData
+      # Upload all but the consequences and optional Fst information to GenomicData
       record.INFO['LABEL'] = dname
       query  = "INSERT IGNORE INTO GenomicData "
       query += "(label,chr,start,end,name,variation,vtype,svtype,ref_allele,alt_allele,"
       query += "svlen,quality,avgpost,rsq,erate,theta,ldaf,ac,an,aa,da,maf,amr_af,asn_af,"
       query += "eas_af,sas_af,afr_af,eur_af,ens_gene,hgnc_gene,"
-      query += "amreas_Nhat,amrsas_Nhat,amreur_Nhat,amrafr_Nhat,eassas_Nhat,easeur_Nhat,"
-      query += "easafr_Nhat,saseur_Nhat,sasafr_Nhat,eurafr_Nhat,amreas_Dhat,"
-      query += "amrsas_Dhat,amreur_Dhat,amrafr_Dhat,eassas_Dhat,easeur_Dhat,"
-      query += "easafr_Dhat,saseur_Dhat,sasafr_Dhat,eurafr_Dhat,amreas_Fst,"
-      query += "amrsas_Fst,amreur_Fst,amrafr_Fst,eassas_Fst,easeur_Fst,easafr_Fst,"
-      query += "saseur_Fst,sasafr_Fst,eurafr_Fst,allpop_Nhat,allpop_Dhat,allpop_Fst,"
       query += "snpsource,format,gt) VALUES "
       query += "(%(LABEL)s,%(CHROM)s,%(START)s,%(END)s,%(ID)s,%(EXISTING)s,%(VT)s,"
       query += "%(SVTYPE)s,%(REF)s,%(ALT)s,%(SVLEN)s,%(QUAL)s,%(AVGPOST)s,%(RSQ)s,"
       query += "%(ERATE)s,%(THETA)s,%(LDAF)s,%(AC)s,%(AN)s,%(AA)s,%(DA)s,"
       query += "%(AF)s,%(AMR_AF)s,%(ASN_AF)s,%(EAS_AF)s,%(SAS_AF)s,%(AFR_AF)s,%(EUR_AF)s,"
-      query += "%(GENE)s,%(HGNC)s,"
-      query += "%(AMREAS_Nhat)s,%(AMRSAS_Nhat)s,%(AMREUR_Nhat)s,%(AMRAFR_Nhat)s,%(EASSAS_Nhat)s,"
-      query += "%(EASEUR_Nhat)s,%(EASAFR_Nhat)s,%(SASEUR_Nhat)s,%(SASAFR_Nhat)s,%(EURAFR_Nhat)s,"
-      query += "%(AMREAS_Dhat)s,%(AMRSAS_Dhat)s,%(AMREUR_Dhat)s,%(AMRAFR_Dhat)s,%(EASSAS_Dhat)s,"
-      query += "%(EASEUR_Dhat)s,%(EASAFR_Dhat)s,%(SASEUR_Dhat)s,%(SASAFR_Dhat)s,%(EURAFR_Dhat)s,"
-      query += "%(AMREAS_Fst)s,%(AMRSAS_Fst)s,%(AMREUR_Fst)s,%(AMRAFR_Fst)s,%(EASSAS_Fst)s,"
-      query += "%(EASEUR_Fst)s,%(EASAFR_Fst)s,%(SASEUR_Fst)s,%(SASAFR_Fst)s,%(EURAFR_Fst)s,"
-      query += "%(ALLPOP_Nhat)s,%(ALLPOP_Dhat)s,%(ALLPOP_Fst)s,%(SNPSOURCE)s,%(FORMAT)s,%(GT)s)"
+      query += "%(GENE)s,%(HGNC)s,%(SNPSOURCE)s,%(FORMAT)s,%(GT)s)"
       try: 
         self._c.execute(query,record.INFO)
         self._con.commit()
       except Exception as e:
         if "_last_executed" in dir(self._c):
           msg = self._c._last_executed.replace('\n',';')
-          sys.stderr.write("WARNING (PDBMapIO) MySQL query failed, query: %s\n"%msg)
+          sys.stderr.write("WARNING (PDBMapIO) GenomicData query failed, query: %s\n"%msg)
         else:
           msg  = str(e).replace('\n',';')
-          msg += "WARNING (PDBMapIO) MySQL query failed, exception: %s\n"%msg
+          msg += "WARNING (PDBMapIO) GenomicData query failed, exception: %s\n"%msg
           sys.stderr.write(msg)
         self._con.rollback()
       self._close()
+
+      self._connect(cursorclass=MySQLdb.cursors.Cursor)
+      # Upload optional Fst information to PopulationFst
+      query  = "INSERT IGNORE INTO PopulationFst "
+      query += "(label,chr,start,end,name,"
+      query += "amreas_Nhat,amrsas_Nhat,amreur_Nhat,amrafr_Nhat,eassas_Nhat,easeur_Nhat,"
+      query += "easafr_Nhat,saseur_Nhat,sasafr_Nhat,eurafr_Nhat,amreas_Dhat,"
+      query += "amrsas_Dhat,amreur_Dhat,amrafr_Dhat,eassas_Dhat,easeur_Dhat,"
+      query += "easafr_Dhat,saseur_Dhat,sasafr_Dhat,eurafr_Dhat,amreas_Fst,"
+      query += "amrsas_Fst,amreur_Fst,amrafr_Fst,eassas_Fst,easeur_Fst,easafr_Fst,"
+      query += "saseur_Fst,sasafr_Fst,eurafr_Fst,allpop_Nhat,allpop_Dhat,allpop_Fst) VALUES "
+      query += "(%(LABEL)s,%(CHROM)s,%(START)s,%(END)s,%(ID)s,"
+      query += "%(AMREAS_Nhat)s,%(AMRSAS_Nhat)s,%(AMREUR_Nhat)s,%(AMRAFR_Nhat)s,%(EASSAS_Nhat)s,"
+      query += "%(EASEUR_Nhat)s,%(EASAFR_Nhat)s,%(SASEUR_Nhat)s,%(SASAFR_Nhat)s,%(EURAFR_Nhat)s,"
+      query += "%(AMREAS_Dhat)s,%(AMRSAS_Dhat)s,%(AMREUR_Dhat)s,%(AMRAFR_Dhat)s,%(EASSAS_Dhat)s,"
+      query += "%(EASEUR_Dhat)s,%(EASAFR_Dhat)s,%(SASEUR_Dhat)s,%(SASAFR_Dhat)s,%(EURAFR_Dhat)s,"
+      query += "%(AMREAS_Fst)s,%(AMRSAS_Fst)s,%(AMREUR_Fst)s,%(AMRAFR_Fst)s,%(EASSAS_Fst)s,"
+      query += "%(EASEUR_Fst)s,%(EASAFR_Fst)s,%(SASEUR_Fst)s,%(SASAFR_Fst)s,%(EURAFR_Fst)s,"
+      query += "%(ALLPOP_Nhat)s,%(ALLPOP_Dhat)s,%(ALLPOP_Fst)s)"
+      try: 
+        self._c.execute(query,record.INFO)
+        self._con.commit()
+      except Exception as e:
+        if "_last_executed" in dir(self._c):
+          msg = self._c._last_executed.replace('\n',';')
+          sys.stderr.write("WARNING (PDBMapIO) PopulationFst query failed, query: %s\n"%msg)
+        else:
+          msg  = str(e).replace('\n',';')
+          msg += "WARNING (PDBMapIO) PopulationFst query failed, exception: %s\n"%msg
+          sys.stderr.write(msg)
+        self._con.rollback()
+      self._close()
+
       self._connect(cursorclass=MySQLdb.cursors.Cursor)
       # Upload each consequence to GenomicConsequence
       query  = "INSERT IGNORE INTO GenomicConsequence "
@@ -695,10 +715,10 @@ class PDBMapIO(PDBIO):
         except Exception as e:
           if "_last_executed" in dir(self._c):
             msg = self._c._last_executed.replace('\n',';')
-            sys.stderr.write("WARNING (PDBMapIO) MySQL query failed, query:: %s\n"%msg)
+            sys.stderr.write("WARNING (PDBMapIO) GenomicConsequence query failed, query:: %s\n"%msg)
           else:
             msg  = str(e).replace('\n',';')
-            msg += "WARNING (PDBMapIO) MySQL query failed, exception: %s\n"%msg
+            msg += "WARNING (PDBMapIO) GenomicConsequence query failed, exception: %s\n"%msg
             sys.stderr.write(msg)            
     resetwarnings()
     self._close()
@@ -1059,6 +1079,7 @@ class PDBMapIO(PDBIO):
                 'lib/create_schema_GenomicData.sql',
                 'lib/create_schema_GenomicConsequence.sql',
                 'lib/create_schema_GenomicIntersection.sql',
+                'lib/create_schema_PopulationFst.sql',
                 'lib/create_schema_sifts.sql',
                 'lib/create_schema_pfam.sql',
                 'lib/create_procedure_assign_foreign_keys.sql',
