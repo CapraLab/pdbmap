@@ -19,7 +19,7 @@ $transcript = $transcript_adaptor->fetch_by_stable_id($transcript_id);
 # Check that the transcript query was successful
 if (!defined $transcript) {
   print STDERR "No transcript found for ID (Non-Human or Non-Existant): $transcript_id\n";
-  exit 0;
+  exit 1; # clearly indicate that no transcript was found
 }
 
 # Extract general transcript data
@@ -35,7 +35,7 @@ my $translation = $transcript->translate();
 my $p_stable_id = $transcript->translation()->stable_id();
 if (!defined $translation) {
 	print STDERR "No translation for $transcript_id at $s_name:$s_start-$s_end\n";
-	exit 1;
+	exit 1; # clearly indicate that no transcript was found
 }
 my $peptide = $translation->seq();
 my $peplength = length($peptide);

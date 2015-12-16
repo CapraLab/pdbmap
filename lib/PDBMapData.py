@@ -289,8 +289,115 @@ class PDBMapData():
       yield self.record_parser(record,info_headers,csq_headers)
     print "Total SNPs (syn+nonsyn) in %s: %d"%(fname,snpcount)
 
+  def load_vcffile(self,fname,io,buffer_size=1000):
+    """ Creates a supplementary table for original VCF datafile """
+    parser = vcf.Reader(filename=fname,prepend_chr=True)
+    # Extract header fields
+    var_header  = ["chr","start","name","ref","alt","qual","filter"]
+    # Types for the standard fields
+    header_types  = ["VARCHAR(100)","BIGINT","VARCHAR(100)","VARCHAR(100)"]
+    header_types += ["VARCHAR(100)","DOUBLE","VARCHAR(100)"]
+    # Extract info fields
+    info_header = parser.infos.keys()
+    # Extract and convert info types
+    type_conv = {"Integer":"BIGINT","Float":"DOUBLE","Flag":"TINYINT","String":"TEXT"}
+    info_types  = [type_conv[info.type] for info in parser.infos.values()]
+    # csq_header  = []
+    # if "CSQ" in parser.infos:
+    #   csq_header = parser.infos["CSQ"].desc.split(': ')[-1].split('|')
+    #   info_header.remove("CSQ")
+    for char in ['.',' ','/','\\','(',')','[',']','-','!','+','=']:
+        info_header = [f.replace(char,'_') for f in info_header]
+        # csq_header  = [f.replace(char,'_') for f in csq_header]
+    header = var_header + info_header #+ csq_header
+    # Use the first row to infer data types for the INFO fields
+    record = parser.next()
+    #REPLACED: VCF explicitly lists field types
+    # # Use the first row to infer data types for the CSQ fields
+    # csq_types = []
+    # if "CSQ" in parser.infos:
+    #   for col in record.INFO["CSQ"]:
+    #     try:
+    #       col = float(col)
+    #       csq_types.append("DOUBLE")
+    #     except ValueError,TypeError:
+    #       if len(col) > 150:
+    #         csq_types.append("TEXT")
+    #       else:
+    #         csq_types.append("VARCHAR(250)") # reasonably large varchar
+    types    = header_types + info_types #+ csq_types
+    # Set default values for each type
+    defaults = {"BIGINT":0,"DOUBLE":0.0,"TINYINT":0,"TEXT":"''","VARCHAR(100)":"''"}
+    notnull  = set(["TINYINT","TEXT","VARCHAR(100)","DOUBLE"])
+    # don't worry about type conversion for now, Nones are causing an issue
+    formatter = {"BIGINT":"%s","DOUBLE":"%s","TEXT":"%s","TINYINT":"%s","VARCHAR(100)":"%s"}
+    queryf = "(%s)"%','.join([formatter[f] for f in types])
+    # Generate a create statement for this table
+    table_def = ["%s %s DEFAULT %s %s"%(header[i].lower(),types[i],defaults[types[i]],
+                  "NOT NULL" if types[i] in notnull else "") \
+                  for i in range(len(header))]
+    query = "DROP TABLE IF EXISTS pdbmap_supp.%s"
+    query = query%self.dname
+    io.secure_command(query)
+    # Include as many non-TEXT columns in primary key as allowed (16)
+    # Additional INFO (like END) may justify duplicates within the standard VCF fields
+    query = "CREATE TABLE IF NOT EXISTS pdbmap_supp.%s (%s, PRIMARY KEY(%s))"
+    pk = ','.join([h for i,h in enumerate(header) if types[i]!="TEXT"][:16])
+    query = query%(self.dname,', '.join(table_def),pk)
+    # Create the table
+    io.secure_command(query)
+    # Populate the table with contents of VCF file
+    query_head  = "INSERT IGNORE INTO pdbmap_supp.%s "%self.dname
+    query_head += "(%s) VALUES "%','.join(header)
+    query = query_head
+    def record2row(record,infos):#,csq_header=None):
+      row  = [record.CHROM,record.POS,record.ID]
+      row += [record.REF,record.ALT,record.QUAL,record.FILTER]
+      # Only retain the most frequent alternate allele (force biallelic)
+      row += [record.INFO[f] if f in record.INFO else None for f in infos.keys()]
+      # Replace any empty lists with None
+      row =  [r if type(r)!=list or len(r)<1 else r[0] for r in row]
+      row =  [r if r else None for r in row]
+      # if csq_header:
+      #   csq  = record.INFO["CSQ"].split("|")
+      #   row += [csq[f] for f in csq_header]
+      return row
+    # Add the first record to insert rows
+    rows   = record2row(record,parser.infos)
+    query += " "+queryf
+    for i,record in enumerate(parser):
+      # Buffered upload - Flush as specified in config
+      if not (i+1) % buffer_size:
+        try:
+          io.secure_command(query,rows)
+        except:
+          print "Isolating the problem row..."
+          rowlen = queryf.count("%")
+          for i in range(0,len(rows),rowlen):
+            row = rows[i:i+rowlen]
+            query = query_head+" "+queryf
+            io.secure_command(query,row)
+        rows  = []
+        query = query_head+" "+queryf
+      else:
+        query += ", "+queryf
+      rows.extend(record2row(record,parser.infos))
+    if rows:
+      # If rows in buffer at EOF, flush buffer
+      try:
+        io.secure_command(query,rows)
+      except:
+        print "Isolating the problem row..."
+        rowlen = queryf.count("%")
+        for i in range(0,len(rows),rowlen):
+          row = rows[i:i+rowlen]
+          query = query_head+" "+queryf
+          io.secure_command(query,row)
+    # Return the number of rows uploaded
+    return i
+
   def load_bedfile(self,fname,io,delim='\t',indexing=None,vepprep=True):
-    """ Creates a supplementary table for original datafile """
+    """ Creates a supplementary table for original BED datafile """
     print "Uploading original datafile to supplementary database."
     with open(fname,'rb') as fin:
       header = fin.readline().strip().split('\t')

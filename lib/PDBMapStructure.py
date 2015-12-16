@@ -153,7 +153,7 @@ class PDBMapStructure(Structure):
     # prot2chain = {}
     for chain in self.structure[0]:
       # # If a chain of the same protein has already been solved, use solution
-      # # BUT NOTE: do not use the object itself, backreferences will be wrong
+      # # BUT NOTE: must update Alignment->Chain backreference after deep copy
       # if chain.unp in prot2chain:
       #   chain.alignments = [copy.deepcopy(a) for a in prot2chain[chain.unp]]
       #   # Update the back-reference on the copied Alignment to point to this chain
@@ -178,7 +178,7 @@ class PDBMapStructure(Structure):
             alignments[alignment.transcript.gene].append((len(alignment.transcript.sequence),alignment.transcript.transcript,alignment))
         else:
           # Note that at least one transcript was dropped due to low alignment quality
-          error_msg += "%s dropped due to low alignment quality (%.2f); "%(trans,alignment.perc_identity)
+          error_msg += "%s dropped due to low alignment quality (%.2f); "%(trans.transcript,alignment.perc_identity)
       # Store canonical transcript for each gene alignment as element of chain
       chain.alignments = []
       # prot2chain[chain.unp] = []

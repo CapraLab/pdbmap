@@ -174,6 +174,8 @@ class PDBMap():
       ext = dfile.split('.')[-2].lower()
     # Process and accordingly
     if ext == 'vcf':
+      nrows = d.load_vcffile(dfile,io,args.buffer_size)
+      print "%d VCF records uploaded to supplemental database before processing"%nrows
       generator = d.load_vcf(dfile,usevep)
     elif ext in ["bed","txt","csv"]:
       # Determine the column delimiter by file type
@@ -275,10 +277,13 @@ class PDBMap():
     v  = PDBMapVisualize(io,args.pdb_dir,args.modbase_dir)
     entity_type = io.detect_entity_type(entity) if not entity=='all' else 'all'
     if entity_type == 'structure' and not biounits:
-      # Query all biological assemblies, exclude the asymmetric unit
-      query = "SELECT DISTINCT biounit FROM Chain WHERE label=%s AND structid=%s AND biounit>0"
-      res   = io.secure_query(query,(struct_label,entity,),cursorclass='Cursor')
-      biounits = [r[0] for r in res]
+      if io.is_nmr(entity):
+        biounits = [-1]
+      else:
+        # Query all biological assemblies, exclude the asymmetric unit
+        query = "SELECT DISTINCT biounit FROM Chain WHERE label=%s AND structid=%s AND biounit>0"
+        res   = io.secure_query(query,(struct_label,entity,),cursorclass='Cursor')
+        biounits = [r[0] for r in res]
     elif entity_type == 'model' and not biounits:
       biounits = [-1]
     eps,mins = False,False
@@ -589,31 +594,32 @@ __  __  __
   help="Specify config file", metavar="FILE")
   args, remaining_argv = conf_parser.parse_known_args()
   defaults = {
-    "dbhost" : None,
-    "dbname" : None,
-    "dbuser" : None,
-    "dbpass" : None,
+    "dbhost"  : None,
+    "dbname"  : None,
+    "dbuser"  : None,
+    "dbpass"  : None,
     "pdb_dir" : "data/pdb",
-    "modbase_dir" : None,
+    "modbase_dir"     : None,
     "modbase_summary" : None,
-    "create_new_db" : False,
+    "create_new_db"   : False,
     "force" : False,
     "pdbid" : "",
-    "unp" : "",
+    "unp"   : "",
     "idmapping" : "",
     "sec2prim" : "",
-    "sprot" : "",
-    "vep" : "variant_effect_predictor.pl",
-    "plink" : "plink",
+    "sprot"  : "",
+    "vep"    : "variant_effect_predictor.pl",
+    "plink"  : "plink",
     "reduce" : "reduce",
-    "probe" : "probe",
+    "probe"  : "probe",
     "slabel" : "",
-    "dlabel" : "",
-    "indexing": None,
-    "novep" : False,
-    "cores" : 1,
-    "ppart" : None,
-    "ppidx" : None
+    "dlabel"   : "",
+    "indexing" : None,
+    "novep"    : False,
+    "buffer_size" : 1000,
+    "cores"  : 1,
+    "ppart"  : None,
+    "ppidx"  : None
     }
   if args.conf_file:
     config = ConfigParser.SafeConfigParser()
@@ -671,6 +677,8 @@ __  __  __
  							help="Indexing used by data file(s) [pdbmap,ensembl,ucsc]")
   parser.add_argument("--novep",action='store_true',
               help="Disables VEP consequence prediction. All SNPs uploaded.")
+  parser.add_argument("--buffer_size", type=int,
+              help="Size of mysql buffer (in rows/records) when applicable")
   parser.add_argument("--ppart", type=int,
               help="Used to manage parallel subprocesses. Do not call directly.")
   parser.add_argument("--ppidx", type=int,
@@ -775,8 +783,8 @@ __  __  __
     if not args.slabel:
       args.slabel = "uniprot-pdb"
     if len(args.args)<1: 
-      msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> load_unp pdb_file [pdb_file,...]\n"
-      msg += "   or: pdbmap.py -c conf_file --slabel=<slabel> all"
+      msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> load_unp unpid [unpid,...]\n"
+      msg += "   or: pdbmap.py -c conf_file --slabel=<slabel> load_unp all"
       print msg; sys.exit(0)
     elif args.args[0] == 'all':
       # All PDB-mapped UniProt IDs (later expand to all UniProt IDs)

@@ -63,8 +63,8 @@ class PDBMapTranscript():
       if trans:
         res.append(trans)
       else:
-        error_msg = "Transcript query failed for %s"%transid
-        raise Exception("ERROR (PDBMapTranscript) %s\n"%error_msg)
+        error_msg = "Transcript query failed for %s (%s)"%(unpid,transid)
+        sys.stderr.write("WARNING (PDBMapTranscript) %s\n"%error_msg)
     return res
 
   @classmethod

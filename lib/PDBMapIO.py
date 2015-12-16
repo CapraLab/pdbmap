@@ -361,6 +361,23 @@ class PDBMapIO(PDBIO):
     if not createdb:
       self._connect()
 
+  def is_nmr(self,pdbid,label=-1):
+    # None is a valid argument to label
+    if label == -1:
+      label=self.slabel
+    self._connect()
+    query  = "SELECT * FROM Structure WHERE pdbid=%s and method like '%nmr%' "
+    if label:
+      query += "AND label=%s "
+    query += "LIMIT 1"
+    if label:
+      self._c.execute(query,(pdbid,label))
+    else:
+      self._c.execute(query,(pdbid,))
+    res = True if self._c.fetchone() else False
+    self._close()
+    return res
+
   def structure_in_db(self,pdbid,label=-1):
     # None is a valid argument to label
     if label == -1:
@@ -529,6 +546,7 @@ class PDBMapIO(PDBIO):
       tquery  = "INSERT IGNORE INTO Transcript "
       tquery += "(label,transcript,protein,gene,seqid,rescode,chr,start,end,strand) "
       tquery += "VALUES "
+      # Inner exception if empty list, outer exception if error during query
       if not len(s.get_transcripts(io=self)):
         raise Exception("No transcripts for structure %s, proteins: %s"%(s.id,','.join([c.unp for m in s for c in m])))
       seen = set([])
@@ -540,6 +558,10 @@ class PDBMapIO(PDBIO):
             tquery += '"%s",%d,%d,%d),'%(chr,start,end,strand)
       queries.append(tquery[:-1])
     except Exception as e:
+      import pdb, traceback, sys
+      type, value, tb = sys.exc_info()
+      traceback.print_exc()
+      pdb.post_mortem(tb)
       msg = "ERROR (PDBMapIO) Failed to get transcripts for %s: %s"%(s.id,str(e).rstrip('\n'))
       raise Exception(msg)
 
@@ -1011,11 +1033,13 @@ class PDBMapIO(PDBIO):
     self._connect()
     filterwarnings('ignore', category = MySQLdb.Warning)
     try:
-      if qvars: self._c.execute(query,qvars)
+      if qvars: self._c.execute(query,tuple(qvars))
       else:     self._c.execute(query)
+      self._con.commit()
     except Exception as e:
+      self._con.rollback()
       msg  = "ERROR (PDBMapIO) Secure command failed; Exception: %s; "%str(e)
-      msg += "Command: %s"%self._c._last_executed
+      msg += "\nCommand: %s"%self._c._last_executed
       raise Exception(msg)
     rc = self._c.rowcount
     self._close()
