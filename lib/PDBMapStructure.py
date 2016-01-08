@@ -27,12 +27,18 @@ from lib.PDBMapTranscript import PDBMapTranscript
 from lib.PDBMapAlignment import PDBMapAlignment
 from warnings import filterwarnings,resetwarnings
 from Bio.PDB.PDBExceptions import PDBConstructionWarning
-try:
-  import rosetta
-  import lib.mutants as mutants
-  rosetta.init()
-except:
-  sys.stderr.write("PyRosetta not found. Rosetta utilities are unavailable.\n")
+
+# Import helper for PyRosetta
+def import_rosetta():
+  if not import_rosetta.imported:
+    try:
+      import rosetta
+      import lib.mutants as mutants
+      rosetta.init()
+      import_rosetta.imported = True
+    except:
+      sys.stderr.write("PyRosetta not found. Rosetta utilities are unavailable.\n")
+import_rosetta.imported = False
 
 from multiprocessing import Pool,cpu_count
 def unwrap_self_mutate(arg,**kwargs):
@@ -122,6 +128,7 @@ class PDBMapStructure(Structure):
 
   def pose(self):
     """ Loads the PDBMapStructure as a Rosetta::Pose object """
+    import_rosetta()
     io = PDBIO()
     io.set_structure(self.structure)
     with tempfile.NamedTemporaryFile('wrb',suffix='.pdb',delete=False) as tf:
@@ -334,18 +341,20 @@ class PDBMapStructure(Structure):
 
   def relax(self):
     """ Apply Rosetta:FastRelax """
+    import_rosetta()
     pose  = self.pose()
     relax = rosetta.FastRelax()
     relax.constrain_relax_to_start_coords(True)
-    # relax.set_scorefxn(rosetta.create_score_function('talaris2015'))
-    relax.set_scorefxn(rosetta.create_score_function_ws_patch("standard", "score12"))
+    relax.set_scorefxn(rosetta.create_score_function('talaris2014'))
+    # relax.set_scorefxn(rosetta.create_score_function_ws_patch("standard", "score12"))
     relax.apply(pose)
     return self.from_pose(pose)
 
   def score(self,norm=True):
     """ Use Rosetta::Score to evaluate a structure """
-    # sfxn = rosetta.create_score_function('talaris2015')
-    sfxn = rosetta.create_score_function_ws_patch("standard", "score12")
+    import_rosetta()
+    sfxn = rosetta.create_score_function('talaris2014')
+    # sfxn = rosetta.create_score_function_ws_patch("standard", "score12")
     p    = self.pose()
     sc   = sfxn(p)
     if norm:
@@ -353,8 +362,10 @@ class PDBMapStructure(Structure):
     return sc
 
   def fa_rep(self,norm=False):
-    sfxn   = rosetta.create_score_function_ws_patch("standard", "score12")
-    p      = self.pose()
+    import_rosetta()
+    sfxn = rosetta.create_score_function('talaris2014')
+    # sfxn = rosetta.create_score_function_ws_patch("standard", "score12")
+    p    = self.pose()
     sfxn(p)
     fa_rep = p.energies().total_energies()[rosetta.fa_rep]
     if norm:
@@ -362,6 +373,7 @@ class PDBMapStructure(Structure):
     return fa_rep
 
   def rmsd(self,s2,norm100=True):
+    import_rosetta()
     p = self.pose()
     rmsd = rosetta.CA_rmsd(p,s2.pose())
     if not norm100:

@@ -156,7 +156,7 @@ class PDBMap():
     sys.stderr.write(msg)
     return 0
 
-  def load_data(self,dname,dfile,indexing=None,usevep=True):
+  def load_data(self,dname,dfile,indexing=None,usevep=True,upload=True):
     """ Loads a data file into the PDBMap database """
     if usevep:
       d = PDBMapData.PDBMapData(vep=self.vep,plink=self.plink,dname=dname)
@@ -174,8 +174,9 @@ class PDBMap():
       ext = dfile.split('.')[-2].lower()
     # Process and accordingly
     if ext == 'vcf':
-      nrows = d.load_vcffile(dfile,io,args.buffer_size)
-      print "%d VCF records uploaded to supplemental database before processing"%nrows
+      if upload:
+        nrows = d.load_vcffile(dfile,io,args.buffer_size)
+        print "%d VCF records uploaded to supplemental database before processing"%nrows
       generator = d.load_vcf(dfile,usevep)
     elif ext in ["bed","txt","csv"]:
       # Determine the column delimiter by file type
@@ -193,7 +194,7 @@ class PDBMap():
     else:
       msg = "ERROR (PDBMap) Unsupported file type: %s"%ext
       raise Exception(msg)
-    print "Uploading genomic data to PDBMap via generator..."
+    # Pass the relevant generator to be uploaded
     nrows = io.upload_genomic_data(generator,dname)
     return(nrows)
   
@@ -205,7 +206,7 @@ class PDBMap():
     if quick:
     	nrows = i.quick_intersect(dname,slabel,dtype)
     else:
-    	nrows = i.intersect(dname,slabel,dtype)
+    	nrows = i.intersect(dname,slabel,dtype,args.buffer_size)
     return(nrows) # Return the number of intersections
 
   def filter_data(self,dname,dfiles):
@@ -616,6 +617,7 @@ __  __  __
     "dlabel"   : "",
     "indexing" : None,
     "novep"    : False,
+    "noupload" : False,
     "buffer_size" : 1000,
     "cores"  : 1,
     "ppart"  : None,
@@ -676,7 +678,9 @@ __  __  __
   parser.add_argument("--indexing",
  							help="Indexing used by data file(s) [pdbmap,ensembl,ucsc]")
   parser.add_argument("--novep",action='store_true',
-              help="Disables VEP consequence prediction. All SNPs uploaded.")
+              help="Disables VEP consequence prediction. If no CSQ provided, all SNPs uploaded.")
+  parser.add_argument("--noupload",action='store_true',
+              help="Disables upload of the original data file to a supplementary database. Potential information loss.")
   parser.add_argument("--buffer_size", type=int,
               help="Size of mysql buffer (in rows/records) when applicable")
   parser.add_argument("--ppart", type=int,
@@ -858,7 +862,7 @@ __  __  __
     nrows = 0
     for dfile,dname in dfiles:
       print "## Processing (%s) %s ##"%(dname,dfile)
-      nrows += pdbmap.load_data(dname,dfile,args.indexing,not args.novep)
+      nrows += pdbmap.load_data(dname,dfile,args.indexing,not args.novep,not args.noupload)
       print " # %d data rows uploaded."%nrows
     #TESTING: Explicit calls allow for parallelization of load_data and filter
     #       : over each chromosome/file in the dataset

@@ -107,7 +107,7 @@ class PDBMapData():
 
     # Enforce biallelic assumption
     # Record only the first alternate allele count
-    record.INFO['AC'] = record.INFO['AC'][0] if 'AC' in record.INFO else None
+    record.INFO['AC'] = record.INFO['AC'][0] if 'AC' in record.INFO and record.INFO['AC'] else None
 
     # Ensure necessary fields are present in record.INFO
     if 'AN'      not in record.INFO: record.INFO['AN']      = None
@@ -170,7 +170,8 @@ class PDBMapData():
     else:
       record.INFO["DA"] = record.INFO["ALT"]      
     
-    if not csq_headers:
+    # If CSQ missing for this record or all records, dummy code
+    if not csq_headers or not record.INFO["CSQ"]:
       record.CSQ = [{"ID":   record.INFO["ID"],
                     "CHROM": record.INFO["CHROM"],
                     "START": record.INFO["START"],
@@ -229,8 +230,8 @@ class PDBMapData():
     if vep:
       parser = vcf.Reader(self.load_vep(fname,'vcf',cache),prepend_chr=True)
     else:
-      parser = vcf.Reader(fname,prepend_chr=True)
-      if not parser.infos['CSQ']: # CSQ may be pre-computed
+      parser = vcf.Reader(filename=fname,prepend_chr=True)
+      if "CSQ" not in parser.infos or not parser.infos['CSQ']: # CSQ may be pre-computed
         # If no CSQ present, insert dummy structure
         parser.infos['CSQ'] = bed.Consequence() # dummy object
     # Determine Info headers
@@ -289,7 +290,7 @@ class PDBMapData():
       yield self.record_parser(record,info_headers,csq_headers)
     print "Total SNPs (syn+nonsyn) in %s: %d"%(fname,snpcount)
 
-  def load_vcffile(self,fname,io,buffer_size=1000):
+  def load_vcffile(self,fname,io,buffer_size=1):
     """ Creates a supplementary table for original VCF datafile """
     parser = vcf.Reader(filename=fname,prepend_chr=True)
     # Extract header fields
@@ -336,10 +337,6 @@ class PDBMapData():
     table_def = ["%s %s DEFAULT %s %s"%(header[i].lower(),types[i],defaults[types[i]],
                   "NOT NULL" if types[i] in notnull else "") \
                   for i in range(len(header))]
-    #REALLY bad idea for parallel calls
-    # query = "DROP TABLE IF EXISTS pdbmap_supp.%s"
-    # query = query%self.dname
-    # io.secure_command(query)
     # Include as many non-TEXT columns in primary key as allowed (16)
     # Additional INFO (like END) may justify duplicates within the standard VCF fields
     query = "CREATE TABLE IF NOT EXISTS pdbmap_supp.%s (%s, PRIMARY KEY(%s))"
@@ -474,14 +471,14 @@ class PDBMapData():
     print ' '.join(cmd)
     try:
       # Call VEP and capture stdout in realtime
-      p = sp.Popen(cmd,stdout=sp.PIPE)
+      p = sp.Popen(cmd,stdout=sp.PIPE,bufsize=1)
       # Filter variants without consequence annotations
       p1 = p
-      p = sp.Popen(["grep","^#\|CSQ"],stdin=p1.stdout,stdout=sp.PIPE)
+      p = sp.Popen(["grep","^#\|CSQ"],stdin=p1.stdout,stdout=sp.PIPE,bufsize=1)
       if self.dname == '1kg3':
         # Pipe output to vcf_fst for Fst calculations
         p2 = p
-        p = sp.Popen(["bash","lib/vcf_fst.sh"],stdin=p2.stdout,stdout=sp.PIPE)
+        p = sp.Popen(["bash","lib/vcf_fst.sh"],stdin=p2.stdout,stdout=sp.PIPE,bufsize=1)
       if outfile:
         fout = gzip.open(outfile,'wb') # Open cache for writing
       for line in iter(p.stdout.readline,b''):
@@ -527,6 +524,7 @@ class PDBMapData():
         elif csq_header[i] == "Amino_acids":
           if not field: # No Value
             ref,alt = None,None
+          #FIXME: `type(field)==str or` looks like a bug. Is it?
           elif type(field)==str or len(field.split('/')) < 2: # Only one value
             ref,alt = field,field
           else: # Both specified

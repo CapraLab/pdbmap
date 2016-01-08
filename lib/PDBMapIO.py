@@ -597,8 +597,8 @@ class PDBMapIO(PDBIO):
       sys.stderr.write(msg)
       self._con.rollback()
       raise
-    
-    self._close()
+    finally:
+      self._close()
     return(0)
 
   def upload_model(self):
@@ -624,18 +624,17 @@ class PDBMapIO(PDBIO):
     # Execute upload query
     self._connect()
     self._c.execute(mquery)
-    self._c.close()
+    self._close()
     # Pass the underlying PDBMapStructure to upload_structure
     self.upload_structure(model=True,sfields=mfields)
 
 
   def upload_genomic_data(self,dstream,dname):
     """ Uploads genomic data via a PDBMapData generator """
-    self._connect(cursorclass=MySQLdb.cursors.Cursor)
     filterwarnings('ignore', category = MySQLdb.Warning)
     i=0 # ensure initialization
     for i,record in enumerate(dstream):
-      sys.stdout.write("\rRecord %4d"%i)
+      # sys.stdout.write("\rRecord %4d"%i)
       # Upload all but the consequences and optional Fst information to GenomicData
       record.INFO['LABEL'] = dname
       query  = "INSERT IGNORE INTO GenomicData "
@@ -648,7 +647,8 @@ class PDBMapIO(PDBIO):
       query += "%(ERATE)s,%(THETA)s,%(LDAF)s,%(AC)s,%(AN)s,%(AA)s,%(DA)s,"
       query += "%(AF)s,%(AMR_AF)s,%(ASN_AF)s,%(EAS_AF)s,%(SAS_AF)s,%(AFR_AF)s,%(EUR_AF)s,"
       query += "%(GENE)s,%(HGNC)s,%(SNPSOURCE)s,%(FORMAT)s,%(GT)s)"
-      try: 
+      try:
+        self._connect(cursorclass=MySQLdb.cursors.Cursor)
         self._c.execute(query,record.INFO)
         self._con.commit()
       except Exception as e:
@@ -660,9 +660,10 @@ class PDBMapIO(PDBIO):
           msg += "WARNING (PDBMapIO) GenomicData query failed, exception: %s\n"%msg
           sys.stderr.write(msg)
         self._con.rollback()
-      self._close()
+        continue # halt upload of this variant
+      finally:
+        self._close()
 
-      self._connect(cursorclass=MySQLdb.cursors.Cursor)
       # Upload optional Fst information to PopulationFst
       query  = "INSERT IGNORE INTO PopulationFst "
       query += "(label,chr,start,end,name,"
@@ -681,6 +682,7 @@ class PDBMapIO(PDBIO):
       query += "%(EASEUR_Fst)s,%(EASAFR_Fst)s,%(SASEUR_Fst)s,%(SASAFR_Fst)s,%(EURAFR_Fst)s,"
       query += "%(ALLPOP_Nhat)s,%(ALLPOP_Dhat)s,%(ALLPOP_Fst)s)"
       try: 
+        self._connect(cursorclass=MySQLdb.cursors.Cursor)
         self._c.execute(query,record.INFO)
         self._con.commit()
       except Exception as e:
@@ -692,9 +694,10 @@ class PDBMapIO(PDBIO):
           msg += "WARNING (PDBMapIO) PopulationFst query failed, exception: %s\n"%msg
           sys.stderr.write(msg)
         self._con.rollback()
-      self._close()
+        continue # halt upload of this variant
+      finally:
+        self._close()
 
-      self._connect(cursorclass=MySQLdb.cursors.Cursor)
       # Upload each consequence to GenomicConsequence
       query  = "INSERT IGNORE INTO GenomicConsequence "
       query += "(label,chr,start,end,name,transcript,protein,uniprot,canonical,allele,"
@@ -710,6 +713,7 @@ class PDBMapIO(PDBIO):
       for csq in record.CSQ:
         csq["LABEL"] = self.dlabel
         try: 
+          self._connect(cursorclass=MySQLdb.cursors.Cursor)
           self._c.execute(query,csq)
           self._con.commit()
         except Exception as e:
@@ -719,17 +723,25 @@ class PDBMapIO(PDBIO):
           else:
             msg  = str(e).replace('\n',';')
             msg += "WARNING (PDBMapIO) GenomicConsequence query failed, exception: %s\n"%msg
-            sys.stderr.write(msg)            
+            sys.stderr.write(msg)    
+          self._con.rollback()
+          continue # halt upload of this variant
+        finally:
+          self._close()
     resetwarnings()
-    self._close()
     return i # return the number of uploaded rows
 
-  def upload_intersection(self,dstream,dlabel=None,slabel=None):
+  def upload_intersection(self,dstream,dlabel=None,slabel=None,buffer_size=1):
     """ Uploads an intersection via a process parser generator """
-    self._connect()
-    query  = "INSERT IGNORE INTO GenomicIntersection "
-    query += "(dlabel,slabel,structid,chain,seqid,gc_id) VALUES "
-    query += "(%s,%s,%s,%s,%s,%s)" # Direct reference
+    # Query header
+    queryh  = "INSERT IGNORE INTO GenomicIntersection "
+    queryh += "(dlabel,slabel,structid,chain,seqid,gc_id) VALUES "
+    # Query value string
+    queryv  = "(%s,%s,%s,%s,%s,%s)" # Direct reference
+    # Query value list
+    vals = []
+    # Query argument list
+    args = []
     i=0 # ensure initialization
     for i,row in enumerate(dstream):
       row = list(row) # convert from tuple
@@ -743,12 +755,34 @@ class PDBMapIO(PDBIO):
         row.insert(0,self.dlabel)
       else:
         row.insert(0,dlabel)
-      row = tuple(row) # convert to tuple
+      # row = tuple(row) # convert to tuple
+      vals.append(queryv)
+      args.extend(row)
+      if not (i+1) % buffer_size:
+        # Construct query string
+        query = queryh + ','.join(vals)
+        try:
+          self._connect()
+          self._c.execute(query,args)
+          self._con.commit()
+        except:
+          self._con.rollback()
+          raise
+        finally:
+          self._close()
+    # Upload any rows left in the buffer
+    if args:
+      # Construct query string
+      query = queryh + ','.join(vals)
       try:
-        self._c.execute(query,row)
+        self._connect()
+        self._c.execute(query,args)
+        self._con.commit()
       except:
+        self._con.rollback()
         raise
-    self._close()
+      finally:
+        self._close()
     return(i) # Return the number of uploaded rows
 
   def load_structure(self,structid,biounit=0,useranno=False,raw=False):
@@ -1036,6 +1070,8 @@ class PDBMapIO(PDBIO):
     try:
       if qvars: self._c.execute(query,qvars)
       else:     self._c.execute(query)
+      for row in self._c:
+        yield row
     except Exception as e:
       msg  = "ERROR (PDBMapIO) Secure query failed; Exception: %s; "%str(e)
       msg += " Provided query: %s"%query
@@ -1043,10 +1079,9 @@ class PDBMapIO(PDBIO):
       if "_last_executed" in dir(self._c):
         msg += " Executed Query: %s"%self._c._last_executed
       raise Exception(msg)
-    resetwarnings()
-    for row in self._c:
-      yield row
-    self._close()
+    finally:
+      resetwarnings()
+      self._close()
 
   def secure_command(self,query,qvars=None):
     """ Executes commands using safe practices """
@@ -1056,14 +1091,15 @@ class PDBMapIO(PDBIO):
       if qvars: self._c.execute(query,tuple(qvars))
       else:     self._c.execute(query)
       self._con.commit()
+      rc = self._c.rowcount
     except Exception as e:
       self._con.rollback()
       msg  = "ERROR (PDBMapIO) Secure command failed; Exception: %s; "%str(e)
       msg += "\nCommand: %s"%self._c._last_executed
       raise Exception(msg)
-    rc = self._c.rowcount
-    self._close()
-    resetwarnings()
+    finally:
+      self._close()
+      resetwarnings()
     return rc
 
   def check_schema(self):

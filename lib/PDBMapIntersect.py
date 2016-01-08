@@ -55,7 +55,7 @@ class PDBMapIntersect():
       self.io.secure_command(query,(dlabel,))
     return(-1) # No row feedback for quick-intersect
 
-  def intersect(self,dlabel,slabel=None,dtype='Genomic'):
+  def intersect(self,dlabel,slabel=None,dtype='Genomic',buffer_size=1):
     # Intersects a structure set with a dataset using intersectBed
     # Slow, but intersection pointers are stored permanently (1-time op)
     # dtype options: Genomic, [Protein, Structural]
@@ -69,7 +69,7 @@ class PDBMapIntersect():
         query  = "SELECT a.chr,a.start-1,a.end-1,a.gc_id,a.transcript FROM "
         query += "GenomicConsequence as a INNER JOIN GenomicData as b "
         query += "ON a.label=%s AND a.label=b.label AND a.chr=b.chr AND a.start=b.start AND a.end=b.end "
-        query += "WHERE (a.consequence LIKE '%%missense_variant' OR a.consequence LIKE '%%synonymous_variant')"
+        #query += "WHERE (a.consequence LIKE '%%missense_variant' OR a.consequence LIKE '%%synonymous_variant')"
       elif dtype == 'Protein':
         msg = "ERROR (PDBMapIntersect) Protein intersection not implemented."
         raise Exception(msg)
@@ -115,11 +115,11 @@ class PDBMapIntersect():
       p = sp.Popen(cmd,stdout=sp.PIPE)
       parser = process_parser(p)
       nrows = self.io.upload_intersection(parse_intersection(parser),
-                      dlabel=dlabel,slabel=slabel)
+                      dlabel=dlabel,slabel=slabel,buffer_size=buffer_size)
 
       # Remove temp files only if no exception
-      sp.check_call(["rm","-f",temp1])
-      sp.check_call(["rm","-f",temp2])
+      #sp.check_call(["rm","-f",temp1])
+      #sp.check_call(["rm","-f",temp2])
         
     except Exception as e: 
       msg  = "ERROR (PDBMapIntersect) Exception during "
@@ -153,7 +153,7 @@ def parse_intersection(parser):
     line = line.strip()
     if not line or line[0] == "#": continue
     row = line.split('\t')
-    if len(row) < 12:
+    if len(row) < 12 or not row[4]:
       # No transcript info from GenomicConsequence
       d_chr,d_start,d_end,gc_id,t_chr,t_start,t_end, \
       pdbid,chain,seqid,t_trans = row

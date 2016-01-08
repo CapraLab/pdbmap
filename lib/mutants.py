@@ -64,7 +64,9 @@ def mutate_residue(pose,mutant_position,mutant_aa,
 
     # Create a standard scorefxn by default
     if not pack_scorefxn:
-        pack_scorefxn = create_score_function_ws_patch("standard", "score12")
+        # pack_scorefxn = create_score_function_ws_patch("standard", "score12")
+        ## Soft repulsion for repack per the Kellogg protocol
+        pack_scorefxn = create_score_function("soft_rep_design")
 
     # Initialize the Rosetta task
     task = rosetta.standard_packer_task(pose)
@@ -72,14 +74,15 @@ def mutate_residue(pose,mutant_position,mutant_aa,
     # By default, the entire protein is re-designed
     # Restrict design to residues within the pack_radius
     # Restrict design to original amino acids (repack only)
-    center = pose.residue( mutant_position ).nbr_atom_xyz()
+    ## Repack applied to ALL residues per the Kellogg protocol
+    # center = pose.residue( mutant_position ).nbr_atom_xyz()
     for i in range(1,pose.total_residue() + 1 ):
-        d = center.distance_squared(pose.residue(i).nbr_atom_xyz()) 
-        # Only repack the mutated residue and any within the pack_radius
-        if d > pack_radius**2:
-            task.nonconst_residue_task(i).prevent_repacking()
-        else:
-            task.nonconst_residue_task(i).restrict_to_repacking()
+        # d = center.distance_squared(pose.residue(i).nbr_atom_xyz()) 
+        # # Only repack the mutated residue and any within the pack_radius
+        # if d > pack_radius**2:
+        #     task.nonconst_residue_task(i).prevent_repacking()
+        # else:
+        task.nonconst_residue_task(i).restrict_to_repacking()
 
     # Apply the mutation and pack nearby residues
     packer = PackRotamersMover(pack_scorefxn,task)
