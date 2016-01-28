@@ -13,7 +13,6 @@
 #=============================================================================#
 
 import subprocess as sp
-import scipy.sparse.csr as csr
 import numpy as np
 import sys,csv,os,re
 

@@ -298,6 +298,11 @@ class PDBMapData():
     # Types for the standard fields
     header_types  = ["VARCHAR(100)","BIGINT","VARCHAR(100)","VARCHAR(100)"]
     header_types += ["VARCHAR(100)","DOUBLE","VARCHAR(100)"]
+    # Correct any overlaps with the default header
+    for name in parser.infos.keys():
+      if name.lower() in var_header:
+        parser.infos["%s2"%name] = parser.infos[name]
+        del parser.infos[name]
     # Extract info fields
     info_header = parser.infos.keys()
     # Extract and convert info types
@@ -334,7 +339,7 @@ class PDBMapData():
     formatter = {"BIGINT":"%s","DOUBLE":"%s","TEXT":"%s","TINYINT":"%s","VARCHAR(100)":"%s"}
     queryf = "(%s)"%','.join([formatter[f] for f in types])
     # Generate a create statement for this table
-    table_def = ["%s %s DEFAULT %s %s"%(header[i].lower(),types[i],defaults[types[i]],
+    table_def = ["`%s` %s DEFAULT %s %s"%(header[i].lower(),types[i],defaults[types[i]],
                   "NOT NULL" if types[i] in notnull else "") \
                   for i in range(len(header))]
     # Include as many non-TEXT columns in primary key as allowed (16)
@@ -346,7 +351,7 @@ class PDBMapData():
     io.secure_command(query)
     # Populate the table with contents of VCF file
     query_head  = "INSERT IGNORE INTO pdbmap_supp.%s "%self.dname
-    query_head += "(%s) VALUES "%','.join(header)
+    query_head += "(%s) VALUES "%','.join(['`%s`'%h for h in header])
     query = query_head
     def record2row(record,infos):#,csq_header=None):
       row  = [record.CHROM,record.POS,record.ID]

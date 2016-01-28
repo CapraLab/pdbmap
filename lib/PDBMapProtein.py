@@ -61,6 +61,11 @@ class PDBMapProtein():
     return PDBMapProtein._unp2pdb.get(unp,[])
 
   @classmethod
+  def isunp(cls,unpid):
+    # Return True if the provided ID is a UNP ID
+    return unpid in PDBMapProtein._unp2pdb
+
+  @classmethod
   def load_idmapping(cls,idmapping_fname):
     # Load UniProt crossreferences, keyed on UniProt
     with open(idmapping_fname) as fin:
