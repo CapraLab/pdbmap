@@ -331,6 +331,186 @@ class PDBMap():
       # raise Exception(msg)
       raise
 
+  def colocalization(self,structid,biounit,muts,io,label=None,strict=True,relaxdir=False,refseq=None,sfile=None,unp=None):
+    ## Prepare the structure coordinate file
+    p  = PDBParser()
+    if sfile:
+      bio = sfile
+    # Otherwise, use coordinates from the biological assembly or relaxed biological assembly
+    else:
+      label = label if label else "%s_%s"%(structid,biounit)
+      if relaxdir:
+        bio = "results/%s_%s_wt_relaxation/%s_%s.relaxed.pdb.gz"%(structid.upper(),biounit,structid.upper(),biounit)
+        if not os.path.exists(bio):
+          sys.stderr.write("Relaxdir specified, but no relaxed PDB found at %s. Skipping.\n"%bio)
+          return
+      elif biounit > 0:
+        bio = "%s/biounit/coordinates/all/%s.pdb%d.gz"%(args.pdb_dir,structid.lower(),biounit)
+      elif biounit == 0:
+        bio = "%s/structures/all/pdb/pdb%s.ent.gz"%(args.pdb_dir,structid.lower())
+      else:
+        bio = "%s/models/model/%s.pdb.gz"%(args.modbase_dir,structid.upper())
+        if not os.path.exists(bio):
+          print "Converting .xz to .gz"
+          cmd = "xz -d %s; gzip %s"%('.'.join(bio.split('.')[:-1])+'.xz','.'.join(bio.split('.')[:-1]))
+          print cmd
+          os.system(cmd)
+        biounit = 0
+    with gzip.open(bio,'rb') as fin:
+      from warnings import filterwarnings,resetwarnings
+      from Bio.PDB.PDBExceptions import PDBConstructionWarning
+      filterwarnings('ignore',category=PDBConstructionWarning)
+      s = p.get_structure(structid,fin)
+      resetwarnings()
+
+    p = PDBMapIO.PDBMapParser()
+    s = p.process_structure(s,force=True)
+    s = PDBMapStructure.PDBMapStructure(s,refseq=refseq,pdb2pose={})
+
+    if unp:
+      # If this structure is in PDBMap (not provided by file), query the UNP chains
+      select = "SELECT distinct chain FROM Chain "
+      where  = "WHERE label=%s AND structid=%s AND biounit=%s AND unp=%s"
+      unp_chains = io.secure_query(select+where,(args.slabel,structid,biounit,unp),cursorclass="Cursor")
+      muts = [(c[0],m[1]) for m in muts for c in unp_chains]
+    else:
+      # If not, assume all chains match the UNP
+      muts = [(c.id,m) for m in muts for c in s.get_chains()]
+
+    ## Check that at least one candidate mutation is present in the structure
+    present = False
+    muts = [m for m in muts if s.get_residue(m[0],int(m[1][1:-1]))]
+    if not muts:
+      sys.stderr.write("Structure %s.%s contains none of the candidate mutations.\n"%(structid,biounit))
+      return
+
+    ## Build the variant datasets, pathogenic supercedes benign, candidate supercedes pathogenic
+    dclass = {}
+    # Build the query template
+    select  = "SELECT distinct chain,ref_amino_acid,protein_pos,alt_amino_acid FROM GenomicConsequence a "
+    select += "INNER JOIN GenomicIntersection b ON a.gc_id=b.gc_id "
+    select += "INNER JOIN GenomicData c ON a.gd_id=c.gd_id "
+    where   = "WHERE a.label=%s AND consequence LIKE '%%missense_variant%%' "
+    where  += "AND b.structid=%s "
+    # Query natural variation from 1000 Genomes
+    print "Querying natural varition from 1000 Genomes..."
+    q = select+where
+    dclass.update(dict(((row[0],''.join([str(r) for r in row[1:]])),0) for row in io.secure_query(q,("1kg3",structid),cursorclass="Cursor")))
+    # Query somatic mutations from Cosmic
+    print "Querying somatic mutations from Cosmic..."
+    q = select+where
+    dclass.update(dict(((row[0],''.join([str(r) for r in row[1:]])),4) for row in io.secure_query(q,("cosmic",structid),cursorclass="Cursor")))
+    # Query (likely) benign variation from ClinVar
+    print "Querying (likely) benign variation from ClinVar..."
+    select += "INNER JOIN pdbmap_supp.clinvar d "
+    select += "ON c.chr=d.chr and c.start=d.start "
+    benign  = "AND d.clnsig in (2,3)"
+    q = select+where+benign
+    dclass.update(dict(((row[0],''.join([str(r) for r in row[1:]])),1) for row in io.secure_query(q,("clinvar",structid),cursorclass="Cursor")))
+    # Query (probably) pathogenic variation from ClinVar
+    print "Querying (probably) pathogenic variation from ClinVar..."
+    pathgen = "AND d.clnsig in (4,5)"
+    q = select+where+pathgen
+    dclass.update(dict(((row[0],''.join([str(r) for r in row[1:]])),2) for row in io.secure_query(q,("clinvar",structid),cursorclass="Cursor")))
+    # Query drug response-affecting variation from ClinVar
+    print "Querying drug response-affecting variation from ClinVar..."
+    drugaff = "AND d.clnsig=7"
+    q = select+where+drugaff
+    dclass.update(dict(((row[0],''.join([str(r) for r in row[1:]])),3) for row in io.secure_query(q,("clinvar",structid),cursorclass="Cursor")))
+    # Add candidate mutations, overwrite previous entries if conflicted
+    dclass.update(dict((m,-1) for m in muts))
+
+    ## Keep a long-form description of each dataset
+    code2class = {-1:"Candidate Mutation",0:"[1KGp3v5a] Natural",1:"[ClinVar] (likely) Benign",
+                   2:"[ClinVar] (probably) Pathogenic",3:"[ClinVar] Affects Drug Response",
+                   4:"[Cosmic] Somatic"}
+
+    for key,val in sorted(dclass.iteritems(),key=lambda t: (t[1],t[0][0],int(t[0][1][1:-1]))):
+      print "%s\t%s"%(key,code2class[val])
+    print ""
+    sys.stdout.flush()
+    if not [d for d in dclass.values() if d>1]:
+      sys.stderr.write("%s.%s contains no pathogenic/somatic variation.\n"%(structid,biounit))
+      return
+    if not [d for d in dclass.values() if d in [0,1]]:
+      sys.stderr.write("%s.%s contains no neutral variation.\n"%(structid,biounit))
+      return
+    print ""
+
+    ## Determine the structural coordinates of each mutation/variant (center of mass)
+    def resicom(resi):
+      if not resi: return None
+      return np.array([np.array(a.get_coord()) for a in resi.get_unpacked_list()]).mean(axis=0)
+    coords = dict((m,resicom(s.get_residue(m[0],int(m[1][1:-1])))) for m in dclass.keys())
+    # Remove mutations/variants without coordinates in this structure
+    coords = dict((key,val) for key,val in coords.iteritems() if val!=None)
+    dclass = dict((key,val) for key,val in dclass.iteritems() if key in coords)
+
+    # Coordinates are good
+    # Labels are good
+    ## Colocalization analysis is ready to code
+    def WAP(nq,nr,dqr,t=10.):
+      return nq*nr*np.exp(-dqr**2/(2*t**2))
+    def pathprox(cands,neut,path,coords):
+      """ Predicts pathogenicity of a mutation vector given observed neutral/pathogenic """
+      from scipy.spatial import KDTree
+      num_neut = len(neut)
+      num_path = len(path)
+      cand_scores = []
+      for var in cands:
+        kdt        = KDTree(np.array([coords[var2] for var2 in neut if var!=var2]))
+        dist,_     = kdt.query(coords[var],num_neut-1)
+        neut_score = np.sum([WAP(1,1,d) for d in dist])
+        kdt        = KDTree(np.array([coords[var2] for var2 in path if var!=var2]))
+        dist,_     = kdt.query(coords[var],num_path-1)
+        path_score = np.sum([WAP(1,1,d) for d in dist])
+        cand_scores.append(path_score / neut_score)
+      return cand_scores
+    def rank_cand_mutations(cands,neuts,paths,coords,label="ClinVar"):
+      # Calculate pathogenicity score of neutral variants
+      neut_scores = pathprox(neuts,neuts,paths,coords)
+      print "\nNeutral median: %.4f; mean: %.4f"%(np.median(neut_scores),np.mean(neut_scores))
+      # Calculate pathogenicity score of pathogenic variants
+      path_scores = pathprox(paths,neuts,paths,coords)
+      print "Pathogenic median: %.4f; mean: %.4f"%(np.median(path_scores),np.mean(path_scores))
+      # Test if neutral and pathogenic are from different distributions
+      from scipy.stats import f_oneway
+      F,p = f_oneway(neut_scores,path_scores)
+      print "Neutral vs Pathogen ANOVA: F=%g; p=%g\n"%(F,p)
+      # Calculate pathogenicity score of candidate mutations
+      cand_scores = pathprox(cands,neuts,paths,coords)
+      if p>0.05:
+        print "WARNING: Variant colocalization score may not be predictive of pathogenicity.\n"
+      # Candidate pathogenicity score percentiles in each set
+      from scipy.stats import percentileofscore
+      neut_pcntls = [percentileofscore(neut_scores,c) for c in cand_scores]
+      path_pcntls = [percentileofscore(path_scores,c) for c in cand_scores]
+      # Report the results of the colocalization analysis
+      print "PathRef\tChain\tMut\tX\tY\tZ\tScore\tN_Pcntl\tP_Pcntl\tPrediction"
+      for i,cand in enumerate(cands):
+        crd = coords[cand]
+        res = "%s\t%s\t%s\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%s"
+        print res%(label,cand[0],cand[1],crd[0],crd[1],crd[2],cand_scores[i],
+                    neut_pcntls[i],path_pcntls[i],
+                    ["Neutral","Deleterious"][int(cand_scores[i])>1])
+
+    ## Pathogenicity score w.r.t. ClinVar pathogenic variants
+    cands = [k for k,v in sorted(dclass.iteritems(),key=lambda t: (t[1],t[0][0],int(t[0][1][1:-1]))) if v==-1]
+    neuts = [k for k,v in sorted(dclass.iteritems(),key=lambda t: (t[1],t[0][0],int(t[0][1][1:-1]))) if v in [0,1]]
+    paths = [k for k,v in sorted(dclass.iteritems(),key=lambda t: (t[1],t[0][0],int(t[0][1][1:-1]))) if v==2]
+    if paths:
+      rank_cand_mutations(cands,neuts,paths,coords,label="Path")
+
+    ## Pathogenicity score w.r.t. ClinVar drug response-affecting variants
+    paths = [k for k,v in sorted(dclass.iteritems(),key=lambda t: (t[1],t[0][0],int(t[0][1][1:-1]))) if v==3]
+    if paths:
+      rank_cand_mutations(cands,neuts,paths,coords,label="Drug")
+
+    ## Pathogenicity score w.r.t. Cosmic somatic variants
+    paths = [k for k,v in sorted(dclass.iteritems(),key=lambda t: (t[1],t[0][0],int(t[0][1][1:-1]))) if v==4]
+    if paths:
+      rank_cand_mutations(cands,neuts,paths,coords,label="Somatic")
+
   def mutate(self,structid,biounit,muts,label=None,strict=True,relaxdir=False,refseq=None,sfile=None):
     if sfile:
       bio = sfile
@@ -991,9 +1171,6 @@ __  __  __
         refseq = ''.join([l.strip() for l in fin.readlines() if l[0]!=">"])
     else:
       refseq = None
-    
-    print entity,sfile
-    print etype
 
     # If a file was specified, process separately
     if etype == 'file':
@@ -1061,6 +1238,118 @@ __  __  __
       print "Modeling mutation %s in %s[%s].%s"%(mut[1],sid,bio,mut[0])
       print "\n#####################################\n"
       pdbmap.mutate(sid,bio,[mut],label=label,strict=strict,relaxdir=relaxdir,refseq=refseq,sfile=sfile)
+
+  ## colocalization ##
+  elif args.cmd == "colocalization":
+    if len(args.args) < 1:
+      msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> colocalization entity unp mut1[,mut2,...] [relaxdir] [fastafile]"
+      print msg; sys.exit(1)
+    pdbmap = PDBMap(idmapping=args.idmapping)
+    entity = args.args[0]
+    if os.path.exists(entity):
+      if os.path.isfile(entity):
+        etype = "file"
+        sfile = entity
+        # Use the file name without the .vcf[.gz] extension
+        exts  = 1 + int(os.path.basename(entity).split('.')[-1]=='gz')
+        structid,bio = '.'.join(os.path.basename(entity).split('.')[:-exts]),0
+        label = "%s_colocalization_%s"%(structid,str(time.strftime("%Y%m%d")))
+    else:
+      io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,slabel=args.slabel)
+      etype = io.detect_entity_type(entity)
+      sfile = None
+      label = "%s_colocalization_%s"%(entity,str(time.strftime("%Y%m%d")))
+    if not os.path.exists("results/%s"%label):
+      os.mkdir("results/%s"%label)
+    # Record the relevant UniProt ID
+    unp = args.args[1]
+    # Read mutations from file if file provided
+    if os.path.exists(args.args[2]):
+      # Process file with one row per SNP
+      with open(args.args[2],'rb') as fin:
+        muts = [m.strip().split(':') for m in fin]
+    elif args.dlabel:
+      # Pull variants associated with the data label
+      print "Not yet implemented: Colocalize Variants w/ Data Label"
+      sys.exit()
+    else:
+      # Process comma-separated list of mutations
+      muts   = [m.split(':') for m in args.args[2].split(',')]
+    muts   = [m if len(m)>1 else ['',m[0]] for m in muts]
+    # Check for a directory of relaxed WT structures
+    relaxdir  = False if len(args.args) < 4 else args.args[3]=="True"
+    fastafile = None if len(args.args) < 5 else args.args[4]
+    if fastafile:
+      with open(fastafile,'rb') as fin:
+        refseq = ''.join([l.strip() for l in fin.readlines() if l[0]!=">"])
+    else:
+      refseq = None
+
+    # If a file was specified, process separately
+    if etype == 'file':
+      biounits = [(structid,bio)]
+    # If a PDBMap entity was specified, load and process relevant structures
+    elif etype == 'structure':
+      # Query all biological assemblies, exclude the asymmetric unit
+      query = "SELECT DISTINCT biounit FROM Chain WHERE label=%s AND structid=%s AND biounit>0"
+      res   = io.secure_query(query,(args.slabel,entity,),cursorclass='Cursor')
+      biounits = [(entity,r[0]) for r in res]
+      if not biounits:
+        print "No biological assemblies found. Using asymmetric unit."
+        query = "SELECT DISTINCT biounit FROM Chain WHERE label=%s AND structid=%s"
+        res   = io.secure_query(query,(args.slabel,entity,),cursorclass='Cursor')
+        biounits = [(entity,r[0]) for r in res]
+    elif etype == 'model':
+      biounits = [(entity,0)]
+    elif etype == 'unp':
+      res_list  = io.load_unp(entity)
+      biounits = []
+      for etype,entity in res_list:
+        if etype == 'structure':
+          # Query all biological assemblies, exclude the asymmetric unit
+          query = "SELECT DISTINCT biounit FROM Chain WHERE label=%s AND structid=%s AND biounit>0"
+          res   = io.secure_query(query,(args.slabel,entity,),cursorclass='Cursor')
+          biounits += [(entity,r[0]) for r in res]
+        elif etype =='model':
+          biounits += [(entity,0)]    
+    # If relaxation directory is specified, prune biounits w/o relaxed structures
+    if relaxdir and etype!='file':
+      pbio = []
+      print "Checking for relaxed structures..."
+      for structid,biounit in biounits:
+        biopath = "results/%s_%s_wt_relaxation/%s_%s.relaxed.pdb.gz"%(structid.upper(),biounit,structid.upper(),biounit)
+        if os.path.exists(biopath):
+          pbio.append((structid,biounit))
+        else:
+          print "  %s[%s] has no relaxed structure."%(structid,biounit)
+      print "Pruning %d unrelaxed structures."%(len(biounits)-len(pbio))
+      biounits = pbio
+
+    # Determine mutations to test
+    mutations = [(sid,bio,mut) for sid,bio in biounits for mut in muts]
+    print "Total mutations to test for colocalization:",len(mutations)
+    # If multiple mutation specified, do not throw "not found" errors
+    strict = True if len(mutations) < 2 else False
+    # strict = True if len(muts) < 2 else False
+    if args.ppart != None and args.ppidx != None:
+      psize = len(mutations) / args.ppart if args.ppart<len(mutations) else 1 # floor
+      # psize = len(biounits) / args.ppart # floor
+      if (args.ppart-1) == args.ppidx:
+        mutations = mutations[args.ppidx*psize:]
+        # biounits = biounits[args.ppidx*psize:]
+        if len(mutations):
+          print "Analyzing mutations %d to %d"%(args.ppidx*psize,len(mutations))
+      else:
+        mutations = mutations[args.ppidx*psize:(args.ppidx+1)*psize]
+        # biounits = biounits[args.ppidx*psize:(args.ppidx+1)*psize]
+        if len(mutations):
+          print "Analyzing mutations %d to %d"%(args.ppidx*psize,(args.ppidx+1)*psize-1)
+    # Simulate the mutations
+    for sid,bio,mut in mutations:
+      print "\n#####################################\n"
+      print "Testing mutation %s in %s[%s] for disease colocalization"%(mut[1],sid,bio)
+      print "\n#####################################\n"
+      pdbmap.colocalization(sid,bio,[mut],io=io,label=label,strict=strict,relaxdir=relaxdir,refseq=refseq,sfile=sfile,unp=unp)
 
   ## filter ##
   elif args.cmd == "filter":

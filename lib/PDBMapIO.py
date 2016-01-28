@@ -432,7 +432,7 @@ class PDBMapIO(PDBIO):
   def gene_in_db(self,gene,label=-1):
     # None is a valid argument to label
     if label == -1:
-      label=self.slabel
+      label=self.dlabel
     self._connect()
     query  = "SELECT protein FROM GenomicData a "
     query += "INNER JOIN GenomicConsequence b "
@@ -765,6 +765,7 @@ class PDBMapIO(PDBIO):
           self._connect()
           self._c.execute(query,args)
           self._con.commit()
+          vals,args = [],[]
         except:
           self._con.rollback()
           raise
@@ -920,6 +921,8 @@ class PDBMapIO(PDBIO):
       return "model"
     elif self.structure_in_db(entity,label=None):
       return "structure"
+    elif PDBMapProtein.isunp(entity):
+      return "unp"
     elif self.unp_in_db(entity,label=None):
       return "unp"
     else:

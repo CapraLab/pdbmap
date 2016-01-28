@@ -129,7 +129,7 @@ class PDBMapVisualize():
         sys.stderr.write(msg)
         continue # Move to next annotation
       cols = ['model','seqid','chain',anno]
-      out  = [res[col] for col in cols if res[anno]] # Extract columns as rows
+      out  = [[r for i,r in enumerate(res[col]) if res[anno][i]] for col in cols] # Extract columns as rows
       out  = [list(i) for i in zip(*out)]            # Transpose back to columns
       try:
         # For duplicate residues (multi-transcripts, multi-snp codons, etc)

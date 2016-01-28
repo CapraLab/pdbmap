@@ -34,7 +34,7 @@ from rosetta.core.pose import PDBInfo
 
 # replaces the residue at  <resid>  in  <pose>  with  <new_res>  with repacking
 def mutate_residue(pose,mutant_position,mutant_aa,
-                    pack_radius=0.0,pack_scorefxn=None):
+                    pack_radius=8.0,pack_scorefxn=None):
     """
     Replaces the residue at  <mutant_position>  in  <pose>  with  <mutant_aa>
         and repack any residues within  <pack_radius>  Angstroms of the mutating
@@ -71,18 +71,16 @@ def mutate_residue(pose,mutant_position,mutant_aa,
     # Initialize the Rosetta task
     task = rosetta.standard_packer_task(pose)
 
-    # By default, the entire protein is re-designed
-    # Restrict design to residues within the pack_radius
-    # Restrict design to original amino acids (repack only)
-    ## Repack applied to ALL residues per the Kellogg protocol
+    # By default, restrict redesign to 8 Angstrom radius as 
+    # described in the Kellogg low-resolution protocol
     # center = pose.residue( mutant_position ).nbr_atom_xyz()
     for i in range(1,pose.total_residue() + 1 ):
-        # d = center.distance_squared(pose.residue(i).nbr_atom_xyz()) 
-        # # Only repack the mutated residue and any within the pack_radius
-        # if d > pack_radius**2:
-        #     task.nonconst_residue_task(i).prevent_repacking()
-        # else:
-        task.nonconst_residue_task(i).restrict_to_repacking()
+        d = center.distance_squared(pose.residue(i).nbr_atom_xyz()) 
+        # Only repack the mutated residue and any within the pack_radius
+        if d > pack_radius**2:
+            task.nonconst_residue_task(i).prevent_repacking()
+        else:
+            task.nonconst_residue_task(i).restrict_to_repacking()
 
     # Apply the mutation and pack nearby residues
     packer = PackRotamersMover(pack_scorefxn,task)

@@ -118,6 +118,31 @@ class PDBMapStructure(Structure):
     else:
       return result
 
+  def get_residue(self,chain,seqid,model=0,refpos=False,strict=False):
+    if not refpos:
+      try:
+        return self.structure[model][chain][seqid]
+      except:
+        return None
+    else:
+      # Adjust for alignment between reference and structure
+      print "Reference position %d is aligned with PDB position..."%seqid,
+      if seqid in self.structure[model][chain].alignment.seq2pdb:
+        seqid = self.structure[model][chain].alignment.seq2pdb[seqid]
+      else:
+        if strict: raise Exception("PDB cannot map position %d"%seqid)
+        else: print 'NA'; return None
+      print model,chain,seqid
+      # Adjust for alignment between structure and pose
+      print "Structure position %d.%s.%d is aligned with pose position..."%(model,chain,seqid),
+      if seqid in self._pdb2pose[model][chain]:
+        seqid = self._pdb2pose[model][chain][seqid]
+      else:
+        if strict: raise Exception("Pose cannot map position %d"%seqid)
+        else: print 'NA'; return None
+      print model,chain,seqid
+      return self.structure[model][chain][seqid]
+
   def align2refseq(self,sid,refseq):
     for c in self.get_chains():
       refseq = dict((i+1,(r,"NA",0,0,0)) for i,r in enumerate(refseq))
