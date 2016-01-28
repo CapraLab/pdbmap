@@ -18,6 +18,6 @@
 #PBS -l walltime=1:00:00:00
 #=============================================================================#
 
-wget -q -r --no-parent -N --reject -nH -nd --timeout=200000 --tries=100 ftp://ftp.wwpdb.org/pub/pdb/data/structures/all/pdb -P structures/all/pdb
-wget -q -r --no-parent -N --reject -nH -nd --timeout=100000 --tries=100 ftp://ftp.wwpdb.org/pub/pdb/data/biounit/coordinates/all/ -P biounit/coordinates/all
+wget -r --no-parent -N --reject -nH -nd --timeout=200000 --tries=100 ftp://ftp.wwpdb.org/pub/pdb/data/structures/all/pdb -P structures/all/pdb
+wget -r --no-parent -N --reject -nH -nd --timeout=100000 --tries=100 ftp://ftp.wwpdb.org/pub/pdb/data/biounit/coordinates/all/ -P biounit/coordinates/all
 

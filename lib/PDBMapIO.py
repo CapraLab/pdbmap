@@ -792,7 +792,7 @@ class PDBMapIO(PDBIO):
     if useranno:
       supp_select = ",z.* "
       supp_table  = "LEFT JOIN pdbmap_supp.%s AS z ON z.chr=g.chr "%self.dlabel
-      supp_table += "AND z.start=g.start AND z.end=g.end AND z.name=g.name "
+      supp_table += "AND z.start=g.start AND z.name=g.name "
     else:
       supp_select = ''
       supp_table  = ''
@@ -1181,10 +1181,12 @@ class PDBMapIO(PDBIO):
   /*USERANNO*/%s
   WHERE a.label=%%s
   AND (f.transcript IS NULL OR f.transcript=h.transcript)
-  AND (c.method LIKE '%%%%nmr%%%%' OR b.biounit>0 OR NOT ISNULL(d.modelid))
   AND a.structid=%%s AND a.biounit=%%s
   ORDER BY b.unp,a.seqid DESC;
   """
+  # Removing non-asymmetric unit clause since biounit is always specified explicitly anyway
+  # and sometimes the asymmetric unit is wanted. Retaining below:
+  # AND (c.method LIKE '%%%%nmr%%%%' OR b.biounit>0 OR NOT ISNULL(d.modelid))
 
   # Queries all structures and models associated with a given UniProt ID
   unp_query = """SELECT DISTINCT structid FROM Chain WHERE label=%s AND unp=%s;"""
