@@ -852,7 +852,7 @@ class PDBMapIO(PDBIO):
     return PDBMapStructure(s)
 
   def load_unp(self,unpid):
-    """ Identifies all associated structures, then pulls those structures. """
+    """ Identifies all associated structures and models, then pulls those structures. """
     query = PDBMapIO.unp_query
     q = self.secure_query(query,qvars=(self.slabel,unpid),
                                         cursorclass='Cursor')
@@ -922,9 +922,11 @@ class PDBMapIO(PDBIO):
       return "unp"
     elif self.unp_in_db(entity,label=None):
       return "unp"
+    # If a gene, return the associated UniProt ID
+    elif PDBMapProtein.ishgnc(entity):
+      return PDBMapProtein.hgnc2unp(hgnc)
     else:
       isgene,unp = self.gene_in_db(entity,label=None)
-      # If a gene, return the associated UniProt ID
       if isgene:
         return unp
     return None

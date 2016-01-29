@@ -184,6 +184,7 @@ class PDBMapStructure(Structure):
     # Identify and align corresponding transcripts
     # prot2chain = {}
     for chain in self.structure[0]:
+      print "Getting transcripts for %s.%s"%(self.id,chain.id)
       # # If a chain of the same protein has already been solved, use solution
       # # BUT NOTE: must update Alignment->Chain backreference after deep copy
       # if chain.unp in prot2chain:
@@ -195,8 +196,8 @@ class PDBMapStructure(Structure):
       # Query all transcripts associated with the chain's UNP ID
       candidate_transcripts = PDBMapTranscript.query_from_unp(chain.unp)
       if len(candidate_transcripts) < 1:
-        error_msg = "UniProt indicates no EnsEMBL transcripts for %s"%chain.unp
-        raise Exception("ERROR (PDBMapStructure): %s\n"%error_msg)
+        error_msg += "UniProt indicates no EnsEMBL transcripts for %s.%s (%s)"%(self.id,chain.id,chain.unp)
+        # raise Exception("ERROR (PDBMapStructure): %s\n"%error_msg)
       # Align chains candidate transcripts
       alignments = {}
       for trans in candidate_transcripts:
@@ -210,7 +211,7 @@ class PDBMapStructure(Structure):
             alignments[alignment.transcript.gene].append((len(alignment.transcript.sequence),alignment.transcript.transcript,alignment))
         else:
           # Note that at least one transcript was dropped due to low alignment quality
-          error_msg += "%s dropped due to low alignment quality (%.2f); "%(trans.transcript,alignment.perc_identity)
+          error_msg += "%s (%s.%s (%s)) dropped due to low alignment quality (%.2f); "%(trans.transcript,self.id,chain.id,chain.unp,alignment.perc_identity)
       # Store canonical transcript for each gene alignment as element of chain
       chain.alignments = []
       # prot2chain[chain.unp] = []

@@ -388,7 +388,7 @@ class PDBMap():
     select += "INNER JOIN GenomicIntersection b ON a.gc_id=b.gc_id "
     select += "INNER JOIN GenomicData c ON a.gd_id=c.gd_id "
     where   = "WHERE a.label=%s AND consequence LIKE '%%missense_variant%%' "
-    where  += "AND b.structid=%s "
+    where  += "AND b.structid=%s AND LENGTH(ref_amino_acid)=1 "
     # Query natural variation from 1000 Genomes
     print "Querying natural varition from 1000 Genomes..."
     q = select+where
@@ -422,10 +422,17 @@ class PDBMap():
                    2:"[ClinVar] (probably) Pathogenic",3:"[ClinVar] Affects Drug Response",
                    4:"[Cosmic] Somatic"}
 
-    for key,val in sorted(dclass.iteritems(),key=lambda t: (t[1],t[0][0],int(t[0][1][1:-1]))):
-      print "%s\t%s"%(key,code2class[val])
+    print "Variant/Mutation Counts:"
+    for code in code2class:
+      print "%40s:  %d"%(code2class[code],len([val for val in dclass.values() if val==code]))
     print ""
     sys.stdout.flush()
+
+    # for key,val in sorted(dclass.iteritems(),key=lambda t: (t[1],t[0][0],int(t[0][1][1:-1]))):
+    #   print "%s\t%s"%(key,code2class[val])
+    # print ""
+    # sys.stdout.flush()
+
     if not [d for d in dclass.values() if d>1]:
       sys.stderr.write("%s.%s contains no pathogenic/somatic variation.\n"%(structid,biounit))
       return
@@ -489,7 +496,7 @@ class PDBMap():
         res = "%s\t%s\t%s\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%s"
         print res%(label,cand[0],cand[1],crd[0],crd[1],crd[2],cand_scores[i],
                     neut_pcntls[i],path_pcntls[i],
-                    ["Neutral","Deleterious"][int(cand_scores[i])>1])
+                    ["Neutral","Deleterious"][int(int(cand_scores[i])>1.)])
 
     ## Pathogenicity score w.r.t. ClinVar pathogenic variants
     cands = [k for k,v in sorted(dclass.iteritems(),key=lambda t: (t[1],t[0][0],int(t[0][1][1:-1]))) if v==-1]

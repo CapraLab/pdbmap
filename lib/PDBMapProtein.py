@@ -21,10 +21,12 @@ class PDBMapProtein():
 
   _refseq2unp = {}
   _unp2pdb    = {}
-  _unp2ensembltrans = {}
   _unp2ensp   = {}
   _ensp2unp   = {}
   _enst2ensp  = {}
+  _unp2hgnc   = {}
+  _hgnc2unp   = {}
+  _unp2ensembltrans = {}
 
   def __init__(self):
     msg = "ERROR (PDBMapProtein) This class should not be instantiated."
@@ -37,8 +39,18 @@ class PDBMapProtein():
 
   @classmethod
   def unp2ensembltrans(cls,unp):
-    # Return UniProt ID associated with Ensembl Transcript ID
+    # Return Ensembl Transcript ID associated with UniProt ID
     return PDBMapProtein._unp2ensembltrans.get(unp,[])
+
+  @classmethod
+  def unp2hgnc(cls,unp):
+    # Return HGNC gene name associated with UniProt ID
+    return PDBMapProtein._unp2hgnc[unp]
+
+  @classmethod
+  def hgnc2unp(cls,hgnc):
+    # Return HGNC gene name associated with UniProt ID
+    return PDBMapProtein._hgnc2unp[hgnc]
 
   @classmethod
   def unp2ensp(cls,unp):
@@ -66,11 +78,17 @@ class PDBMapProtein():
     return unpid in PDBMapProtein._unp2pdb
 
   @classmethod
+  def ishgnc(cls,hgncid):
+    # Return True if the provided ID is an HGNC ID
+    return hgncic in PDBMapProtein._hgnc2unp
+
+  @classmethod
   def load_idmapping(cls,idmapping_fname):
     # Load UniProt crossreferences, keyed on UniProt
     with open(idmapping_fname) as fin:
       reader = csv.reader(fin,delimiter='\t')
-      for (unp,refseqlist,pdblist,translist,protlist) in reader:
+      for (unp,hgnc,refseqlist,pdblist,translist,protlist) in reader:
+        hgnc       = hgnc.split("_")[0]
         pdblist    = [] if not pdblist else pdblist.strip().split('; ')
         protlist   = [] if not protlist else protlist.strip().split('; ')
         translist  = [] if not translist else translist.strip().split('; ')
@@ -84,6 +102,10 @@ class PDBMapProtein():
           PDBMapProtein._unp2ensembltrans[unp].extend(translist)
         else:
           PDBMapProtein._unp2ensembltrans[unp] = translist
+        ## Map UniProt IDs to HGNC gene names
+        PDBMapProtein._unp2hgnc[unp]  = hgnc
+        ## Map HGNC gene names to UniProt IDs
+        PDBMapProtein._hgnc2unp[hgnc] = unp
         ## Map UniProt IDs to Ensembl Protein IDs
         if unp in PDBMapProtein._unp2ensp:
           PDBMapProtein._unp2ensp[unp].extend(protlist)
