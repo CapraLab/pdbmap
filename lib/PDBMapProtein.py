@@ -80,7 +80,7 @@ class PDBMapProtein():
   @classmethod
   def ishgnc(cls,hgncid):
     # Return True if the provided ID is an HGNC ID
-    return hgncic in PDBMapProtein._hgnc2unp
+    return hgncid in PDBMapProtein._hgnc2unp
 
   @classmethod
   def load_idmapping(cls,idmapping_fname):

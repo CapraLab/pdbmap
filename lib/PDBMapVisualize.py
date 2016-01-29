@@ -67,7 +67,9 @@ class PDBMapVisualize():
         break # all missing annotations filled when the first is found missing
 
     # Determine the first residue for renumbering
-    fres = min(res['trans_seqid'])
+    resrenumber = {}
+    for chain in set(res["chain"]):
+      resrenumber[chain] = min(r for i,r in enumerate(res["aln_trans_seqid"]) if res["chain"][i]==chain)
     # Correct submodel ID for undivided structures
     maxm = len(set(res['model']))
     if maxm < 2:
@@ -176,7 +178,7 @@ class PDBMapVisualize():
       else:
         struct_loc = "%s/biounit/coordinates/all/%s.pdb%s.gz"%(self.pdb_dir,structid,biounit)
       params = {'structid':structid,'biounit':biounit,'anno':anno,'attrf':attrf,'colors':colors,
-                'minval':minval,'maxval':maxval,'resis':out,'struct_loc':struct_loc,'fres':fres}
+                'minval':minval,'maxval':maxval,'resis':out,'struct_loc':struct_loc,'resrenumber':resrenumber}
       self.visualize(params,group=group)
 
   def visualize_unp(self,unpid,anno_list=['maf'],eps=None,mins=None,spectrum_range=[],colors=[]):
@@ -245,8 +247,8 @@ class PDBMapVisualize():
     params['minval'] = "%0.6f"%params['minval']
     params['maxval'] = "%0.6f"%params['maxval']
     params['colors'] = '-' if not params['colors'] else ','.join(params['colors'])
-    keys   = ['structid','biounit','anno','attrf','minval','maxval','struct_loc','res_dir','colors','fres']
-    script = '"lib/PDBMapVisualize.py %s"'%' '.join([str(params[key]) for key in keys])
+    keys   = ['structid','biounit','anno','attrf','minval','maxval','struct_loc','res_dir','colors','resrenumber']
+    script = '"lib/PDBMapVisualize.py %s"'%' '.join([str(params[key]).translate(None,' ') for key in keys])
     cmd    = "TEMP=$PYTHONPATH; unset PYTHONPATH; chimera --nogui --silent --script %s; export PYTHONPATH=$TEMP"%script
     # Allow Mac OSX to use the GUI window
     if platform.system() == 'Darwin':
@@ -416,7 +418,8 @@ if __name__ == '__main__':
   args = sys.argv
   params = {'structid':args[1],'biounit':int(args[2]),'anno':args[3],'attrf':args[4],
             'minval':float(args[5]),'maxval':float(args[6]),'struct_loc':args[7],
-            'res_dir':args[8],'colors':args[9],'resis':[],'fres':args[10]}
+            'res_dir':args[8],'colors':args[9],'resis':[],'resrenumber':args[10]}
+  params["resrenumber"] = eval(params["resrenumber"])
   if params['colors'] != '-':
     params['colors'] = params['colors'].split(',')
   else:
@@ -470,7 +473,10 @@ if __name__ == '__main__':
     rc("color gray,a :/%(anno)s=%(minval)s"%params)
     rc("color gray,a :/%(anno)s<%(minval)s"%params)
   # Renumber residues to reference sequence
-  rc("resrenumber %(fres)s"%params)
+  # This fails for discontinuous chains because numbering remains
+  # sequential regardless of the gap length.
+  # for chain,seqid in params["resrenumber"].iteritems():
+  #   rc("resrenumber %s :.%d"%(chain,seqid))
   # Export the scene
   rc("save %(res_dir)s/%(structid)s_biounit%(biounit)d_%(anno)s.py"%params)
   # Export the image

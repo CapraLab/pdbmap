@@ -924,7 +924,7 @@ class PDBMapIO(PDBIO):
       return "unp"
     # If a gene, return the associated UniProt ID
     elif PDBMapProtein.ishgnc(entity):
-      return PDBMapProtein.hgnc2unp(hgnc)
+      return PDBMapProtein.hgnc2unp(entity)
     else:
       isgene,unp = self.gene_in_db(entity,label=None)
       if isgene:
