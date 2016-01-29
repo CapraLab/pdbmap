@@ -66,6 +66,8 @@ class PDBMapVisualize():
         del nres
         break # all missing annotations filled when the first is found missing
 
+    # Determine the first residue for renumbering
+    fres = min(res['trans_seqid'])
     # Correct submodel ID for undivided structures
     maxm = len(set(res['model']))
     if maxm < 2:
@@ -174,7 +176,7 @@ class PDBMapVisualize():
       else:
         struct_loc = "%s/biounit/coordinates/all/%s.pdb%s.gz"%(self.pdb_dir,structid,biounit)
       params = {'structid':structid,'biounit':biounit,'anno':anno,'attrf':attrf,'colors':colors,
-                'minval':minval,'maxval':maxval,'resis':out,'struct_loc':struct_loc}
+                'minval':minval,'maxval':maxval,'resis':out,'struct_loc':struct_loc,'fres':fres}
       self.visualize(params,group=group)
 
   def visualize_unp(self,unpid,anno_list=['maf'],eps=None,mins=None,spectrum_range=[],colors=[]):
@@ -243,7 +245,7 @@ class PDBMapVisualize():
     params['minval'] = "%0.6f"%params['minval']
     params['maxval'] = "%0.6f"%params['maxval']
     params['colors'] = '-' if not params['colors'] else ','.join(params['colors'])
-    keys   = ['structid','biounit','anno','attrf','minval','maxval','struct_loc','res_dir','colors']
+    keys   = ['structid','biounit','anno','attrf','minval','maxval','struct_loc','res_dir','colors','fres']
     script = '"lib/PDBMapVisualize.py %s"'%' '.join([str(params[key]) for key in keys])
     cmd    = "TEMP=$PYTHONPATH; unset PYTHONPATH; chimera --nogui --silent --script %s; export PYTHONPATH=$TEMP"%script
     # Allow Mac OSX to use the GUI window
@@ -414,7 +416,7 @@ if __name__ == '__main__':
   args = sys.argv
   params = {'structid':args[1],'biounit':int(args[2]),'anno':args[3],'attrf':args[4],
             'minval':float(args[5]),'maxval':float(args[6]),'struct_loc':args[7],
-            'res_dir':args[8],'colors':args[9],'resis':[]}
+            'res_dir':args[8],'colors':args[9],'resis':[],'fres':args[10]}
   if params['colors'] != '-':
     params['colors'] = params['colors'].split(',')
   else:
@@ -467,13 +469,15 @@ if __name__ == '__main__':
     rc("color green,a :/%(anno)s>%(maxval)s"%params)
     rc("color gray,a :/%(anno)s=%(minval)s"%params)
     rc("color gray,a :/%(anno)s<%(minval)s"%params)
+  # Renumber residues to reference sequence
+  rc("resrenumber %(fres)s"%params)
   # Export the scene
   rc("save %(res_dir)s/%(structid)s_biounit%(biounit)d_%(anno)s.py"%params)
   # Export the image
-  rc("copy file %(res_dir)s/%(structid)s_biounit%(biounit)d_struct_%(anno)s.png width 800 height 800 units points dpi 72"%params)
+  rc("copy file %(res_dir)s/%(structid)s_biounit%(biounit)d_struct_%(anno)s.png width 1600 height 1600 units points dpi 72"%params)
   # remove the structure, leaving only the variants
   rc("bonddisplay off")
-  rc("copy file %(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(anno)s.png width 800 height 800 units points dpi 72"%params)
+  rc("copy file %(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(anno)s.png width 1600 height 1600 units points dpi 72"%params)
   rc("close all")
   rc("stop now")
   # Export the movie 
