@@ -306,6 +306,7 @@ class PDBMapParser(PDBParser):
     return s
 
   def get_model(self,model_summary,fname,unp=None):
+    unp = unp if unp else model_summary[17]
     modelid  = model_summary[1]   # Extract the ModBase model ID
     try:
       ext = os.path.basename(fname).split('.')[-1]
@@ -558,10 +559,6 @@ class PDBMapIO(PDBIO):
             tquery += '"%s",%d,%d,%d),'%(chr,start,end,strand)
       queries.append(tquery[:-1])
     except Exception as e:
-      import pdb, traceback, sys
-      type, value, tb = sys.exc_info()
-      traceback.print_exc()
-      pdb.post_mortem(tb)
       msg = "ERROR (PDBMapIO) Failed to get transcripts for %s: %s"%(s.id,str(e).rstrip('\n'))
       raise Exception(msg)
 

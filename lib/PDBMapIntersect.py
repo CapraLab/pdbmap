@@ -55,7 +55,7 @@ class PDBMapIntersect():
       self.io.secure_command(query,(dlabel,))
     return(-1) # No row feedback for quick-intersect
 
-  def intersect(self,dlabel,slabel=None,dtype='Genomic',buffer_size=1):
+  def intersect(self,dlabel=None,slabel=None,dtype='Genomic',buffer_size=1):
     # Intersects a structure set with a dataset using intersectBed
     # Slow, but intersection pointers are stored permanently (1-time op)
     # dtype options: Genomic, [Protein, Structural]
@@ -68,7 +68,10 @@ class PDBMapIntersect():
       if dtype == 'Genomic':
         query  = "SELECT a.chr,a.start-1,a.end-1,a.gc_id,a.transcript FROM "
         query += "GenomicConsequence as a INNER JOIN GenomicData as b "
-        query += "ON a.label=%s AND a.label=b.label AND a.chr=b.chr AND a.start=b.start AND a.end=b.end "
+        query += "ON a.label=b.label AND a.chr=b.chr AND a.start=b.start AND a.end=b.end "
+        query += "AND a.transcript!='' "
+        if dlabel:
+          query += "WHERE a.label=%s "
         #query += "WHERE (a.consequence LIKE '%%missense_variant' OR a.consequence LIKE '%%synonymous_variant')"
       elif dtype == 'Protein':
         msg = "ERROR (PDBMapIntersect) Protein intersection not implemented."
@@ -81,7 +84,10 @@ class PDBMapIntersect():
         raise Exception(msg%dtype)
       with open(temp1,'wb') as fout:
         writer = csv.writer(fout,delimiter='\t')
-        data = self.io.secure_query(query,(dlabel,),cursorclass='SSCursor')
+        if dlabel:
+          data = self.io.secure_query(query,(dlabel,),cursorclass='SSCursor')
+        else:
+          data = self.io.secure_query(query,cursorclass='SSCursor')
         print " # Fetching PDBMap::GenomicConsequence,GenomicData #"
         for row in data:
           writer.writerow(row)

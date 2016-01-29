@@ -103,7 +103,7 @@ class PDBMapModel(Structure):
       return self.transcripts
     for chain in self.structure[0]:
       # Query all transcripts associated with the chain's UNP ID
-      candidate_transcripts = PDBMapTranscript.query_from_unp(chain.unp)
+      candidate_transcripts = PDBMapTranscript.query_from_unp(self.unp)
       # But limit to those relevant to this model's template ENSP, if specified
       if "ENSP" in self.id:
         candidate_transcripts = [ct for ct in candidate_transcripts if

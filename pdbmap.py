@@ -126,10 +126,7 @@ class PDBMap():
     # Check if model is already in the database
     modelid = model_summary[1] # extract ModBase model ID
     if io.model_in_db(modelid,label):
-      # msg  = "WARNING (PDBMapIO) Model %s "%modelid
-      # msg += "already in database. Skipping.\n"
-      # sys.stderr.write(msg)
-      msg = "VALID (PDBMap) %s already in database.\n"%pdbid
+      msg = "VALID (PDBMap) %s already in database.\n"%modelid
       return 0
 
     # Load the ModBase model
@@ -152,7 +149,7 @@ class PDBMap():
       msg = "ERROR (PDBMap) %s: %s\n"%(modelid,str(e))
       sys.stderr.write(msg)
       return 1
-    msg = "VALID (PDBMap) %s complete.\n"%pdbid
+    msg = "VALID (PDBMap) %s complete.\n"%modelid
     sys.stderr.write(msg)
     return 0
 
@@ -1011,11 +1008,18 @@ __  __  __
                       sprot=args.sprot)
     if not args.slabel:
       args.slabel = 'manual'
+    if len(args.args)<1: 
+      msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> load_model model_summary model[,model,...]\n"
+      msg += "   or: pdbmap.py -c conf_file --slabel=<slabel> load_model model_summary modeldir/*"
+      msg += "   or: pdbmap.py -c conf_file --slabel=<slabel> load_model all"
     if not len(args.args) > 1:
       msg = "ERROR (PDBMap): Must include model summary file with load_model"
       raise Exception(msg)
     model_summary = args.args[0]
-    if "*" in args.args[1]:
+    if args.args[1] in ['all','*']:
+      model_summary = args.modbase_summary
+      models = glob.glob("%s/*"%args.modbase_dir)
+    elif "*" in args.args[1]:
       models = glob.glob(args.args[1])
     else:
       models        = args.args[1:]
@@ -1113,9 +1117,9 @@ __  __  __
 
   ## intersect ##
   elif args.cmd == "intersect":
-    if not (args.slabel and args.dlabel):
-      msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> --dlabel=<data_name> intersect [quick]\n"
-      print msg; sys.exit(1)
+    # if not (args.slabel and args.dlabel):
+    msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> --dlabel=<data_name> intersect [quick]\n"
+      # print msg; sys.exit(1)
     pdbmap = PDBMap()
     # msg  = "WARNING (PDBMap) If loading data, intersections may be automatically applied.\n"
     # sys.stderr.write(msg)
@@ -1123,10 +1127,17 @@ __  __  __
     slabel = args.slabel
     quick  = True if len(args.args)>0 and args.args[0].lower() in ['1','true','yes','quick','fast'] else False
     # nrows = QUICK_THRESH+1 if len(args.args) < 3 else int(args.args[2])
-    print "## Intersecting %s with %s ##"%(dname,slabel)
+    if dname and slabel:
+      print "## Intersecting %s with %s ##"%(dname,slabel)
+    elif dname:
+      print "## Intersecting %s with all structures/models ##"%dname
+    elif slabel:
+      print "## Intersecting all genetic datasets with %s ##"%slabel
+    else:
+      print "## Intersecting all genetic datasets with all structures/models ##"
     # quick = True if nrows < QUICK_THRESH else False
     print [" # (This may take a while) #"," # Using quick-intersect #"][int(quick)]
-    nrows = pdbmap.intersect_data(dname,slabel=slabel,quick=quick)
+    nrows = pdbmap.intersect_data(dname,slabel,quick=quick)
     print " # %d intersection rows uploaded."%nrows
 
   ## mutate ##
@@ -1244,6 +1255,7 @@ __  __  __
     if len(args.args) < 1:
       msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> colocalization entity unp mut1[,mut2,...] [relaxdir] [fastafile]"
       print msg; sys.exit(1)
+    args.slabel = args.slabel if args.slabel else "uniprot-pdb"
     pdbmap = PDBMap(idmapping=args.idmapping)
     entity = args.args[0]
     if os.path.exists(entity):
@@ -1257,6 +1269,9 @@ __  __  __
     else:
       io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,slabel=args.slabel)
       etype = io.detect_entity_type(entity)
+      if not etype:
+        sys.stderr.write("%s is not a recognized entity. Terminating...\n"%entity)
+        sys.exit(1)
       sfile = None
       label = "%s_colocalization_%s"%(entity,str(time.strftime("%Y%m%d")))
     if not os.path.exists("results/%s"%label):
@@ -1300,7 +1315,7 @@ __  __  __
         res   = io.secure_query(query,(args.slabel,entity,),cursorclass='Cursor')
         biounits = [(entity,r[0]) for r in res]
     elif etype == 'model':
-      biounits = [(entity,0)]
+      biounits = [(entity,-1)]
     elif etype == 'unp':
       res_list  = io.load_unp(entity)
       biounits = []
@@ -1311,7 +1326,10 @@ __  __  __
           res   = io.secure_query(query,(args.slabel,entity,),cursorclass='Cursor')
           biounits += [(entity,r[0]) for r in res]
         elif etype =='model':
-          biounits += [(entity,0)]    
+          biounits += [(entity,-1)]
+    else:
+      sys.stderr.write("Entity type %s not recognized. Terminating...\n"%etype)
+      sys.exit(1)
     # If relaxation directory is specified, prune biounits w/o relaxed structures
     if relaxdir and etype!='file':
       pbio = []
@@ -1347,8 +1365,8 @@ __  __  __
     # Simulate the mutations
     for sid,bio,mut in mutations:
       print "\n#####################################\n"
-      print "Testing mutation %s in %s[%s] for disease colocalization"%(mut[1],sid,bio)
-      print "\n#####################################\n"
+      print "Testing mutation %s in %s[%s] for disease colocalization\n"%(mut[1],sid,bio)
+      # print "\n#####################################\n"
       pdbmap.colocalization(sid,bio,[mut],io=io,label=label,strict=strict,relaxdir=relaxdir,refseq=refseq,sfile=sfile,unp=unp)
 
   ## filter ##
