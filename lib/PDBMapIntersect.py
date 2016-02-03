@@ -66,7 +66,7 @@ class PDBMapIntersect():
     try: # Ensure proper file cleanup
       # Query and write data ranges to temp file
       if dtype == 'Genomic':
-        query  = "SELECT a.chr,a.start-1,a.end-1,a.gc_id,a.transcript FROM "
+        query  = "SELECT a.chr,a.start-1,a.end-1,a.gc_id,a.transcript,a.label FROM "
         query += "GenomicConsequence as a INNER JOIN GenomicData as b "
         query += "ON a.label=b.label AND a.chr=b.chr AND a.start=b.start AND a.end=b.end "
         query += "AND a.transcript!='' "
@@ -93,7 +93,7 @@ class PDBMapIntersect():
           writer.writerow(row)
 
       # Query and write PDBMap ranges to temp file, adjusted for UCSC indexing
-      query  = "SELECT chr,start-1,end-1,structid,chain,chain_seqid,a.transcript FROM "
+      query  = "SELECT chr,start-1,end-1,structid,chain,chain_seqid,a.transcript,a.label FROM "
       query += "Transcript as a "
       query += "INNER JOIN Alignment as b "
       query += "ON a.label=b.label AND a.transcript=b.transcript AND a.seqid=b.trans_seqid "
@@ -121,7 +121,7 @@ class PDBMapIntersect():
       p = sp.Popen(cmd,stdout=sp.PIPE)
       parser = process_parser(p)
       nrows = self.io.upload_intersection(parse_intersection(parser),
-                      dlabel=dlabel,slabel=slabel,buffer_size=buffer_size)
+                      buffer_size=buffer_size)
 
       # Remove temp files only if no exception
       #sp.check_call(["rm","-f",temp1])
@@ -159,19 +159,19 @@ def parse_intersection(parser):
     line = line.strip()
     if not line or line[0] == "#": continue
     row = line.split('\t')
-    if len(row) < 12 or not row[4]:
+    if len(row) < 14 or not row[4]:
       # No transcript info from GenomicConsequence
-      d_chr,d_start,d_end,gc_id,t_chr,t_start,t_end, \
-      pdbid,chain,seqid,t_trans = row
+      d_chr,d_start,d_end,gc_id,d_label,t_chr,t_start,t_end, \
+      pdbid,chain,seqid,t_trans,slabel = row
     else:
       # Transcript checks only if transcript info available
-      d_chr,d_start,d_end,gc_id,d_trans,t_chr,t_start,t_end, \
-      pdbid,chain,seqid,t_trans = row
+      d_chr,d_start,d_end,gc_id,d_trans,d_label,t_chr,t_start,t_end, \
+      pdbid,chain,seqid,t_trans,s_label = row
       if d_trans != t_trans: continue # Not the same transcript
     seqid = int(seqid)
     gc_id = int(gc_id)
     # Return the direct reference
-    yield (pdbid,chain,seqid,gc_id)
+    yield (d_label,s_label,pdbid,chain,seqid,gc_id)
 
 # Main check
 if __name__== "__main__":

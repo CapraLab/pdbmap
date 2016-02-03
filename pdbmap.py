@@ -331,6 +331,7 @@ class PDBMap():
   def colocalization(self,structid,biounit,muts,io,label=None,strict=True,relaxdir=False,refseq=None,sfile=None,unp=None):
     ## Prepare the structure coordinate file
     p  = PDBParser()
+    modelflag = False
     if sfile:
       bio = sfile
     # Otherwise, use coordinates from the biological assembly or relaxed biological assembly
@@ -346,13 +347,13 @@ class PDBMap():
       elif biounit == 0:
         bio = "%s/structures/all/pdb/pdb%s.ent.gz"%(args.pdb_dir,structid.lower())
       else:
+        modelflag = True
         bio = "%s/models/model/%s.pdb.gz"%(args.modbase_dir,structid.upper())
         if not os.path.exists(bio):
-          print "Converting .xz to .gz"
           cmd = "xz -d %s; gzip %s"%('.'.join(bio.split('.')[:-1])+'.xz','.'.join(bio.split('.')[:-1]))
-          print cmd
           os.system(cmd)
         biounit = 0
+    print "Reading coordinates from %s..."%bio
     with gzip.open(bio,'rb') as fin:
       from warnings import filterwarnings,resetwarnings
       from Bio.PDB.PDBExceptions import PDBConstructionWarning
@@ -364,7 +365,7 @@ class PDBMap():
     s = p.process_structure(s,force=True)
     s = PDBMapStructure.PDBMapStructure(s,refseq=refseq,pdb2pose={})
 
-    if unp:
+    if unp and not modelflag:
       # If this structure is in PDBMap (not provided by file), query the UNP chains
       select = "SELECT distinct chain FROM Chain "
       where  = "WHERE label=%s AND structid=%s AND biounit=%s AND unp=%s"
@@ -372,50 +373,93 @@ class PDBMap():
       muts = [(c[0],m[1]) for m in muts for c in unp_chains]
     else:
       # If not, assume all chains match the UNP
-      muts = [(c.id,m) for m in muts for c in s.get_chains()]
+      muts = [(c.id,m[1]) for m in muts for c in s.get_chains()]
 
     ## Check that at least one candidate mutation is present in the structure
     present = False
     muts = [m for m in muts if s.get_residue(m[0],int(m[1][1:-1]))]
     if not muts:
       sys.stderr.write("Structure %s.%s contains none of the candidate mutations.\n"%(structid,biounit))
+      for mut in muts:
+        sys.stderr.write("  %s: %s\n"%m)
+      sys.stderr.write("\n\n")
+      for chain in s[0]:
+        resis = [r.id[1] for r in chain]
+        sys.stderr.write("  Chain %s sequence coverage: %d:%d\n"%(chain.id,min(resis),max(resis)))
       return
 
     ## Build the variant datasets, pathogenic supercedes benign, candidate supercedes pathogenic
-    dclass = {}
+    dclass,align = {},{}
     # Build the query template
-    select  = "SELECT distinct chain,ref_amino_acid,protein_pos,alt_amino_acid FROM GenomicConsequence a "
+    select  = "SELECT distinct chain,ref_amino_acid,protein_pos,alt_amino_acid,seqid FROM GenomicConsequence a "
     select += "INNER JOIN GenomicIntersection b ON a.gc_id=b.gc_id "
     select += "INNER JOIN GenomicData c ON a.gd_id=c.gd_id "
-    where   = "WHERE a.label=%s AND consequence LIKE '%%missense_variant%%' "
+    where   = "WHERE b.slabel='uniprot-pdb' and a.label=%s AND consequence LIKE '%%missense_variant%%' "
     where  += "AND b.structid=%s AND LENGTH(ref_amino_acid)=1 "
     # Query natural variation from 1000 Genomes
-    print "Querying natural varition from 1000 Genomes..."
+    print "Querying natural variation from 1000 Genomes..."
     q = select+where
-    dclass.update(dict(((row[0],''.join([str(r) for r in row[1:]])),0) for row in io.secure_query(q,("1kg3",structid),cursorclass="Cursor")))
+    print q%("1kg3",structid)
+    res = [row for row in io.secure_query(q,("1kg3",structid),cursorclass="Cursor")]
+    dclass.update(dict(((row[0],''.join([str(r) for r in row[1:-1]])),0) for row in res))
+    align.update(dict((row[2],row[-1]) for row in res))
+    # dclass.update(dict(((row[0],''.join([str(r) for r in row[1:]])),0) for row in io.secure_query(q,("1kg3",structid),cursorclass="Cursor")))
     # Query somatic mutations from Cosmic
     print "Querying somatic mutations from Cosmic..."
-    q = select+where
-    dclass.update(dict(((row[0],''.join([str(r) for r in row[1:]])),4) for row in io.secure_query(q,("cosmic",structid),cursorclass="Cursor")))
+    rcrnt   = "INNER JOIN pdbmap_supp.cosmic d "
+    rcrnt  += " ON c.chr=d.chr and c.start=d.start "
+    rcrnt  += " AND d.cnt>1 "
+    q = select+rcrnt+where
+    res = [row for row in io.secure_query(q,("cosmic",structid),cursorclass="Cursor")]
+    dclass.update(dict(((row[0],''.join([str(r) for r in row[1:-1]])),4) for row in res))
+    align.update(dict((row[2],row[-1]) for row in res))
+    # dclass.update(dict(((row[0],''.join([str(r) for r in row[1:]])),4) for row in io.secure_query(q,("cosmic",structid),cursorclass="Cursor")))
     # Query (likely) benign variation from ClinVar
     print "Querying (likely) benign variation from ClinVar..."
     select += "INNER JOIN pdbmap_supp.clinvar d "
     select += "ON c.chr=d.chr and c.start=d.start "
     benign  = "AND d.clnsig in (2,3)"
     q = select+where+benign
-    dclass.update(dict(((row[0],''.join([str(r) for r in row[1:]])),1) for row in io.secure_query(q,("clinvar",structid),cursorclass="Cursor")))
+    res = [row for row in io.secure_query(q,("clinvar",structid),cursorclass="Cursor")]
+    dclass.update(dict(((row[0],''.join([str(r) for r in row[1:-1]])),1) for row in res))
+    align.update(dict((row[2],row[-1]) for row in res))
+    # dclass.update(dict(((row[0],''.join([str(r) for r in row[1:]])),1) for row in io.secure_query(q,("clinvar",structid),cursorclass="Cursor")))
     # Query (probably) pathogenic variation from ClinVar
     print "Querying (probably) pathogenic variation from ClinVar..."
     pathgen = "AND d.clnsig in (4,5)"
     q = select+where+pathgen
-    dclass.update(dict(((row[0],''.join([str(r) for r in row[1:]])),2) for row in io.secure_query(q,("clinvar",structid),cursorclass="Cursor")))
+    res = [row for row in io.secure_query(q,("clinvar",structid),cursorclass="Cursor")]
+    dclass.update(dict(((row[0],''.join([str(r) for r in row[1:-1]])),2) for row in res))
+    align.update(dict((row[2],row[-1]) for row in res))
+    # dclass.update(dict(((row[0],''.join([str(r) for r in row[1:]])),2) for row in io.secure_query(q,("clinvar",structid),cursorclass="Cursor")))
     # Query drug response-affecting variation from ClinVar
     print "Querying drug response-affecting variation from ClinVar..."
     drugaff = "AND d.clnsig=7"
     q = select+where+drugaff
-    dclass.update(dict(((row[0],''.join([str(r) for r in row[1:]])),3) for row in io.secure_query(q,("clinvar",structid),cursorclass="Cursor")))
+    res = [row for row in io.secure_query(q,("clinvar",structid),cursorclass="Cursor")]
+    dclass.update(dict(((row[0],''.join([str(r) for r in row[1:-1]])),3) for row in res))
+    align.update(dict((row[2],row[-1]) for row in res))
+    # dclass.update(dict(((row[0],''.join([str(r) for r in row[1:]])),3) for row in io.secure_query(q,("clinvar",structid),cursorclass="Cursor")))
     # Add candidate mutations, overwrite previous entries if conflicted
     dclass.update(dict((m,-1) for m in muts))
+    # Query the alignment
+    print "Checking database for %s->%s alignment..."%(unp,structid)
+    select  = "SELECT trans_seqid,chain_seqid,b.transcript from Alignment a "
+    select += "INNER JOIN Transcript b ON a.tr_id=b.tr_id "
+    where   = "where a.label='uniprot-pdb' and structid=%s and chain=%s and trans_seqid=%s "#and canonical=1 
+    q = select+where
+    res = [row for row in io.secure_query(q,(structid,m[0],m[1][1:-1]),cursorclass="Cursor")]
+    align.update(dict((row[0],row[1]) for row in res))
+
+    if modelflag:
+      # Reconcile PDBMap and ModBase chain-naming conventions
+      for oldkey,val in dclass.items():
+        if oldkey[0]=="A":
+          key = (" ",oldkey[1])
+          dclass[key] = val
+          del dclass[oldkey]
+      # Ensure that mutations still take precedence
+      dclass.update(dict((m,-1) for m in muts))
 
     ## Keep a long-form description of each dataset
     code2class = {-1:"Candidate Mutation",0:"[1KGp3v5a] Natural",1:"[ClinVar] (likely) Benign",
@@ -423,29 +467,25 @@ class PDBMap():
                    4:"[Cosmic] Somatic"}
 
     print "Variant/Mutation Counts:"
-    for code in code2class:
+    for code in sorted(code2class.keys()):
       print "%40s:  %d"%(code2class[code],len([val for val in dclass.values() if val==code]))
     print ""
     sys.stdout.flush()
 
-    # for key,val in sorted(dclass.iteritems(),key=lambda t: (t[1],t[0][0],int(t[0][1][1:-1]))):
-    #   print "%s\t%s"%(key,code2class[val])
-    # print ""
-    # sys.stdout.flush()
-
-    if not [d for d in dclass.values() if d>1]:
-      sys.stderr.write("%s.%s contains no pathogenic/somatic variation.\n"%(structid,biounit))
+    if len([d for d in dclass.values() if d>1])<2:
+      sys.stderr.write("%s.%s contains insufficient pathogenic/somatic variation.\n"%(structid,biounit))
       return
-    if not [d for d in dclass.values() if d in [0,1]]:
-      sys.stderr.write("%s.%s contains no neutral variation.\n"%(structid,biounit))
+    if len([d for d in dclass.values() if d in [0,1]])<2:
+      sys.stderr.write("%s.%s contains insufficient neutral variation.\n"%(structid,biounit))
       return
     print ""
 
     ## Determine the structural coordinates of each mutation/variant (center of mass)
     def resicom(resi):
       if not resi: return None
-      return np.array([np.array(a.get_coord()) for a in resi.get_unpacked_list()]).mean(axis=0)
-    coords = dict((m,resicom(s.get_residue(m[0],int(m[1][1:-1])))) for m in dclass.keys())
+      return np.array([np.array(a.get_coord()) for a in resi.get_unpacked_list()]).mean(axis=0)      
+
+    coords = dict((m,resicom(s.get_residue(m[0],int(align[int(m[1][1:-1])])))) for m in dclass.keys())
     # Remove mutations/variants without coordinates in this structure
     coords = dict((key,val) for key,val in coords.iteritems() if val!=None)
     dclass = dict((key,val) for key,val in dclass.iteritems() if key in coords)
@@ -464,10 +504,14 @@ class PDBMap():
       for var in cands:
         kdt        = KDTree(np.array([coords[var2] for var2 in neut if var!=var2]))
         dist,_     = kdt.query(coords[var],num_neut-1)
-        neut_score = np.sum([WAP(1,1,d) for d in dist])
+        if type(dist) != list:
+          dist = [dist]
+        neut_score = np.sum([WAP(1,1,d) for d in dist])/num_neut
         kdt        = KDTree(np.array([coords[var2] for var2 in path if var!=var2]))
         dist,_     = kdt.query(coords[var],num_path-1)
-        path_score = np.sum([WAP(1,1,d) for d in dist])
+        if type(dist) != list:
+          dist = [dist]
+        path_score = np.sum([WAP(1,1,d) for d in dist])/num_path
         cand_scores.append(path_score / neut_score)
       return cand_scores
     def rank_cand_mutations(cands,neuts,paths,coords,label="ClinVar"):
@@ -503,17 +547,22 @@ class PDBMap():
     neuts = [k for k,v in sorted(dclass.iteritems(),key=lambda t: (t[1],t[0][0],int(t[0][1][1:-1]))) if v in [0,1]]
     paths = [k for k,v in sorted(dclass.iteritems(),key=lambda t: (t[1],t[0][0],int(t[0][1][1:-1]))) if v==2]
     if paths:
+      print "Calculating pathogenicity score..."
       rank_cand_mutations(cands,neuts,paths,coords,label="Path")
 
     ## Pathogenicity score w.r.t. ClinVar drug response-affecting variants
     paths = [k for k,v in sorted(dclass.iteritems(),key=lambda t: (t[1],t[0][0],int(t[0][1][1:-1]))) if v==3]
     if paths:
+      print "Calculating drug response score..."
       rank_cand_mutations(cands,neuts,paths,coords,label="Drug")
 
     ## Pathogenicity score w.r.t. Cosmic somatic variants
     paths = [k for k,v in sorted(dclass.iteritems(),key=lambda t: (t[1],t[0][0],int(t[0][1][1:-1]))) if v==4]
     if paths:
+      print "calculating somatic score..."
       rank_cand_mutations(cands,neuts,paths,coords,label="Somatic")
+
+    print "Colocalization analysis complete."
 
   def mutate(self,structid,biounit,muts,label=None,strict=True,relaxdir=False,refseq=None,sfile=None):
     if sfile:
