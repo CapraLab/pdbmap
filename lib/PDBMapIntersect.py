@@ -39,7 +39,7 @@ class PDBMapIntersect():
       msg = "ERROR (PDBMapIntersect) %s intersection is not a valid option."
       raise Exception(msg%dtype)
     query  = "INSERT IGNORE INTO GenomicIntersection "
-    query += "SELECT a.label,c.label,c.structid,c.chain,c.chain_seqid,a.gc_id "
+    query += "SELECT a.label,c.label,c.structid,c.chain,c.chain_seqid,a.gc_id,NULL,a.gd_id,c.res_id "
     query += "FROM GenomicConsequence as a "
     query += "INNER JOIN Transcript as b "
     query += "ON (a.transcript='' OR a.transcript=b.transcript) AND a.chr=b.chr "

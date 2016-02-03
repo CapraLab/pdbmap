@@ -321,6 +321,7 @@ class PDBMapParser(PDBParser):
       filterwarnings('ignore',category=PDBConstructionWarning)
       s = p.get_structure(modelid,fin)
       resetwarnings()
+      fin.close()
       m = PDBMapModel(s,model_summary)
     except Exception as e:
       msg = "ERROR (PDBMapIO) Error while parsing %s: %s"%(modelid,str(e).replace('\n',' '))

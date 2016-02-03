@@ -126,7 +126,8 @@ class PDBMap():
     # Check if model is already in the database
     modelid = model_summary[1] # extract ModBase model ID
     if io.model_in_db(modelid,label):
-      msg = "VALID (PDBMap) %s already in database.\n"%modelid
+      msg = "VALID (PDBMap) %s (%s) already in database.\n"%(modelid,label)
+      print msg
       return 0
 
     # Load the ModBase model
@@ -142,7 +143,10 @@ class PDBMap():
         return 1
     try:
       p = PDBMapIO.PDBMapParser()
+      print "Loading %s (%s) from %s..."%(modelid,unp,model_fname)
       m = p.get_model(model_summary,model_fname,unp=unp)
+      print "Successful! Model:"
+      print m
       io.set_structure(m)
       io.upload_model()
     except Exception as e:
@@ -328,7 +332,7 @@ class PDBMap():
       # raise Exception(msg)
       raise
 
-  def colocalization(self,structid,biounit,muts,io,label=None,strict=True,relaxdir=False,refseq=None,sfile=None,unp=None):
+  def colocalization(self,structid,biounit,muts,io,label=None,strict=True,relaxdir=False,refseq=None,sfile=None,unp=None,slabel=None):
     ## Prepare the structure coordinate file
     p  = PDBParser()
     modelflag = False
@@ -354,12 +358,13 @@ class PDBMap():
           os.system(cmd)
         biounit = 0
     print "Reading coordinates from %s..."%bio
-    with gzip.open(bio,'rb') as fin:
-      from warnings import filterwarnings,resetwarnings
-      from Bio.PDB.PDBExceptions import PDBConstructionWarning
-      filterwarnings('ignore',category=PDBConstructionWarning)
-      s = p.get_structure(structid,fin)
-      resetwarnings()
+    fin = gzip.open(bio,'rb') if bio.split('.')[-1]=="gz" else open(bio,'rb')
+    from warnings import filterwarnings,resetwarnings
+    from Bio.PDB.PDBExceptions import PDBConstructionWarning
+    filterwarnings('ignore',category=PDBConstructionWarning)
+    s = p.get_structure(structid,fin)
+    resetwarnings()
+    fin.close()
 
     p = PDBMapIO.PDBMapParser()
     s = p.process_structure(s,force=True)
@@ -394,13 +399,12 @@ class PDBMap():
     select  = "SELECT distinct chain,ref_amino_acid,protein_pos,alt_amino_acid,seqid FROM GenomicConsequence a "
     select += "INNER JOIN GenomicIntersection b ON a.gc_id=b.gc_id "
     select += "INNER JOIN GenomicData c ON a.gd_id=c.gd_id "
-    where   = "WHERE b.slabel='uniprot-pdb' and a.label=%s AND consequence LIKE '%%missense_variant%%' "
+    where   = "WHERE b.slabel=%s and a.label=%s AND consequence LIKE '%%missense_variant%%' "
     where  += "AND b.structid=%s AND LENGTH(ref_amino_acid)=1 "
     # Query natural variation from 1000 Genomes
     print "Querying natural variation from 1000 Genomes..."
     q = select+where
-    print q%("1kg3",structid)
-    res = [row for row in io.secure_query(q,("1kg3",structid),cursorclass="Cursor")]
+    res = [row for row in io.secure_query(q,(slabel,"1kg3",structid),cursorclass="Cursor")]
     dclass.update(dict(((row[0],''.join([str(r) for r in row[1:-1]])),0) for row in res))
     align.update(dict((row[2],row[-1]) for row in res))
     # dclass.update(dict(((row[0],''.join([str(r) for r in row[1:]])),0) for row in io.secure_query(q,("1kg3",structid),cursorclass="Cursor")))
@@ -410,7 +414,7 @@ class PDBMap():
     rcrnt  += " ON c.chr=d.chr and c.start=d.start "
     rcrnt  += " AND d.cnt>1 "
     q = select+rcrnt+where
-    res = [row for row in io.secure_query(q,("cosmic",structid),cursorclass="Cursor")]
+    res = [row for row in io.secure_query(q,(slabel,"cosmic",structid),cursorclass="Cursor")]
     dclass.update(dict(((row[0],''.join([str(r) for r in row[1:-1]])),4) for row in res))
     align.update(dict((row[2],row[-1]) for row in res))
     # dclass.update(dict(((row[0],''.join([str(r) for r in row[1:]])),4) for row in io.secure_query(q,("cosmic",structid),cursorclass="Cursor")))
@@ -420,7 +424,7 @@ class PDBMap():
     select += "ON c.chr=d.chr and c.start=d.start "
     benign  = "AND d.clnsig in (2,3)"
     q = select+where+benign
-    res = [row for row in io.secure_query(q,("clinvar",structid),cursorclass="Cursor")]
+    res = [row for row in io.secure_query(q,(slabel,"clinvar",structid),cursorclass="Cursor")]
     dclass.update(dict(((row[0],''.join([str(r) for r in row[1:-1]])),1) for row in res))
     align.update(dict((row[2],row[-1]) for row in res))
     # dclass.update(dict(((row[0],''.join([str(r) for r in row[1:]])),1) for row in io.secure_query(q,("clinvar",structid),cursorclass="Cursor")))
@@ -428,7 +432,7 @@ class PDBMap():
     print "Querying (probably) pathogenic variation from ClinVar..."
     pathgen = "AND d.clnsig in (4,5)"
     q = select+where+pathgen
-    res = [row for row in io.secure_query(q,("clinvar",structid),cursorclass="Cursor")]
+    res = [row for row in io.secure_query(q,(slabel,"clinvar",structid),cursorclass="Cursor")]
     dclass.update(dict(((row[0],''.join([str(r) for r in row[1:-1]])),2) for row in res))
     align.update(dict((row[2],row[-1]) for row in res))
     # dclass.update(dict(((row[0],''.join([str(r) for r in row[1:]])),2) for row in io.secure_query(q,("clinvar",structid),cursorclass="Cursor")))
@@ -436,7 +440,7 @@ class PDBMap():
     print "Querying drug response-affecting variation from ClinVar..."
     drugaff = "AND d.clnsig=7"
     q = select+where+drugaff
-    res = [row for row in io.secure_query(q,("clinvar",structid),cursorclass="Cursor")]
+    res = [row for row in io.secure_query(q,(slabel,"clinvar",structid),cursorclass="Cursor")]
     dclass.update(dict(((row[0],''.join([str(r) for r in row[1:-1]])),3) for row in res))
     align.update(dict((row[2],row[-1]) for row in res))
     # dclass.update(dict(((row[0],''.join([str(r) for r in row[1:]])),3) for row in io.secure_query(q,("clinvar",structid),cursorclass="Cursor")))
@@ -446,10 +450,16 @@ class PDBMap():
     print "Checking database for %s->%s alignment..."%(unp,structid)
     select  = "SELECT trans_seqid,chain_seqid,b.transcript from Alignment a "
     select += "INNER JOIN Transcript b ON a.tr_id=b.tr_id "
-    where   = "where a.label='uniprot-pdb' and structid=%s and chain=%s and trans_seqid=%s "#and canonical=1 
+    where   = "where a.label=%s and structid=%s and chain=%s and trans_seqid=%s "#and canonical=1 
     q = select+where
-    res = [row for row in io.secure_query(q,(structid,m[0],m[1][1:-1]),cursorclass="Cursor")]
+    print "Alignment query:"
+    print q%(slabel,structid,m[0],m[1][1:-1])
+    res = [row for row in io.secure_query(q,(slabel,structid,m[0],m[1][1:-1]),cursorclass="Cursor")]
     align.update(dict((row[0],row[1]) for row in res))
+
+    print "Alignment:"
+    for key,val in align.iteritems():
+      print "%4s -> %4s"%(key,val)
 
     if modelflag:
       # Reconcile PDBMap and ModBase chain-naming conventions
@@ -1066,8 +1076,9 @@ __  __  __
       args.slabel = 'manual'
     if len(args.args)<1: 
       msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> load_model model_summary model[,model,...]\n"
-      msg += "   or: pdbmap.py -c conf_file --slabel=<slabel> load_model model_summary modeldir/*"
+      msg += "   or: pdbmap.py -c conf_file --slabel=<slabel> load_model model_summary modeldir/*\n"
       msg += "   or: pdbmap.py -c conf_file --slabel=<slabel> load_model all"
+      print msg; sys.exit(1)
     if not len(args.args) > 1:
       msg = "ERROR (PDBMap): Must include model summary file with load_model"
       raise Exception(msg)
@@ -1314,6 +1325,7 @@ __  __  __
     args.slabel = args.slabel if args.slabel else "uniprot-pdb"
     pdbmap = PDBMap(idmapping=args.idmapping)
     entity = args.args[0]
+    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,slabel=args.slabel)
     if os.path.exists(entity):
       if os.path.isfile(entity):
         etype = "file"
@@ -1323,7 +1335,6 @@ __  __  __
         structid,bio = '.'.join(os.path.basename(entity).split('.')[:-exts]),0
         label = "%s_colocalization_%s"%(structid,str(time.strftime("%Y%m%d")))
     else:
-      io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,slabel=args.slabel)
       etype = io.detect_entity_type(entity)
       if not etype:
         sys.stderr.write("%s is not a recognized entity. Terminating...\n"%entity)
@@ -1423,7 +1434,7 @@ __  __  __
       print "\n#####################################\n"
       print "Testing mutation %s in %s[%s] for disease colocalization\n"%(mut[1],sid,bio)
       # print "\n#####################################\n"
-      pdbmap.colocalization(sid,bio,[mut],io=io,label=label,strict=strict,relaxdir=relaxdir,refseq=refseq,sfile=sfile,unp=unp)
+      pdbmap.colocalization(sid,bio,[mut],io=io,label=label,strict=strict,relaxdir=relaxdir,refseq=refseq,sfile=sfile,unp=unp,slabel=args.slabel)
 
   ## filter ##
   elif args.cmd == "filter":
