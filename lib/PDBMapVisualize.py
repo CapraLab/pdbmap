@@ -173,7 +173,7 @@ class PDBMapVisualize():
       # Locate the asymmetric unit or biological assembly
       if modelflag:
         struct_loc = "%s/models/model/%s.pdb.gz"%(self.modbase_dir,structid.upper())
-      elif biounit == 0:
+      elif int(biounit) == 0:
         struct_loc = "%s/structures/all/pdb/pdb%s.ent.gz"%(self.pdb_dir,structid)
       else:
         struct_loc = "%s/biounit/coordinates/all/%s.pdb%s.gz"%(self.pdb_dir,structid,biounit)
