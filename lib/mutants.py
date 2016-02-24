@@ -20,7 +20,7 @@ import random
 import rosetta
 from rosetta import Pose
 from rosetta import make_pose_from_sequence
-from rosetta import create_score_function_ws_patch
+from rosetta import create_score_function
 from rosetta import TaskFactory
 from rosetta.utility import vector1_bool
 from rosetta import aa_from_oneletter_code
@@ -59,6 +59,7 @@ def mutate_residue(pose,mutant_position,mutant_aa,
     pose     = copypose
 
     # Insert the mutation
+    mutant_aa = mutant_aa if len(mutant_aa)==3 else one2three[mutant_aa]
     mutate = MutateResidue(mutant_position,mutant_aa)
     mutate.apply(pose)
 
@@ -73,7 +74,7 @@ def mutate_residue(pose,mutant_position,mutant_aa,
 
     # By default, restrict redesign to 8 Angstrom radius as 
     # described in the Kellogg low-resolution protocol
-    # center = pose.residue( mutant_position ).nbr_atom_xyz()
+    center = pose.residue( mutant_position ).nbr_atom_xyz()
     for i in range(1,pose.total_residue() + 1 ):
         d = center.distance_squared(pose.residue(i).nbr_atom_xyz()) 
         # Only repack the mutated residue and any within the pack_radius
@@ -233,4 +234,25 @@ def compare_hbonds( pose1 , pose2 , Ethresh = .5 , display = False ):
             pymol.send_point(names[0]+group+str(k),color,donor[0],donor[1],donor[2],False,False,'')
             pymol.send_point(names[0]+group+str(k),color,acptr[0],acptr[1],acptr[2],False,False,'')
 
-
+one2three = {"A" : "ALA",
+             "R" : "ARG",
+             "N" : "ASN",
+             "D" : "ASP",
+             "B" : "ASX",
+             "C" : "CYS",
+             "E" : "GLU",
+             "Q" : "GLN",
+             "Z" : "GLX",
+             "G" : "GLY",
+             "H" : "HIS",
+             "I" : "ILE",
+             "L" : "LEU",
+             "K" : "LYS",
+             "M" : "MET",
+             "F" : "PHE",
+             "P" : "PRO",
+             "S" : "SER",
+             "T" : "THR",
+             "W" : "TRP",
+             "Y" : "TYR",
+             "V" : "VAL"}

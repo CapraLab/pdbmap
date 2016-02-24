@@ -27,7 +27,7 @@ pd.set_option('display.max_columns', 500)
 import time,os,sys,random,argparse,itertools,csv
 from collections import OrderedDict
 from scipy.spatial import KDTree
-from scipy.spatial.distance import euclidean
+from scipy.spatial.distance import pdist,squareform
 from scipy.stats import fisher_exact,percentileofscore
 from warnings import filterwarnings,resetwarnings
 ## Configuration and Initialization ##
@@ -50,6 +50,8 @@ parser.add_argument("--acol",type=int,default=9,
                     help="Attribute column index")
 parser.add_argument("--aname",type=str,default="attr",
                     help="Attribute name")
+parser.add_argument("--overwrite",action='store_true',default=False,
+                    help="Flag used to overwrite existing results.")
 parser.add_argument("--prefix",type=str,default="results/clumps_score_analysis/",
                     help="Alternate output path/prefix (detail recommended)")
 parser.add_argument("--ppart",type=int,default=1,
@@ -87,13 +89,15 @@ def read_infile(sfile):
   dtypes  = OrderedDict([("structid",str),("biounit",str),("model",str),
                         ("chain",str),("seqid",int),
                         ("icode",str),("x",float),("y",float),("z",float),
-                        (args.acol,float)])
+                        (args.aname,float)])
   df = pd.read_csv(sfile,sep='\t',header=None,na_values=["nan"],
                     index_col=False,usecols=range(9)+[args.acol])
   # Update the data frame names and data types
   df.columns  = dtypes.keys()
   for name,dtype in dtypes.iteritems():
     df[name] = df[name].astype(dtype)
+  # Replace values of 0.0 with NaN to conserve computation
+  df.ix[df[args.aname]==0.,args.aname] = np.nan
   # Remove duplicates to enforce one value per residue
   return df.drop_duplicates().reset_index()
 
@@ -105,14 +109,18 @@ args.infile.close()
 # Shuffle, partition, and subset to assigned partition
 if args.ppart > 1:
   np.random.shuffle(structs) # all processes produce the same shuffle
+  random.seed() # reset the seed to current time for actual analysis
   structs = [s for i,s in enumerate(structs) if i%args.ppart==args.ppidx]
   print "Partition %d contains %d structures."%(args.ppidx,len(structs))
+  # Shuffle the order of structure subset to prevent multi-run bottlenecks
+  np.random.shuffle(structs)
   # Stagger process start times
   time.sleep(args.ppidx%50)
 fname = "%s%s_clust_%d.txt"%(args.prefix,args.aname,args.ppidx)
 names = ["structid","chain","clumps_3D","pval_3D","clumps_1D","pval_1D"]
-with open(fname,'wb') as fout:
-  fout.write("%s\n"%'\t'.join(names))
+if not os.path.exists(fname) and not args.overwrite:
+  with open(fname,'wb') as fout:
+    fout.write("%s\n"%'\t'.join(names))
 #=============================================================================#
 ## Begin Analysis ##
 res = []
@@ -123,45 +131,60 @@ for s in structs:
     # Read the data for each population
     df = read_infile(s)
     sid,bio,model,chain = df[["structid","biounit","model","chain"]].values[0]
+    with open(fname,'rb') as fin:
+      reader = csv.reader(fin,delimiter='\t')
+      existing = [r for r in reader]
+      row = [r for r in existing if r[0]==sid and r[1]==chain]
+      row = row if not row else row[0]
+      if row:
+        sys.stderr.write("%s.%s has already been analyzed.\n"%(sid,chain))
+        continue
+      else:
+        print "%s.%s has not been analyzed (within partition %d of %d).\n"%(sid,chain,args.ppidx,args.ppart)
+
     print "\n###########################\nEvaluating  %s[%s]#%s.%s... \n"%(sid,bio,model,chain)
 
     # Very if that the structure contains at least three residues with valid attribute values
-    if not df[args.acol].notnull().any():
-      sys.stderr.write("Skipped %s: Contains no residues with valid attribute values."%s)
+    if not df[args.aname].notnull().any():
+      sys.stderr.write("Skipped %s.%s: Contains no residues with valid attribute values.\n"%(sid,chain))
       continue
-    elif df[args.acol].notnull().sum() < 3:
-      print "Skipped %s: Contains fewer than three residues with valid attribute values."%s
+    elif df[args.aname].notnull().sum() < 3:
+      sys.stderr.write("Skipped %s.%s: Contains fewer than three residues with valid attribute values.\n"%(sid,chain))
       continue
     else:
-      print "%s[%s]#%s.%s contains %d residues with valid attribute values"%(sid,bio,model,chain,df[args.acol].notnull().sum())
+      print "%s[%s]#%s.%s contains %d residues with valid attribute values"%(sid,bio,model,chain,df[args.aname].notnull().sum())
 
     ## Calculate PopDiff cluster coefficient (WAP)
-    def D(q,r):
-      return euclidean(q,r)
     # Default t=6.0 consistent with original CLUMPS analysis
-    def WAP(nq,nr,dqr,t=6.):
-      return nq*nr*np.exp(-dqr**2/(2*t**2))
-    def perm(df,col=args.acol):
+    def WAP(nq,nr,dqr):#,t=6.):
+      return nq*nr*dqr
+      # return nq*nr*np.exp(-dqr**2/(2*t**2))
+    def perm(df,col=args.aname):
       tdf  = df.copy()
       tdfg = tdf.groupby(["structid","biounit","model","chain"])
       tdf[col] = tdfg[col].transform(np.random.permutation)
       return tdf
-    def CLUMPS(df,permute=False,seq=False,col=args.acol):
+    def CLUMPS(df,permute=False,seq=False,col=args.aname,dmatrix=None,t=6.):
       if permute:
-        df = perm(df,col=col)
-      valid = df[args.acol].notnull() # avoid unnecessary computation
+        df  = perm(df,col=col)
+      if not CLUMPS.d1.size or not CLUMPS.d3.size:
+        CLUMPS.d1 = squareform(pdist(df["seqid"].reshape(len(df["seqid"]),1)))
+        CLUMPS.d1 = np.exp(-CLUMPS.d1**2/(2*t**2))
+        CLUMPS.d3 = squareform(pdist(df[["x","y","z"]]))
+        CLUMPS.d3 = np.exp(-CLUMPS.d3**2/(2*t**2))
+      valid = df[args.aname].notnull() # avoid unnecessary computation
       if not seq:
         # Structural distances measured between all missense SNPs
-        return sum([WAP(df.ix[q,col],df.ix[r,col],
-               D(df.ix[q,["x","y","z"]],df.ix[r,["x","y","z"]])) \
-               for q,r in itertools.combinations(df[valid].index,2) if q!=r])
+        return sum([WAP(df.ix[q,col],df.ix[r,col],CLUMPS.d3[q,r]) \
+               for q,r in itertools.combinations(df[valid].index,2)])
       else:
         # Sequence distances measured only within the same chain
         return sum(df[valid].groupby(["structid","biounit","model","chain"]).apply(lambda g: \
-                 sum([WAP(g.ix[q,col],g.ix[r,col],
-                      D(g.ix[q,"seqid"],g.ix[r,"seqid"])) \
+                 sum([WAP(g.ix[q,col],g.ix[r,col],CLUMPS.d1[q,r]) \
                       for q,r in itertools.combinations(g.index,2) \
                       if q!=r])))
+    CLUMPS.d1 = np.array([]) # Resets on each iteration,
+    CLUMPS.d3 = np.array([]) # but not each permutation
 
     t0 = time.time()
     print "Calculating Structural PopDiff Cluster Coefficient..."
@@ -170,15 +193,15 @@ for s in structs:
 
     ## Calculate permutation p-value for cluster coefficient
     print "Calculating permutation p-value (10^3)..."
-    fperm = [CLUMPS(df,permute=True) for i in xrange(1000)]
+    fperm = [CLUMPS(df,permute=True) for i in xrange(999)]+[clumps_score]
     pval = 1-percentileofscore(fperm,clumps_score,'strict')/100.
-    if pval <= 0.001:  # if at p-value saturation, continue testing
+    if pval < 0.005:  # if near p-value saturation, continue testing
       print "Refining p-value %.1e (10^4)..."%pval
       fperm += [CLUMPS(df,permute=True) for i in xrange(9000)]
       pval   = 1-percentileofscore(fperm,clumps_score,'strict')/100.
-    if pval <= 0.0001: # if at p-value saturation, continue testing
-      print "Refining p-value %.1e (10^6)..."%pval
-      fperm += [CLUMPS(df,permute=True) for i in xrange(990000)]
+    if pval < 0.0005:
+      print "Refining p-value %.1e (10^5)..."%pval
+      fperm += [CLUMPS(df,permute=True) for i in xrange(90000)]
       pval   = 1-percentileofscore(fperm,clumps_score,'strict')/100.
     res =[sid,chain,clumps_score,pval]
     
@@ -188,9 +211,9 @@ for s in structs:
 
     ## Calculate permutation p-value for cluster coefficient
     print "Calculating permutation p-value (10^3)..."
-    fperm = [CLUMPS(df,permute=True,seq=True) for i in xrange(1000)]
+    fperm = [CLUMPS(df,permute=True,seq=True) for i in xrange(999)]+[clumps_score]
     pval = 1-percentileofscore(fperm,clumps_score,'strict')/100.
-    if pval < 0.05:
+    if pval < 0.005:
       print "Refining p-value %.1e (10^4)..."%pval
       fperm += [CLUMPS(df,permute=True,seq=True) for i in xrange(9000)]
       pval = 1-percentileofscore(fperm,clumps_score,'strict')/100.
