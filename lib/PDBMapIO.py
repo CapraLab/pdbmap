@@ -321,6 +321,7 @@ class PDBMapParser(PDBParser):
       filterwarnings('ignore',category=PDBConstructionWarning)
       s = p.get_structure(modelid,fin)
       resetwarnings()
+      fin.close()
       m = PDBMapModel(s,model_summary)
     except Exception as e:
       msg = "ERROR (PDBMapIO) Error while parsing %s: %s"%(modelid,str(e).replace('\n',' '))
@@ -728,7 +729,7 @@ class PDBMapIO(PDBIO):
     resetwarnings()
     return i # return the number of uploaded rows
 
-  def upload_intersection(self,dstream,dlabel=None,slabel=None,buffer_size=1):
+  def upload_intersection(self,dstream,buffer_size=1):
     """ Uploads an intersection via a process parser generator """
     # Query header
     queryh  = "INSERT IGNORE INTO GenomicIntersection "
@@ -742,17 +743,6 @@ class PDBMapIO(PDBIO):
     i=0 # ensure initialization
     for i,row in enumerate(dstream):
       row = list(row) # convert from tuple
-      # Prepend the slabel
-      if not slabel:
-        row.insert(0,self.slabel)
-      else:
-        row.insert(0,slabel)
-      # Prepend the dlabel
-      if not dlabel:
-        row.insert(0,self.dlabel)
-      else:
-        row.insert(0,dlabel)
-      # row = tuple(row) # convert to tuple
       vals.append(queryv)
       args.extend(row)
       if not (i+1) % buffer_size:

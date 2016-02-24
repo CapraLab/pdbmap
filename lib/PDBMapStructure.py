@@ -32,6 +32,7 @@ from Bio.PDB.PDBExceptions import PDBConstructionWarning
 def import_rosetta():
   if not import_rosetta.imported:
     try:
+      global rosetta,mutants
       import rosetta
       import lib.mutants as mutants
       rosetta.init()
@@ -132,7 +133,6 @@ class PDBMapStructure(Structure):
       else:
         if strict: raise Exception("PDB cannot map position %d"%seqid)
         else: print 'NA'; return None
-      print model,chain,seqid
       # Adjust for alignment between structure and pose
       print "Structure position %d.%s.%d is aligned with pose position..."%(model,chain,seqid),
       if seqid in self._pdb2pose[model][chain]:
@@ -140,7 +140,6 @@ class PDBMapStructure(Structure):
       else:
         if strict: raise Exception("Pose cannot map position %d"%seqid)
         else: print 'NA'; return None
-      print model,chain,seqid
       return self.structure[model][chain][seqid]
 
   def align2refseq(self,sid,refseq):
@@ -171,9 +170,11 @@ class PDBMapStructure(Structure):
     with open(tf.name,'rb') as fin:
       filterwarnings('ignore',category=PDBConstructionWarning)
       s = p.get_structure(self.id,tf.name)
+      p = lib.PDBMapIO.PDBMapParser()
+      s = p.process_structure(s,force=True)
       resetwarnings()
     os.remove(tf.name)
-    return PDBMapStructure(s)
+    return PDBMapStructure(s,pdb2pose={},refseq=self.refseq)
 
   def get_transcripts(self,io=None):
     # Retrieve the corresponding transcript for each chain
@@ -298,7 +299,9 @@ class PDBMapStructure(Structure):
     print "\n%s"%' '.join(cmd)
     proc = sp.Popen(cmd,stdout=sp.PIPE)
     s = p.get_structure(self.get_id(),proc.stdout)
-    s = PDBMapStructure(s,pdb2pose=self._pdb2pose)
+    p = lib.PDBMapIO.PDBMapParser()
+    s = p.process_structure(s,force=True)
+    s = PDBMapStructure(s,pdb2pose=self._pdb2pose,refseq=self.refseq)
     os.remove(tf.name)
     return s
 
@@ -310,21 +313,15 @@ class PDBMapStructure(Structure):
     a1,r,a2 = m[0],int(m[1:-1]),m[-1]
     print "\nSimulating mutation: %s%s%s"%(a1,r,a2)
     # Adjust for alignment between reference and structure
-    print "Reference position %d is aligned with PDB position..."%r,
-    if r in self.structure[0][c].alignment.seq2pdb:
-      r = self.structure[0][c].alignment.seq2pdb[r]
-    else:
-      if strict: raise Exception("PDB cannot map position %d"%r)
-      else: print 'NA'; return None
-    print r
+    if "alignment" in dir(self.structure[0][c]):
+      print "Reference position %d is aligned with PDB position..."%r,
+      if r in self.structure[0][c].alignment.seq2pdb:
+        r = self.structure[0][c].alignment.seq2pdb[r]
+      else:
+        if strict: raise Exception("PDB cannot map position %d"%r)
+        else: print 'NA'; return None
+      print r
     # Adjust for alignment between structure and pose
-    print "Structure position %d is aligned with pose position..."%r,
-    if r in self._pdb2pose[0][c]:
-      r = self._pdb2pose[0][c][r]
-    else:
-      if strict: raise Exception("Pose cannot map position %d"%r)
-      else: print 'NA'; return None
-    print r
     print "The reference allele is %s"%a1
     print "The observed  allele is %s"%self.structure[0][c][r].rescode
     print "The alternate allele is %s\n"%a2
@@ -332,6 +329,13 @@ class PDBMapStructure(Structure):
     if not self.structure[0][c][r].rescode == a1:
       if strict: raise Exception("Reference allele does not match.")
       else: return None
+    print "Structure position %d is aligned with pose position..."%r,
+    if r in self._pdb2pose[0][c]:
+      r = self._pdb2pose[0][c][r]
+    else:
+      if strict: raise Exception("Pose cannot map position %d"%r)
+      else: print 'NA'; return None
+    print r
     try:
       print "Inserting the alternate allele...\n"
       pose = mutants.mutate_residue(pose,r,a2,pack_radius=10)
@@ -387,7 +391,7 @@ class PDBMapStructure(Structure):
       return sc / p.n_residue()
     return sc
 
-  def fa_rep(self,norm=False):
+  def fa_rep(self,norm=True):
     import_rosetta()
     sfxn = rosetta.create_score_function('talaris2014')
     # sfxn = rosetta.create_score_function_ws_patch("standard", "score12")
@@ -425,7 +429,7 @@ class PDBMapStructure(Structure):
       filterwarnings('ignore',category=PDBConstructionWarning)
       s = p.get_structure(self.id,scwrlfile)
       resetwarnings()
-    s = PDBMapStructure(s)
+    s = PDBMapStructure(s,pdb2pose={},refseq=self.refseq)
     os.remove(structfile)
     os.remove(scwrlfile)
     os.remove(seqfname)
