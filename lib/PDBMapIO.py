@@ -1178,7 +1178,7 @@ class PDBMapIO(PDBIO):
   ON a.structid=p.pdbid AND a.chain=p.chain AND a.seqid BETWEEN p.seqstart AND p.seqend
   /*USERANNO*/%s
   WHERE a.label=%%s
-  AND (f.transcript IS NULL OR f.transcript=h.transcript)
+  AND (f.transcript IS NULL OR f.transcript="" OR f.transcript=h.transcript)
   AND a.structid=%%s AND a.biounit=%%s
   ORDER BY b.unp,a.seqid DESC;
   """
