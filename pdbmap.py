@@ -337,6 +337,7 @@ class PDBMap():
     p  = PDBParser()
     modelflag = False
     if sfile:
+      manualflag = True
       bio = sfile
     # Otherwise, use coordinates from the biological assembly or relaxed biological assembly
     else:
@@ -370,7 +371,7 @@ class PDBMap():
     s = p.process_structure(s,force=True)
     s = PDBMapStructure.PDBMapStructure(s,refseq=refseq,pdb2pose={})
 
-    if unp and not modelflag:
+    if unp and not (modelflag or manualflag):
       # If this structure is in PDBMap (not provided by file), query the UNP chains
       select = "SELECT distinct chain FROM Chain "
       where  = "WHERE label=%s AND structid=%s AND biounit=%s AND unp=%s"
@@ -390,7 +391,7 @@ class PDBMap():
       sys.stderr.write("\n\n")
       for chain in s[0]:
         resis = [r.id[1] for r in chain]
-        sys.stderr.write("  Chain %s sequence coverage: %d:%d\n"%(chain.id,min(resis),max(resis)))
+        sys.stderr.write("  Chain '%s' sequence coverage: %d:%d\n"%(chain.id,min(resis),max(resis)))
       return
 
     ## Build the variant datasets, pathogenic supercedes benign, candidate supercedes pathogenic
@@ -446,16 +447,17 @@ class PDBMap():
     # dclass.update(dict(((row[0],''.join([str(r) for r in row[1:]])),3) for row in io.secure_query(q,("clinvar",structid),cursorclass="Cursor")))
     # Add candidate mutations, overwrite previous entries if conflicted
     dclass.update(dict((m,-1) for m in muts))
+
     # Query the alignment
     print "Checking database for %s->%s alignment..."%(unp,structid)
     select  = "SELECT trans_seqid,chain_seqid,b.transcript from Alignment a "
     select += "INNER JOIN Transcript b ON a.tr_id=b.tr_id "
     where   = "where a.label=%s and structid=%s and chain=%s and trans_seqid=%s "#and canonical=1 
     q = select+where
-
-    qchain = m[0] if m[0]!=' ' else 'A'
-    res = [row for row in io.secure_query(q,(slabel,structid,qchain,m[1][1:-1]),cursorclass="Cursor")]
-    align.update(dict((row[0],row[1]) for row in res))
+    for m in muts:
+      qchain = m[0] if m[0]!=' ' else 'A'
+      res = [row for row in io.secure_query(q,(slabel,structid,qchain,m[1][1:-1]),cursorclass="Cursor")]
+      align.update(dict((row[0],row[1]) for row in res))
 
     if modelflag:
       # Reconcile PDBMap and ModBase chain-naming conventions
@@ -477,6 +479,7 @@ class PDBMap():
     resdir = "results/colocalization_%s_%s"%(structid,strftime("%Y-%m-%d-%H-%M"))
     if not os.path.isdir(resdir):
       os.mkdir(resdir)
+    cwd = os.getcwd()
     os.chdir(resdir)
 
     print "Variant/Mutation Counts:"
@@ -491,10 +494,10 @@ class PDBMap():
 
     if len([d for d in dclass.values() if d>1])<2:
       sys.stderr.write("%s.%s contains insufficient pathogenic/somatic variation.\n"%(structid,biounit))
-      return
+      os.chdir(cwd); return
     if len([d for d in dclass.values() if d in [0,1]])<2:
       sys.stderr.write("%s.%s contains insufficient neutral variation.\n"%(structid,biounit))
-      return
+      os.chdir(cwd); return
     print ""
 
     ## Determine the structural coordinates of each mutation/variant (center of mass)
@@ -554,7 +557,7 @@ class PDBMap():
       ## Mann-Whitney U Test
       return mannwhitneyu(nscores,pscores)
 
-    def plot_hist(nscores,pscores,cscores,label):
+    def plot_hist(nscores,pscores,cscores,title,label):
       import matplotlib.pyplot as plt
       from cycler import cycler
       cycle = ["darkred","darkblue","orange","green","magenta","grey"]
@@ -562,14 +565,14 @@ class PDBMap():
       plt.rc('axes',prop_cycle=color_cycle)
       ## Plot the histogram of scores w/ candidates marked in red
       plt.figure(figsize=(15,7))
-      plt.title("Natural and %s Score Distributions"%label)
+      plt.title("Natural and %s Score Distributions"%title)
       maxval = max(nscores+pscores)
       nbins = np.arange(0.,maxval+1,0.25)
-      plt.hist([nscores,pscores],alpha=0.5,label=["Neutral",label],color=["darkblue","darkred"])
+      plt.hist([nscores,pscores],alpha=0.5,label=["Neutral",title],color=["darkblue","darkred"])
       for i,s in enumerate(cscores):
-        plt.axvline(s,label=label,linewidth=4,color=cycle[i%len(cycle)])
+        plt.axvline(s,label=label[i],linewidth=4,color=cycle[i%len(cycle)])
       plt.legend(loc="upper right")
-      plt.savefig("colocalization_%s_hist.pdf"%label.replace(' ','_'),dpi=300)
+      plt.savefig("colocalization_%s_hist.pdf"%title.replace(' ','_'),dpi=300)
 
     def plot_roc(fpr,tpr,label):
       import matplotlib.pyplot as plt
@@ -621,11 +624,11 @@ class PDBMap():
 
     ## Pathogenicity score w.r.t. ClinVar pathogenic variants
     paths = [k for k,v in sorted(dclass.iteritems(),key=lambda t: (t[1],t[0][0],int(t[0][1][1:-1]))) if v==2]
-    if paths:
+    if len(paths)>1:
       print "\nCalculating pathogenicity score..."
       n,p,c       = rank_cand_mutations(cands,neuts,paths,coords,label="Path")
       mwu,mwu_p = mwu_pvalue(n,p)
-      plot_hist(n,p,c,label="ClinVar Pathogenic")
+      plot_hist(n,p,c,title="ClinVar Pathogenic",label=cands)
       fpr,tpr,auc = calc_auc(n,p)
       plot_roc(fpr,tpr,label="ClinVar Pathogenic")
       conf     = confidence(auc)
@@ -635,11 +638,11 @@ class PDBMap():
 
     ## Pathogenicity score w.r.t. ClinVar drug response-affecting variants
     paths = [k for k,v in sorted(dclass.iteritems(),key=lambda t: (t[1],t[0][0],int(t[0][1][1:-1]))) if v==3]
-    if paths:
+    if len(paths)>1:
       print "\nCalculating drug response score..."
       n,p,c = rank_cand_mutations(cands,neuts,paths,coords,label="Drug")
       mwu,mwu_p = mwu_pvalue(n,p)
-      plot_hist(n,p,c,label="ClinVar Drug Response")
+      plot_hist(n,p,c,title="ClinVar Drug Response",label=cands)
       fpr,tpr,auc = calc_auc(n,p)
       plot_roc(fpr,tpr,label="ClinVar Drug Response")
       conf   = confidence(auc)
@@ -648,11 +651,11 @@ class PDBMap():
 
     ## Pathogenicity score w.r.t. Cosmic somatic variants
     paths = [k for k,v in sorted(dclass.iteritems(),key=lambda t: (t[1],t[0][0],int(t[0][1][1:-1]))) if v==4]
-    if paths:
+    if len(paths)>1:
       print "\nCalculating somatic score..."
       n,p,c = rank_cand_mutations(cands,neuts,paths,coords,label="Somatic")
       mwu,mwu_p = mwu_pvalue(n,p)
-      plot_hist(n,p,c,label="Cosmic Somatic")
+      plot_hist(n,p,c,title="Cosmic Somatic",label=cands)
       fpr,tpr,auc = calc_auc(n,p)
       plot_roc(fpr,tpr,label="Cosmic Somatic")
       conf   = confidence(auc)
@@ -660,6 +663,7 @@ class PDBMap():
       write_results(cands,c,preds,conf,len(n)+len(p),mwu_p,auc,label="Cosmic Somatic")
 
     print "\nColocalization analysis complete."
+    os.chdir(cwd); return
 
   def mutate(self,structid,biounit,muts,label=None,strict=True,relaxdir=False,refseq=None,sfile=None,etype=None):
     if sfile:
@@ -741,8 +745,8 @@ class PDBMap():
     s = PDBMapStructure.PDBMapStructure(s,pdb2pose={},refseq=refseq)
     # dummy mutation (synonymous) for WT scores
     c,m  = muts[0]
-    dm   = m[0]+m[1:-1]+m[0]
-    dm   = s.mutate((c,dm),strict=strict)
+    m    = m[0]+m[1:-1]+m[0]
+    dm   = s.mutate((c,m),strict=strict)
     oss  = dm.score()  # RosettaScore of the unrelaxed WT
     orep = dm.fa_rep() # Rosetta full-atom repulsion of the unrelaxed WT
     # Insert mutations
@@ -1404,11 +1408,14 @@ __  __  __
         if len(mutations):
           print "Simulating mutations %d to %d"%(args.ppidx*psize,(args.ppidx+1)*psize-1)
     # Simulate the mutations
-    for sid,bio,mut in mutations:
-      print "\n#####################################\n"
-      print "Modeling mutation %s in %s[%s].%s"%(mut[1],sid,bio,mut[0])
-      print "\n#####################################\n"
-      pdbmap.mutate(sid,bio,[mut],label=label,strict=strict,relaxdir=relaxdir,refseq=refseq,sfile=sfile,etype=etype)
+    sid,bio = mutations[0][0],mutations[0][1]
+    mutations = [m[2] for m in mutations]
+    pdbmap.mutate(sid,bio,mutations,label=label,strict=strict,relaxdir=relaxdir,refseq=refseq,sfile=sfile,etype=etype)
+    # for sid,bio,mut in mutations:
+    #   print "\n#####################################\n"
+    #   print "Modeling mutation %s in %s[%s].%s"%(mut[1],sid,bio,mut[0])
+    #   print "\n#####################################\n"
+      # pdbmap.mutate(sid,bio,[mut],label=label,strict=strict,relaxdir=relaxdir,refseq=refseq,sfile=sfile,etype=etype)
 
   ## colocalization ##
   elif args.cmd == "colocalization":
@@ -1523,11 +1530,14 @@ __  __  __
         if len(mutations):
           print "Analyzing mutations %d to %d"%(args.ppidx*psize,(args.ppidx+1)*psize-1)
     # Simulate the mutations
-    for sid,bio,mut in mutations:
-      print "\n#####################################\n"
-      print "Testing mutation %s in %s[%s] for disease colocalization\n"%(mut[1],sid,bio)
-      # print "\n#####################################\n"
-      pdbmap.colocalization(sid,bio,[mut],io=io,label=label,strict=strict,relaxdir=relaxdir,refseq=refseq,sfile=sfile,unp=unp,slabel=args.slabel)
+    sid,bio = mutations[0][0],mutations[0][1]
+    mutations = [m[2] for m in mutations]
+    pdbmap.colocalization(sid,bio,mutations,io=io,label=label,strict=strict,relaxdir=relaxdir,refseq=refseq,sfile=sfile,unp=unp,slabel=args.slabel)
+    # for sid,bio,mut in mutations:
+    #   print "\n#####################################\n"
+    #   print "Testing mutation %s in %s[%s] for disease colocalization\n"%(mut[1],sid,bio)
+    #   # print "\n#####################################\n"
+    #   pdbmap.colocalization(sid,bio,[mut],io=io,label=label,strict=strict,relaxdir=relaxdir,refseq=refseq,sfile=sfile,unp=unp,slabel=args.slabel)
 
   ## filter ##
   elif args.cmd == "filter":

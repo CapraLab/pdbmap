@@ -49,7 +49,7 @@ def unwrap_self_relax(arg,**kwargs):
 
 class PDBMapStructure(Structure):
 
-  def __init__(self,s,quality=-1,pdb2pose={},refseq=None):
+  def __init__(self,s,quality=-1,pdb2pose={},refseq=None,alignment={}):
     # Assign the Structure, and quality
     if isinstance(s,PDBMapStructure):
       self = copy.deepcopy(s)
@@ -127,19 +127,23 @@ class PDBMapStructure(Structure):
         return None
     else:
       # Adjust for alignment between reference and structure
-      print "Reference position %d is aligned with PDB position..."%seqid,
+      # print "Reference position %d is aligned with PDB position..."%seqid,
       if seqid in self.structure[model][chain].alignment.seq2pdb:
         seqid = self.structure[model][chain].alignment.seq2pdb[seqid]
+        # print seqid
       else:
         if strict: raise Exception("PDB cannot map position %d"%seqid)
-        else: print 'NA'; return None
+        # else: print 'NA'; return None
+        else: return None
       # Adjust for alignment between structure and pose
-      print "Structure position %d.%s.%d is aligned with pose position..."%(model,chain,seqid),
+      # print "Structure position %d.%s.%d is aligned with pose position..."%(model,chain,seqid),
       if seqid in self._pdb2pose[model][chain]:
         seqid = self._pdb2pose[model][chain][seqid]
+        # print seqid
       else:
         if strict: raise Exception("Pose cannot map position %d"%seqid)
         else: print 'NA'; return None
+      # print ""
       return self.structure[model][chain][seqid]
 
   def align2refseq(self,sid,refseq):
@@ -349,9 +353,12 @@ class PDBMapStructure(Structure):
     if len(muts) < 2:
       print "\n## Only one mutation to model. No workers spawned. ##\n"
       return [self.mutate(muts[0],strict=strict)]
-    print "Spawning a pool of %d mutate workers"%(min(len(muts),maxprocs))
-    pool = Pool(processes=min(len(muts),maxprocs))
-    return pool.map(unwrap_self_mutate,zip([self]*len(muts),muts,[strict]*len(muts)))
+    else:
+      print "\n## Modeling mutations in serial. No workers spawned. ##\n"
+      return [self.mutate(m,strict=strict) for m in muts]
+    # print "Spawning a pool of %d mutate workers"%(min(len(muts),maxprocs))
+    # pool = Pool(processes=min(len(muts),maxprocs))
+    # return pool.map(unwrap_self_mutate,zip([self]*len(muts),muts,[strict]*len(muts)))
 
   def prelax(self,iters=1,maxprocs=cpu_count()):
     """ Handles parallelization of relaxation """
