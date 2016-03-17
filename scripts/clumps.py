@@ -144,12 +144,12 @@ for s in structs:
 
     print "\n###########################\nEvaluating  %s[%s]#%s.%s... \n"%(sid,bio,model,chain)
 
-    # Very if that the structure contains at least three residues with valid attribute values
+    # Very if that the structure contains at least three residues with valid attribute values (>0.1)
     if not df[args.aname].notnull().any():
       sys.stderr.write("Skipped %s.%s: Contains no residues with valid attribute values.\n"%(sid,chain))
       continue
-    elif df[args.aname].notnull().sum() < 3:
-      sys.stderr.write("Skipped %s.%s: Contains fewer than three residues with valid attribute values.\n"%(sid,chain))
+    elif df[args.aname].notnull().sum() < 3 or (df[args.aname]>0.1).sum() < 3:
+      sys.stderr.write("Skipped %s.%s: Contains fewer than three residues with valid (>0.1) attribute values.\n"%(sid,chain))
       continue
     else:
       print "%s[%s]#%s.%s contains %d residues with valid attribute values"%(sid,bio,model,chain,df[args.aname].notnull().sum())

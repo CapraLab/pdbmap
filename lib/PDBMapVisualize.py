@@ -43,7 +43,6 @@ class PDBMapVisualize():
       if key != 'issnp':
         res[key] = [r for i,r in enumerate(res[key]) if res['issnp'][i]]
     del res['issnp']
-    print "(%d SNPs)"%len(res['seqid'])
 
     # Convert MAF values into DAF values
     for anno in anno_list:
@@ -54,17 +53,30 @@ class PDBMapVisualize():
     # Ensure any user-supplied annotations are properly formatted
     anno_list = [a.replace('.','_') for a in anno_list]
     anno_list = [a.replace(' ','_') for a in anno_list]
-    for anno in anno_list:
-      # If any specified annotation isn't in the default return
-      if anno not in res:
-        # Join with the user-supplied annotations
-        nres = self.io.load_structure(structid,biounit,useranno=True,raw=True)
-        # Reduce to variable residues and add column to the structure
-        for key in nres:
-          if key in anno_list and anno not in res:
-            res[key] = [r for i,r in enumerate(nres[key]) if nres['issnp'][i]]
-        del nres
-        break # all missing annotations filled when the first is found missing
+    if any(a not in res for a in anno_list):
+      res = [] # reset the result
+      for anno in anno_list:
+        # If any specified annotation isn't in the default return
+        if anno not in res:
+          # Join with the user-supplied annotations
+          nres = self.io.load_structure(structid,biounit,useranno=True,raw=True)
+          if not res:
+            # Initialize res with the first user-annotated result
+            res = nres
+          # Reduce to variable residues and add column to the structure
+          for key in nres:
+            if key!="issnp" and any(nres['issnp']):
+              res[key] = [r for i,r in enumerate(nres[key]) if nres['issnp'][i]]
+            elif key not in ("issnp",anno):
+              # Assume we're working with structural data
+              res[key] = [r for i,r in enumerate(nres[key]) if nres[anno][i]!=None]
+          if not any(nres['issnp']):
+            res[anno] = [r for i,r in enumerate(nres[anno]) if nres[anno][i]!=None]
+          # del nres
+          break # all missing annotations filled when the first is found missing
+
+    # Report the final annotation count
+    print "(%d annotated residues)"%len(res['seqid'])
 
     # Determine the first residue for renumbering
     resrenumber = {}

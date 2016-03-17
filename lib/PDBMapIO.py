@@ -781,12 +781,28 @@ class PDBMapIO(PDBIO):
       supp_select = ",z.* "
       supp_table  = "LEFT JOIN pdbmap_supp.%s AS z ON z.chr=g.chr "%self.dlabel
       supp_table += "AND z.start=g.start AND z.name=g.name "
+      try:
+        # Most custom datasets joined on chromosomal position
+        query = query%(supp_select,supp_table) # Insert genomic useranno text
+        q = self.secure_query(query,qvars=(self.dlabel,self.slabel,
+                        structid,biounit),cursorclass='DictCursor')
+        q = [row for row in q] # must throw exception here if the query failed
+      except:
+        # But some are joined on structural position
+        query = PDBMapIO.structure_query
+        supp_select = ",z.* "
+        supp_table  = "LEFT JOIN pdbmap_supp.%s AS z ON z.pdbid=a.structid "%self.dlabel
+        supp_table += "AND z.chain=a.chain AND z.seqid=a.seqid "
+        query = query%(supp_select,supp_table) # Insert structural useranno text
+        q = self.secure_query(query,qvars=(self.dlabel,self.slabel,
+                        structid,biounit),cursorclass='DictCursor')
     else:
       supp_select = ''
       supp_table  = ''
-    query = query%(supp_select,supp_table) # Insert useranno text
-    q = self.secure_query(query,qvars=(self.dlabel,self.slabel,
-                    structid,biounit),cursorclass='DictCursor')
+      query = query%(supp_select,supp_table) # Insert useranno text
+      q = self.secure_query(query,qvars=(self.dlabel,self.slabel,
+                      structid,biounit),cursorclass='DictCursor')
+      
     # Return raw result dictionary if specified
     if raw:
       res = {}
