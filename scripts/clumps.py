@@ -52,7 +52,7 @@ parser.add_argument("--aname",type=str,default="attr",
                     help="Attribute name")
 parser.add_argument("--overwrite",action='store_true',default=False,
                     help="Flag used to overwrite existing results.")
-parser.add_argument("--prefix",type=str,default="results/clumps_score_analysis/",
+parser.add_argument("--prefix",type=str,default="results/clumps_analysis/",
                     help="Alternate output path/prefix (detail recommended)")
 parser.add_argument("--ppart",type=int,default=1,
                     help="Number of parallel partitions")
@@ -108,7 +108,7 @@ structs = [s.rstrip() for s in args.infile]
 args.infile.close()
 # Shuffle, partition, and subset to assigned partition
 if args.ppart > 1:
-  np.random.shuffle(structs) # all processes produce the same shuffle
+  # np.random.shuffle(structs) # all processes produce the same shuffle
   random.seed() # reset the seed to current time for actual analysis
   structs = [s for i,s in enumerate(structs) if i%args.ppart==args.ppidx]
   print "Partition %d contains %d structures."%(args.ppidx,len(structs))
@@ -159,6 +159,11 @@ for s in structs:
     def WAP(nq,nr,dqr):#,t=6.):
       return nq*nr*dqr
       # return nq*nr*np.exp(-dqr**2/(2*t**2))
+
+    @np.vectorize
+    def glf(t,A=1.,K=0.,B=0.2,v=0.05,Q=1.,C=1.):
+      return A + (K-A)/((C+Q*np.exp(-B*t))**(1./v))
+
     def perm(df,col=args.aname):
       tdf  = df.copy()
       tdfg = tdf.groupby(["structid","biounit","model","chain"])
@@ -170,8 +175,10 @@ for s in structs:
       if not CLUMPS.d1.size or not CLUMPS.d3.size:
         CLUMPS.d1 = squareform(pdist(df["seqid"].reshape(len(df["seqid"]),1)))
         CLUMPS.d1 = np.exp(-CLUMPS.d1**2/(2*t**2))
+        # CLUMPS.d1 = glf(CLUMPS.d1)
         CLUMPS.d3 = squareform(pdist(df[["x","y","z"]]))
         CLUMPS.d3 = np.exp(-CLUMPS.d3**2/(2*t**2))
+        # CLUMPS.d3 = glf(CLUMPS.d3)
       valid = df[args.aname].notnull() # avoid unnecessary computation
       if not seq:
         # Structural distances measured between all missense SNPs
@@ -217,6 +224,10 @@ for s in structs:
       print "Refining p-value %.1e (10^4)..."%pval
       fperm += [CLUMPS(df,permute=True,seq=True) for i in xrange(9000)]
       pval = 1-percentileofscore(fperm,clumps_score,'strict')/100.
+    if pval < 0.0005:
+      print "Refining p-value %.1e (10^5)..."%pval
+      fperm += [CLUMPS(df,permute=True,seq=True) for i in xrange(90000)]
+      pval   = 1-percentileofscore(fperm,clumps_score,'strict')/100.
     res += [clumps_score,pval]
     print "Total Computation Time: %.2fs"%(time.time()-t0)
     print '\t'.join(str(x) for x in res)

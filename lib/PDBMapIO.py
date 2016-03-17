@@ -451,7 +451,11 @@ class PDBMapIO(PDBIO):
     res = self._c.fetchone()
     self._close()
     if res:
-      return True,PDBMapProtein.ensp2unp(res['protein'])[0]
+      try:
+        return True,PDBMapProtein.ensp2unp(res['protein'])[0]
+      except:
+        sys.stderr.write("%s is a deprecated identifier.\n"%res['protein'])
+        return False,None
     return False,None
 
   def genomic_datum_in_db(self,name,label=None):
@@ -1085,9 +1089,11 @@ class PDBMapIO(PDBIO):
       msg += " Provided query: %s"%query
       msg += " Provided args: %s"%str(qvars)
       if "_last_executed" in dir(self._c):
-        msg += " Executed Query: %s"%self._c._last_executed
+        msg += "\n Executed Query: \n%s"%self._c._last_executed
       raise Exception(msg)
     finally:
+      # msg = "Executed Query: \n%s\n"%self._c._last_executed
+      # print msg
       resetwarnings()
       self._close()
 
