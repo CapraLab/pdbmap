@@ -44,8 +44,9 @@ resetwarnings()
 np.random.seed(10)
 random.seed(10)
 TOL = 0.0000001 # zero tolerance threshold
-HEADER = '\t'.join(["structid","chain","R","N","T","K","Kp","Kz","Kzp","wT","wK","wKp","wKz","wKzp"])
-FMT = ["%s"]*2+["%d"]*2+["%.4g"]*10
+PERMUTATIONS = 9999 # 10k
+HEADER = '\t'.join(["structid","chain","R","N","P","T","K","Kp","Kz","Kzp","wP","wT","wK","wKp","wKz","wKzp"])
+FMT = ["%s"]*2+["%d"]*2+["%.4g"]*12
 #=============================================================================#
 ## Parse Command Line Options ##
 desc   = "Generalization of Ripley's K. Residues without an attribute "
@@ -106,7 +107,7 @@ def perm(y,N):
   """ Support function for Kest simulations """
   for i in range(N):
     yield np.random.permutation(y)
-def Kest(D,y,T=[],P=999):
+def Kest(D,y,T=[],P=9999):
   """ Ripley's K-Function Estimator for Spatial Cluster Analysis (w/ Positional Constraints) (w/o Edge Correction)
       D: Distance matrix for all possible point pairs (observed and unobserved)
       y: Weight vector for all possible points (un-observed points must have NaN weight)
@@ -239,12 +240,14 @@ for s in structs:
     ## Run the unweighted and weighted univariate analyses
     # Un-Weighted K-Function
     t0 = time.time()
-    K,Kp,Kz,Kzp,hce,lce,K_perm = Kest(D,o,T,P=9999) #10k permutations
+    P  = PERMUTATIONS
+    K,Kp,Kz,Kzp,hce,lce,K_perm = Kest(D,o,T,P=P) #10k permutations
     print "Un-weighted computation time: %.2fs"%(time.time()-t0)
     if W:
       # Weighted K-Function
       t0 = time.time()
-      wK,wKp,wKz,wKzp,whce,wlce,wK_perm = Kest(D,y,T,P=9999)
+      wP  = max([PERMUTATIONS,np.factorial(N)])
+      wK,wKp,wKz,wKzp,whce,wlce,wK_perm = Kest(D,y,T,P=P)
       print "Weighted computation time: %.2fs\n"%(time.time()-t0)
 
     ## Save the multi-distance plots
@@ -261,15 +264,15 @@ for s in structs:
     if W:
       K_perm = np.concatenate((K_perm,wK_perm),axis=1)
     np.savetxt("%s/%s-%s_%s_Kperm.txt.gz"%(args.outdir,sid,chain,args.aname),
-                  K_perm,"%.4g",'\t',header=HEADER[5:])
+                  K_perm,"%.4g",'\t',header=HEADER[6:])
 
     ## Concatenate and save the complete analysis results
     if W:
-      res = np.array([K,Kp,Kz,Kzp,wK,wKp,wKz,wKzp]).T
+      res = np.array([K,Kp,Kz,Kzp,wP,wK,wKp,wKz,wKzp]).T
     else:
       res = np.array([K,Kp,Kz,Kzp])
     np.savetxt("%s/%s-%s_%s_K_complete.txt.gz"%(args.outdir,sid,chain,args.aname),
-                  res,"%.4g",'\t',header=HEADER[5:])
+                  res,"%.4g",'\t',header=HEADER[6:])
 
     ## Concatenate and save a summary of results with most significant K and wK
     # Optimal T
@@ -282,8 +285,8 @@ for s in structs:
       wt = np.nanargmin(wKzp)
       wT,wK,wKp,wKz,wKzp = wT[wt],wK[wt],wKp[wt],wKz[wt],wKzp[wt]
     else:
-      wT,wK,wKp,wKz,wKzp = np.nan,np.nan,np.nan,np.nan,np.nan
-    res = [sid,chain,R,N,T,K,Kp,Kz,Kzp,wT,wK,wKp,wKz,wKzp]
+      wP,wT,wK,wKp,wKz,wKzp = np.nan,np.nan,np.nan,np.nan,np.nan,np.nan
+    res = [sid,chain,R,N,P,T,K,Kp,Kz,Kzp,wP,wT,wK,wKp,wKz,wKzp]
     res = [FMT[i]%res[i] for i in xrange(len(res))]
     with open("%s/%s_K_summary.txt"%(args.outdir,args.aname),'ab') as fout:
       # Check if empty *after* locking the file
