@@ -25,6 +25,7 @@
 import pandas as pd, numpy as np, subprocess as sp
 pd.set_option('display.max_columns', 500)
 import time,os,sys,random,argparse,itertools,csv
+from time import strftime
 from collections import OrderedDict
 from scipy.spatial import KDTree
 from scipy.spatial.distance import pdist,squareform
@@ -66,10 +67,11 @@ for arg in vars(args):
   except:
     print "  %s:\t%s"%(arg,getattr(args,arg))
 print ""
-# Prefix is assumed to be a directory only if it ends with '/'
-prepath = '/'.join(args.prefix.split('/')[:-1])
+# timestamp = strftime("%Y-%m-%d-%H-%M")
+prepath  = args.prefix.rstrip('/')
+# prepath += "_%s"%timestamp
 if prepath and not os.path.exists(prepath):
-  print "Prefix path does not exist, creating..."
+  print "%s does not exist, creating..."%prepath
   try:
     os.makedirs(prepath)
   except:
@@ -144,12 +146,12 @@ for s in structs:
 
     print "\n###########################\nEvaluating  %s[%s]#%s.%s... \n"%(sid,bio,model,chain)
 
-    # Very if that the structure contains at least three residues with valid attribute values (>0.1)
+    # Very if that the structure contains at least three residues with valid attribute values (>0.01)
     if not df[args.aname].notnull().any():
       sys.stderr.write("Skipped %s.%s: Contains no residues with valid attribute values.\n"%(sid,chain))
       continue
-    elif df[args.aname].notnull().sum() < 3 or (df[args.aname]>0.1).sum() < 3:
-      sys.stderr.write("Skipped %s.%s: Contains fewer than three residues with valid (>0.1) attribute values.\n"%(sid,chain))
+    elif df[args.aname].notnull().sum() < 3:
+      sys.stderr.write("Skipped %s.%s: Contains fewer than three residues with valid attribute values.\n"%(sid,chain))
       continue
     else:
       print "%s[%s]#%s.%s contains %d residues with valid attribute values"%(sid,bio,model,chain,df[args.aname].notnull().sum())
@@ -159,6 +161,10 @@ for s in structs:
     def WAP(nq,nr,dqr):#,t=6.):
       return nq*nr*dqr
       # return nq*nr*np.exp(-dqr**2/(2*t**2))
+
+    @np.vectorize
+    def hill(d,t):
+      return np.exp(-d**2/(2*t**2))
 
     @np.vectorize
     def glf(t,A=1.,K=0.,B=0.2,v=0.05,Q=1.,C=1.):
@@ -174,11 +180,11 @@ for s in structs:
         df  = perm(df,col=col)
       if not CLUMPS.d1.size or not CLUMPS.d3.size:
         CLUMPS.d1 = squareform(pdist(df["seqid"].reshape(len(df["seqid"]),1)))
-        CLUMPS.d1 = np.exp(-CLUMPS.d1**2/(2*t**2))
-        # CLUMPS.d1 = glf(CLUMPS.d1)
+        # CLUMPS.d1 = hill(CLUMPS.d1)
+        CLUMPS.d1 = glf(CLUMPS.d1)
         CLUMPS.d3 = squareform(pdist(df[["x","y","z"]]))
-        CLUMPS.d3 = np.exp(-CLUMPS.d3**2/(2*t**2))
-        # CLUMPS.d3 = glf(CLUMPS.d3)
+        # CLUMPS.d3 = hill(CLUMPS.d3)
+        CLUMPS.d3 = glf(CLUMPS.d3)
       valid = df[args.aname].notnull() # avoid unnecessary computation
       if not seq:
         # Structural distances measured between all missense SNPs
@@ -199,41 +205,38 @@ for s in structs:
     print "Structural PopDiff Cluster Coefficient: %.1e"%clumps_score
 
     ## Calculate permutation p-value for cluster coefficient
-    print "Calculating permutation p-value (10^3)..."
-    fperm = [CLUMPS(df,permute=True) for i in xrange(999)]+[clumps_score]
-    pval = 1-percentileofscore(fperm,clumps_score,'strict')/100.
-    if pval < 0.005:  # if near p-value saturation, continue testing
-      print "Refining p-value %.1e (10^4)..."%pval
-      fperm += [CLUMPS(df,permute=True) for i in xrange(9000)]
-      pval   = 1-percentileofscore(fperm,clumps_score,'strict')/100.
-    if pval < 0.0005:
-      print "Refining p-value %.1e (10^5)..."%pval
-      fperm += [CLUMPS(df,permute=True) for i in xrange(90000)]
-      pval   = 1-percentileofscore(fperm,clumps_score,'strict')/100.
-    res =[sid,chain,clumps_score,pval]
+    print "Calculating permutation p-values (10^3)..."
+    fperm = np.array([CLUMPS(df,permute=True) for i in xrange(999)]+[clumps_score])
+    lpval = 1-percentileofscore(fperm,clumps_score,'strict')/100.
+    rpval = 1-percentileofscore(-fperm,-clumps_score,'strict')/100.
+    if lpval < 0.05 or rpval < 0.05:
+      print "Refining permutation p-values (10^5)"
+      fperm = np.concatenate((fperm,[CLUMPS(df,permute=True) for i in xrange(99000)]))
+      lpval = 1-percentileofscore(fperm,clumps_score,'strict')/100.
+      rpval = 1-percentileofscore(-fperm,-clumps_score,'strict')/100.
+    res = [sid,chain,clumps_score,lpval,rpval]
     
     print "Calculating Sequence PopDiff Cluster Coefficient..."
     clumps_score = CLUMPS(df,seq=True)
     print "Sequence PopDiff Cluster Coefficient: %.1e"%clumps_score
 
     ## Calculate permutation p-value for cluster coefficient
-    print "Calculating permutation p-value (10^3)..."
-    fperm = [CLUMPS(df,permute=True,seq=True) for i in xrange(999)]+[clumps_score]
-    pval = 1-percentileofscore(fperm,clumps_score,'strict')/100.
-    if pval < 0.005:
-      print "Refining p-value %.1e (10^4)..."%pval
-      fperm += [CLUMPS(df,permute=True,seq=True) for i in xrange(9000)]
-      pval = 1-percentileofscore(fperm,clumps_score,'strict')/100.
-    if pval < 0.0005:
-      print "Refining p-value %.1e (10^5)..."%pval
-      fperm += [CLUMPS(df,permute=True,seq=True) for i in xrange(90000)]
-      pval   = 1-percentileofscore(fperm,clumps_score,'strict')/100.
-    res += [clumps_score,pval]
-    print "Total Computation Time: %.2fs"%(time.time()-t0)
+    print "Calculating permutation p-values (10^3)..."
+    fperm = np.array([CLUMPS(df,permute=True,seq=True) for i in xrange(999)]+[clumps_score])
+    lpval = 1-percentileofscore(fperm,clumps_score,'strict')/100.
+    rpval = 1-percentileofscore(-fperm,-clumps_score,'strict')/100.
+    if lpval < 0.05 or rpval < 0.05:
+      print "Refining permutation p-values (10^5)"
+      fperm = np.concatenate((fperm,[CLUMPS(df,permute=True,seq=True) for i in xrange(99000)]))
+      lpval = 1-percentileofscore(fperm,clumps_score,'strict')/100.
+      rpval = 1-percentileofscore(-fperm,-clumps_score,'strict')/100.
+    res = [sid,chain,clumps_score,lpval,rpval]
+
+    print "\nTotal Computation Time: %.2fs"%(time.time()-t0)
     print '\t'.join(str(x) for x in res)
 
     print "\nWriting results to %s..."%fname
-    names = ["structid","chain","clumps_3D","pval_3D","clumps_1D","pval_1D"]
+    names = ["structid","chain","clumps_3D","lpval_3D","rpval_3D","clumps_1D","lpval_1D","rpval_3D"]
     with open(fname,'ab') as fout:
       np.savetxt(fout,[res],fmt="%s",delimiter='\t',comments="")
 
