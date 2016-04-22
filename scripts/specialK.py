@@ -22,7 +22,7 @@
 # ...
 #=============================================================================#
 ## Package Dependenecies ##
-import pandas as pd, numpy as np, subprocess as sp
+import pandas as pd, numpy as np
 import matplotlib as mpl
 mpl.use('Agg')
 import matplotlib.pyplot as plt
@@ -33,6 +33,7 @@ from collections import OrderedDict
 from scipy.spatial.distance import pdist,squareform
 from scipy.stats.mstats import zscore
 from scipy.stats import norm,percentileofscore
+from math import factorial
 from seaborn import violinplot
 from warnings import filterwarnings,resetwarnings
 ## Configuration and Initialization ##
@@ -44,7 +45,7 @@ resetwarnings()
 np.random.seed(10)
 random.seed(10)
 TOL = 0.0000001 # zero tolerance threshold
-PERMUTATIONS = 9999 # 10k
+PERMUTATIONS = 99999 # 100k
 HEADER = '\t'.join(["structid","chain","R","N","P","T","K","Kp","Kz","Kzp","wP","wT","wK","wKp","wKz","wKzp"])
 FMT = ["%s"]*2+["%d"]*2+["%.4g"]*12
 #=============================================================================#
@@ -124,9 +125,11 @@ def Kest(D,y,T=[],P=9999):
   R   = y.size           # Number of protein residues
   N   = yo.size          # Number of observed points
   if weighted:
-    Y  = np.outer(yo,yo) * np.abs(np.identity(N,np.float64)-1) # all-pairs i!=j
-    Y  = Y / Y.sum() # normalize by all-pairs product-sum
-    K = np.array([np.ma.masked_where(Do>=t,Y).sum() for t in T])
+    if P:
+      Kest.DT = [Do>=t for t in T] # Precompute distance masks
+    Y  = np.outer(yo,yo) # NaN distance diagonal handles i=j pairs
+    Y /= Y.sum() # normalize by all-pairs product-sum
+    K  =  np.array([np.ma.masked_where(dt,Y).sum() for dt in Kest.DT])
   else:
     K = np.array([(Do<t).sum() for t in T],dtype=np.float64) / (N*(N-1))
   if P:
@@ -157,6 +160,7 @@ def Kest(D,y,T=[],P=9999):
     return K,K_p,K_z,K_pz,hce,lce,K_perm
   else:
     return K
+Kest.DT = []
 
 def k_plot(T,K,Kzp,lce,hce,ax=None,w=False):
   if not ax:
@@ -206,7 +210,7 @@ res = []
 for s in structs:
   sys.stdout.flush() # flush the stdout buffer after each structure
   try:
-    # Read the data for each population
+    # Read the data 
     df = read_infile(s)
     sid,bio,model,chain = df[["structid","biounit","model","chain"]].values[0]
     fname = "%s/%s-%s_%s_K_complete.txt"%(args.outdir,sid,chain,args.aname)
@@ -246,7 +250,7 @@ for s in structs:
     if W:
       # Weighted K-Function
       t0 = time.time()
-      wP  = max([PERMUTATIONS,np.factorial(N)])
+      wP  = min([PERMUTATIONS,factorial(N)])
       wK,wKp,wKz,wKzp,whce,wlce,wK_perm = Kest(D,y,T,P=P)
       print "Weighted computation time: %.2fs\n"%(time.time()-t0)
 
@@ -264,15 +268,15 @@ for s in structs:
     if W:
       K_perm = np.concatenate((K_perm,wK_perm),axis=1)
     np.savetxt("%s/%s-%s_%s_Kperm.txt.gz"%(args.outdir,sid,chain,args.aname),
-                  K_perm,"%.4g",'\t',header=HEADER[6:])
+                  K_perm,"%.4g",'\t',header='\t'.join(HEADER.split('\t')[6:]))
 
     ## Concatenate and save the complete analysis results
     if W:
-      res = np.array([K,Kp,Kz,Kzp,wP,wK,wKp,wKz,wKzp]).T
+      res = np.array([K,Kp,Kz,Kzp,wK,wKp,wKz,wKzp])
     else:
       res = np.array([K,Kp,Kz,Kzp])
     np.savetxt("%s/%s-%s_%s_K_complete.txt.gz"%(args.outdir,sid,chain,args.aname),
-                  res,"%.4g",'\t',header=HEADER[6:])
+                  res,"%.4g",'\t')
 
     ## Concatenate and save a summary of results with most significant K and wK
     # Optimal T
@@ -281,7 +285,7 @@ for s in structs:
     wT = T.copy()
     T,K,Kp,Kz,Kzp = T[t],K[t],Kp[t],Kz[t],Kzp[t]
     # Optimal wT (if a weighted analysis was performed)
-    if W:
+    if W and not all(np.isnan(wKzp)):
       wt = np.nanargmin(wKzp)
       wT,wK,wKp,wKz,wKzp = wT[wt],wK[wt],wKp[wt],wKz[wt],wKzp[wt]
     else:

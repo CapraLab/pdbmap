@@ -148,8 +148,8 @@ class PDBMapStructure(Structure):
 
   def align2refseq(self,sid,refseq):
     for c in self.get_chains():
-      refseq = dict((i+1,(r,"NA",0,0,0)) for i,r in enumerate(refseq))
-      c.transcript = PDBMapTranscript("ref","ref","ref",refseq)
+      refdict = dict((i+1,(r,"NA",0,0,0)) for i,r in enumerate(refseq))
+      c.transcript = PDBMapTranscript("ref","ref","ref",refdict)
       c.alignment  = PDBMapAlignment(c,c.transcript)
       self.transcripts.append(c.transcript)
       self.alignments.append(c.alignment)

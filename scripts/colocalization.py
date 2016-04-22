@@ -13,20 +13,41 @@
 #                : variation it its protein structure.
 #=============================================================================#
 ## Package Dependenecies ##
+# Standard
 import os,sys,gzip,csv,argparse,ConfigParser
-import pandas as pd,numpy as np
+import subprocess as sp
+from time import strftime
+from itertools import combinations
+from collections import OrderedDict
+
+# Warnings
+from warnings import filterwarnings,resetwarnings
+
+# Numerical
+import pandas as pd
+import numpy as np
+
+# Stats
+from scipy.spatial.distance import cdist,pdist,squareform
+from scipy.stats import percentileofscore
+from scipy.stats import mannwhitneyu
+from scipy.spatial import KDTree
+
+# Machine Learning
+filterwarnings('ignore',category=RuntimeWarning)
+from sklearn.linear_model import LogisticRegression as LR
+from sklearn.preprocessing import scale
+from sklearn.metrics import auc,roc_curve
+resetwarnings()
+
+# Plotting
 import matplotlib.pyplot as plt
 from cycler import cycler
 cycle = ["darkred","darkblue","orange","darkgreen","magenta","grey","purple","cyan"]
 color_cycle = cycler('color',cycle)
 plt.rc('axes',prop_cycle=color_cycle)
-from itertools import combinations
-from scipy.spatial.distance import pdist,squareform
-from scipy.stats import percentileofscore
-from collections import OrderedDict
-from time import strftime
-import subprocess as sp
-from warnings import filterwarnings,resetwarnings
+
+# PDBMap
 from Bio.PDB.PDBParser import PDBParser
 from Bio.PDB.PDBExceptions import PDBConstructionWarning
 sys.path.append("..")
@@ -81,6 +102,8 @@ parser.add_argument("--pathogenic",type=str,
                     help="User-defined set of pathogenic variants")
 parser.add_argument("--polyphen",type=str,
                     help="Location of file with PolyPhen2 scores")
+parser.add_argument("--consurf",type=str,
+                    help="Location of file with ConSurf scores")
 parser.add_argument("--replace",action="store_true",default=False,
                     help="User-defined variant sets are intersected by default")
 parser.add_argument("--no-timestamp","-nt",action="store_true",default=False,
@@ -91,7 +114,7 @@ parser.add_argument("--verbose",action="store_true",default=False,
                     help="Verbose output flag")
 args = parser.parse_args()
 if not args.label:
-  args.label = args.entity
+  args.label = args.entity.split('.')[0] # strip extensions from filenames
 print "\nActive options:"
 for arg in vars(args):
   try:
@@ -228,10 +251,6 @@ def read_coord_file(cf,sid,refseq=None,aln={}):
         c.id = 'A'
         c.get_parent().child_dict['A'] = c
       if aln and c in aln:
-        # print "\nChain %s alignment:"%c.id
-        # for key,val in aln.iteritems():
-        #   print "%s => %s"%(key,val)
-        # print ""
         for r in c:
           r.id = (' ',aln[(c.id,r.id[1])][0],' ')
   return PDBMapStructure(s,refseq=refseq,pdb2pose={})
@@ -264,7 +283,7 @@ def sequence_var_query():
   w += "AND a.uniprot=%s AND LENGTH(ref_amino_acid)=1 "
   if args.isoform:
     w += " AND a.transcript='%s'"%args.isoform
-  else:
+  elif not args.fasta:
     msg  = "\nWARNING: Reference isoform was not specified. \n"
     msg  = "       : Are there multiple isoforms for this protein?\n"
     msg += "       : Explictly declare isoform to avoid mis-alignments\n\n"
@@ -383,7 +402,8 @@ def resicom(resi):
   if resi==None: return [None,None,None]
   return np.array([np.array(a.get_coord()) for a in resi.get_unpacked_list()]).mean(axis=0)
 
-def WAP(nq,nr,dqr,t=6.):
+@np.vectorize
+def WAP(dqr,nq=1,nr=1,t=10.):
   return nq*nr*np.exp(-dqr**2/(2*t**2))
 
 @np.vectorize
@@ -404,59 +424,59 @@ def CLUMPS(df,col,val,permute=False,seq=False,t=6.):
   if not permute or not CLUMPS.d.size:
     CLUMPS.d = squareform(pdist(df[["x","y","z"]]))
     # CLUMPS.d = np.exp(-CLUMPS.d**2/(2*t**2))
-    CLUMPS.d = glf(CLUMPS.d)
-  # WAP w/ t=6. precomputed, all weight equal to 1
+    CLUMPS.d = WAP(CLUMPS.d)
+  # WAP w/ t=10. precomputed, all weight equal to 1
   N = float(valid.sum())
   return sum([CLUMPS.d[q,r] for q,r in combinations(df[valid].index,2)]) / (N*(N-1.))
 CLUMPS.d = np.array([])
 
-def pathprox(cands,neut,path,coords,cv=False,perm=False):
+def pathprox(cands,neut,path,cv=False,perm=False):
   """ Predicts pathogenicity of a mutation vector given observed neutral/pathogenic """
-  num_neut = len(neut)
-  num_path = len(path)
-  if perm:
-    s = neut.append(path)
-    s = s.sample(frac=1)
-    neut,path = s.head(num_neut),s.tail(num_path)
-  from scipy.spatial import KDTree
-  cand_scores = []
-  for _,var in cands.iterrows():
-    # Neutral Score
-    kdt = KDTree(np.array([v[["x","y","z"]] for _,v in neut.iterrows() \
-                    if not all(v.values[:-3]==var.values[:-3]) or not cv]))
-    dist,_ = kdt.query(var[["x","y","z"]],num_neut-int(cv))
-    if type(dist) != list:
-      dist = [dist]
-    neut_score = np.sum([WAP(1,1,d) for d in dist])/num_neut
-    # Pathogenic Score
-    kdt = KDTree(np.array([v[["x","y","z"]] for _,v in path.iterrows() \
-                    if not all(v.values[:-3]==var.values[:-3]) or not cv]))
-    dist,_     = kdt.query(var[["x","y","z"]],num_path-int(cv))
-    if type(dist) != list:
-      dist = [dist]
-    path_score = np.sum([WAP(1,1,d) for d in dist])/num_path
-    cand_scores.append(path_score / neut_score)
-  return cand_scores
+  ncount = len(neut)
+  pcount = len(path)
+  ccount = len(cands)
+  N = ncount + pcount
+  df = neut.append(path)
+  if not perm:
+    # Distance from each candidate to each neutral/pathogenic variant
+    D = WAP(cdist(cands[["x","y","z"]].values,df[["x","y","z"]].values))
+    if cv:
+      D[D<=0] = np.inf # Do not include distance to self during cross-validation
+    pathprox.D = D
+    nmask = np.zeros(N).astype(int)
+    nmask[:ncount] = 1
+    pmask = np.abs(nmask-1)
+  else: # Do not recalculate distances for permutations
+    D = pathprox.D
+    # Randomly assign neut/path for each permutation
+    nmask  = np.zeros(N).astype(int)
+    nmask[np.random.choice(N,ncount)] = 1
+    pmask  = np.abs(nmask-1)
+  pscores = np.sum(D[:,pmask],axis=1)/pcount
+  nscores = np.sum(D[:,nmask],axis=1)/ncount
+  cscores = pscores / nscores
+  return cscores
+pathprox.D = np.array([])
 
-def rank_cand_mutations(cands,neuts,paths,coords):
+def rank_cand_mutations(cands,neuts,paths):
   # Calculate pathogenicity score of neutral variants
-  nscores = pathprox(neuts,neuts,paths,coords,cv=True)
+  nscores = pathprox(neuts,neuts,paths,cv=True)
   if args.verbose:
     print '"False positives" (negative w/ score >1)'
     for i,score in enumerate(nscores):
       if score > 1:
         print " %s\t%.2f"%(neuts.iloc[i][["pos","ref","alt"]].values,score)
-  # Calculate pathogenicity score of pathogenic variants
-  pscores = pathprox(paths,neuts,paths,coords,cv=True)
+  # Calculate pathogenicity score of variants
+  pscores = pathprox(paths,neuts,paths,cv=True)
   if args.verbose:
     print '"False negatives" (positive w/ score <1)'
     for i,score in enumerate(pscores):
       if score < 1:
         print " %s\t%.2f"%(paths.iloc[i][["pos","ref","alt"]].values,score)
   # Calculate pathogenicity score of candidate mutations
-  cscores  = pathprox(cands,neuts,paths,coords)
+  cscores  = pathprox(cands,neuts,paths)
   print "Calculating permutation p-value..."
-  cpermute = np.array([pathprox(cands,neuts,paths,coords,perm=True) \
+  cpermute = np.array([pathprox(cands,neuts,paths,perm=True) \
                         for i in xrange(999)]+[cscores])
   cpvalues = [1-percentileofscore(cpermute[:,c],cscores[c],'strict')/100. \
                                             for c in range(len(cscores))]
@@ -464,7 +484,6 @@ def rank_cand_mutations(cands,neuts,paths,coords):
 
 def calc_auc(nscores,pscores):
   ## Calculate the AUC
-  from sklearn.metrics import roc_curve,auc
   labels = [0]*len(nscores)+[1]*len(pscores)
   preds  = nscores+pscores
   fpr,tpr,_ = roc_curve(labels,preds,drop_intermediate=False)
@@ -472,7 +491,6 @@ def calc_auc(nscores,pscores):
   return fpr,tpr,roc_auc
 
 def mwu_pvalue(nscores,pscores):
-  from scipy.stats import mannwhitneyu
   ## Mann-Whitney U Test
   return mannwhitneyu(nscores,pscores)
 
@@ -499,7 +517,6 @@ def plot_hist(nscores,pscores,cscores,title,label):
   plt.close(fig)
 
 def plot_roc(fpr,tpr,label,fig=None,save=True):
-  from sklearn.metrics import auc
   ## Plot the ROC curve
   roc_auc = auc(fpr,tpr)
   if not fig:
@@ -530,7 +547,6 @@ def predict(cscores):
   return [["Neutral","Deleterious"][int(float(c>1.))] for c in cscores]
 
 def write_results(cands,cscores,cpvalues,preds,conf,N,mwu_p,auc,label):
-  import csv
   h = ["mut","score","pvalue","N","mwu_p","auc","conf","prediction"]
   with open("%s_results.txt"%label.replace(' ','_'),'wb') as fout:
     writer = csv.writer(fout,delimiter='\t')
@@ -548,27 +564,27 @@ def write_results(cands,cscores,cpvalues,preds,conf,N,mwu_p,auc,label):
 def eval_pred(p,n,t,label=None,desc=""):
   """ p[os], n[eg], and t[est] are vectors of prediction scores """
   p,n,t = list(p),list(n),list(t) # ensure python list
-  print "\nEvaluating predictor..."
+  print "\nEvaluating %s predictor..."%desc
   print "Positives: %d"%len(p)
   print "Negatives: %d"%len(n)
   print "Test:      %d"%len(t)
   mwu,mwu_p   = mwu_pvalue(n,p)
-  fpr,tpr,auc = calc_auc(n,p)
+  fpr,tpr,roc_auc = calc_auc(n,p)
   plot_roc(fpr,tpr,label=desc)
   plot_hist(n,p,t,title=desc,label=label)
-  return mwu,mwu_p,auc,tpr,fpr
+  return mwu,mwu_p,roc_auc,tpr,fpr
 
 def colocalization(cands,neuts,paths,label=""):
   hgvs = (cands["ref"]+(cands["pos"].map(str))+cands["alt"]).values
-  n,p,c,pv = rank_cand_mutations(cands,neuts,paths,coords)
-  mwu,mwu_p,auc,tpr,fpr = eval_pred(p,n,c,label=hgvs,desc=label)
+  n,p,c,pv = rank_cand_mutations(cands,neuts,paths)
+  mwu,mwu_p,roc_auc,tpr,fpr = eval_pred(p,n,c,label=hgvs,desc=label)
   # mwu,mwu_p = mwu_pvalue(n,p)
-  # fpr,tpr,auc = calc_auc(n,p)
+  # fpr,tpr,roc_auc = calc_auc(n,p)
   # plot_roc(fpr,tpr,label=label)
   # plot_hist(n,p,c,title=label,label=hgvs)
-  conf   = confidence(auc)
+  conf   = confidence(roc_auc)
   preds  = predict(c)
-  write_results(hgvs,c,pv,preds,conf,len(n)+len(p),mwu_p,auc,label=label)
+  write_results(hgvs,c,pv,preds,conf,len(n)+len(p),mwu_p,roc_auc,label=label)
   return tpr,fpr,p,n,c
 
 # Conversion from short-code to explicit description
@@ -727,7 +743,7 @@ for sid,bio,cf in flist:
   else:
     resis  = [s.get_residue(ch,int(pos),refpos=True) for \
                 _,(ch,pos) in df[["chain","pos"]].iterrows()]
-  coords   = [resicom(r) for r in resis]
+  coords   = np.array([resicom(r) for r in resis])
   coord_df = pd.DataFrame(coords,columns=["x","y","z"])
   coord_df.index = df.index
   df = df.merge(coord_df,left_index=True,right_index=True)
@@ -770,7 +786,8 @@ for sid,bio,cf in flist:
       pass
   os.chdir(args.outdir)
 
-  print "\nVariant Counts:"
+  print "\n################################"
+  print "Variant Counts:"
   with open("%s_variant_counts.txt"%label,'wb') as fout:
     writer = csv.writer(fout,delimiter='\t')
     cnts   = df.groupby("dcode").apply(lambda x: (x["dcode"].values[0],len(x)))
@@ -786,12 +803,10 @@ for sid,bio,cf in flist:
     print ""
 
   # Track the p,n,t and tpr,fpr for each predictor
-  from collections import OrderedDict
   all_pred     = OrderedDict({})
   all_pred_roc = OrderedDict({})
 
-  ## Prediction by DBSCAN + SVM
-  from pathclust import main
+  # Load the complete structure/model of the protein with pandas
   # Create dataframe containing all residues
   sdf = pd.DataFrame([[r.get_parent().id,r.id[1]] for r in s.get_residues()],columns=["chain","seqid"])
   if not bool(aln):
@@ -807,13 +822,19 @@ for sid,bio,cf in flist:
   sdf = sdf.merge(df[["pos","ref","alt","dclass","dcode"]],how="left",on="pos")
   # Ensure that no duplicate residues were introduced by the merge
   sdf = sdf.drop_duplicates(["pos","ref","alt","dcode"]).reset_index(drop=True)
+
+  print "\n################################"
+  print "Beginning analyses...\n"
+
+  # ## Prediction by DBSCAN + SVM
+  # from pathclust import main
   # # Run DBSCAN, build SVM classifier, make predictions
   # pdf,svm = main(sdf)
   # ## Evaluate DBSCAN + SVM Predictions
   # t,n,p = pdf[pdf["dcode"]==-1],pdf[pdf["dcode"].isin([0,1])],pdf[pdf["dcode"]==2]
   # hgvs  = (t["ref"]+(t["pos"].map(str))+t["alt"]).values
   # t,n,p = t["probability"].values,n["probability"].values,p["probability"].values
-  # mwu,mwu_p,auc,tpr,fpr = eval_pred(p,n,t,hgvs,"DBSCAN SVM")
+  # mwu,mwu_p,roc_auc,tpr,fpr = eval_pred(p,n,t,hgvs,"DBSCAN SVM")
   # # Store the tpr/fpr for composite ROC
   # all_pred["DBSCAN-SVM"] = (p,n,t)
   # all_pred_roc["DBSCAN-SVM"] = (fpr,tpr)
@@ -821,99 +842,102 @@ for sid,bio,cf in flist:
   # pdf["prediction"] = pdf["cluster"].apply(lambda x: "Deleterious" if x>0 else "Benign")
   # pdf = pdf.sort(["prediction","probability"],ascending=False)
   # print "\nDBSCAN-based SVM Pathogenicity MWU p-value: %g"%mwu_p
-  # print "DBSCAN-based SVM Pathogenicity ROC AUC:     %g"%auc
+  # print "DBSCAN-based SVM Pathogenicity ROC AUC:     %g"%roc_auc
   # print "DBSCAN-based SVM Pathogenicity Predictions:"
   # for _,row in pdf[pdf["dcode"]==-1].iterrows():
   #   print "%s\t%11s\t%.2f"%tuple(row[["mut","prediction","probability"]].values)
   # print ""
 
-  # ## BLOSUM62 Prediction
-  # blosum = pd.read_csv("/dors/capra_lab/sivleyrm/bin/BLOSUM62.txt",
-  #                       index_col=0,header=0,comment="#",sep='\t')
-  # # Generate the predictions (flip low to high for increasing likelihood)
-  # hgvs = (df.ix[df["dcode"]==-1,"ref"]+(df.ix[df["dcode"]==-1,"pos"].map(str))+df.ix[df["dcode"]==-1,"alt"]).values
-  # p = [-blosum.ix[ref,alt] for _,ref,alt in \
-  #         df.ix[df["dcode"]==2,["ref","alt"]].itertuples()]
-  # n = [-blosum.ix[ref,alt] for _,ref,alt in \
-  #         df.ix[df["dcode"].isin([0,1]),["ref","alt"]].itertuples()]
-  # t = [-blosum.ix[ref,alt] for _,ref,alt in \
-  #         df.ix[df["dcode"]==-1,["ref","alt"]].itertuples()]
-  # mwu,mwu_p,auc,tpr,fpr = eval_pred(p,n,t,hgvs,"BLOSUM62")
-  # all_pred["BLOSUM62"] = (p,n,t)
-  # all_pred_roc["BLOSUM62"] = (fpr,tpr)
-  # print "\nBLOSUM62 Pathogenicity MWU p-value: %g"%mwu_p
-  # print "BLOSUM62 Pathogenicity ROC AUC:     %g"%auc
-  # print "BLOSUM62 Pathogenicity Predictions:"
-  # t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
-  # for i,name in enumerate(hgvs):
-  #   print "%s\t%11s\t%.2f"%(name,["Benign","Deleterious"][int(t[i]>0)],-t[i])
-  # print ""
+  ## BLOSUM62 Prediction
+  blosum = pd.read_csv("/dors/capra_lab/sivleyrm/bin/BLOSUM62.txt",
+                        index_col=0,header=0,comment="#",sep='\t')
+  # Generate the predictions (flip low to high for increasing likelihood)
+  hgvs = (df.ix[df["dcode"]==-1,"ref"]+(df.ix[df["dcode"]==-1,"pos"].map(str))+df.ix[df["dcode"]==-1,"alt"]).values
+  p = [-blosum.ix[ref,alt] for _,ref,alt in \
+          df.ix[df["dcode"]==2,["ref","alt"]].itertuples()]
+  n = [-blosum.ix[ref,alt] for _,ref,alt in \
+          df.ix[df["dcode"].isin([0,1]),["ref","alt"]].itertuples()]
+  t = [-blosum.ix[ref,alt] for _,ref,alt in \
+          df.ix[df["dcode"]==-1,["ref","alt"]].itertuples()]
+  mwu,mwu_p,roc_auc,tpr,fpr = eval_pred(p,n,t,hgvs,"BLOSUM62")
+  all_pred["BLOSUM62"] = (p,n,t)
+  all_pred_roc["BLOSUM62"] = (fpr,tpr)
+  print "\nBLOSUM62 Pathogenicity MWU p-value: %g"%mwu_p
+  print "BLOSUM62 Pathogenicity ROC AUC:     %g"%roc_auc
+  print "BLOSUM62 Pathogenicity Predictions:"
+  t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
+  for i,name in enumerate(hgvs):
+    print "%s\t%11s\t%.2f"%(name,["Benign","Deleterious"][int(t[i]>0)],-t[i])
+  print ""
 
   ## Evolutionary Conservation Prediction
-  hgvs = (sdf.ix[sdf["dcode"]==-1,"ref"]+(sdf.ix[sdf["dcode"]==-1,"pos"].map(str))+sdf.ix[sdf["dcode"]==-1,"alt"]).values
-  evocons = pd.read_csv("/dors/capra_lab/sivleyrm/pdbmap/data/udn/rtel1/rtel1.consurf",
-                          index_col=False,header=0,sep='\t',usecols=["SEQID","SCORE"])
-  evocons.columns = [c.lower() for c in evocons.columns]
-  evocons["seqid"] = evocons["seqid"].astype(int)
-  # Merge with sdf (not df) because ConSurf is defined by PDB numbering
-  evocons = sdf.merge(evocons,on=["seqid"])
-  # Generate predictions (flip low to high for increasing likelihood)
-  p = -evocons.ix[evocons["dcode"]==2,"score"]
-  n = -evocons.ix[evocons["dcode"].isin([0,1]),"score"]
-  t = -evocons.ix[evocons["dcode"]==-1,"score"]
-  mwu,mwu_p,auc,tpr,fpr = eval_pred(p,n,t,hgvs,"ConSurf")
-  all_pred["ConSurf"] = (p,n,t)
-  # all_pred_roc["ConSurf"] = (fpr,tpr)
-  print "\nConSurf Pathogenicity MWU p-value: %g"%mwu_p
-  print "ConSurf Pathogenicity ROC AUC:     %g"%auc
-  print "ConSurf Pathogenicity Predictions:"
-  t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
-  for i,name in enumerate(hgvs):
-    print "%s\t%11s\t%.2f"%(name,["Benign","Deleterious"][int(t[i]>0.5)],-t[i])
-  print ""
+  if args.consurf:
+    hgvs = (sdf.ix[sdf["dcode"]==-1,"ref"]+(sdf.ix[sdf["dcode"]==-1,"pos"].map(str))+sdf.ix[sdf["dcode"]==-1,"alt"]).values
+    evocons = pd.read_csv(args.consurf,index_col=False,header=0,
+                            sep='\t',usecols=["SEQID","SCORE"])
+    evocons.columns = [c.lower() for c in evocons.columns]
+    evocons["seqid"] = evocons["seqid"].astype(int)
+    # Merge with sdf (not df) because ConSurf is defined by PDB numbering
+    evocons = sdf.merge(evocons,on=["seqid"])
+    # Generate predictions (flip low to high for increasing likelihood)
+    p = -evocons.ix[evocons["dcode"]==2,"score"]
+    n = -evocons.ix[evocons["dcode"].isin([0,1]),"score"]
+    t = -evocons.ix[evocons["dcode"]==-1,"score"]
+    mwu,mwu_p,roc_auc,tpr,fpr = eval_pred(p,n,t,hgvs,"ConSurf")
+    all_pred["ConSurf"] = (p,n,t)
+    # all_pred_roc["ConSurf"] = (fpr,tpr)
+    print "\nConSurf Pathogenicity MWU p-value: %g"%mwu_p
+    print "ConSurf Pathogenicity ROC AUC:     %g"%roc_auc
+    print "ConSurf Pathogenicity Predictions:"
+    t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
+    for i,name in enumerate(hgvs):
+      print "%s\t%11s\t%.2f"%(name,["Benign","Deleterious"][int(t[i]>0.5)],-t[i])
+    print ""
 
   ## PolyPhen2 Prediction
-  hgvs = (df.ix[df["dcode"]==-1,"ref"]+(df.ix[df["dcode"]==-1,"pos"].map(str))+df.ix[df["dcode"]==-1,"alt"]).values
-  p = df.ix[df["dcode"]==2,"pph2_prob"].values
-  n = df.ix[df["dcode"].isin([0,1]),"pph2_prob"].values
-  t = df.ix[df["dcode"]==-1,"pph2_prob"].values
-  mwu,mwu_p,auc,tpr,fpr = eval_pred(p,n,t,hgvs,"PolyPhen2")
-  all_pred["PolyPhen2"] = (p,n,t)
-  all_pred_roc["PolyPhen2"] = (fpr,tpr)
-  print "\nPolyPhen2 Pathogenicity MWU p-value: %g"%mwu_p
-  print "PolyPhen2 Pathogenicity ROC AUC:     %g"%auc
-  print "PolyPhen2 Pathogenicity Predictions:"
-  t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
-  for i,name in enumerate(hgvs):
-    print "%s\t%11s\t%.3f"%(name,["Benign","Damaging"][int(t[i]>0.5)],t[i])
-  print ""
+  if args.polyphen:
+    hgvs = (df.ix[df["dcode"]==-1,"ref"]+(df.ix[df["dcode"]==-1,"pos"].map(str))+df.ix[df["dcode"]==-1,"alt"]).values
+    p = df.ix[df["dcode"]==2,"pph2_prob"].values
+    n = df.ix[df["dcode"].isin([0,1]),"pph2_prob"].values
+    t = df.ix[df["dcode"]==-1,"pph2_prob"].values
+    mwu,mwu_p,roc_auc,tpr,fpr = eval_pred(p,n,t,hgvs,"PolyPhen2")
+    all_pred["PolyPhen2"] = (p,n,t)
+    all_pred_roc["PolyPhen2"] = (fpr,tpr)
+    print "\nPolyPhen2 Pathogenicity MWU p-value: %g"%mwu_p
+    print "PolyPhen2 Pathogenicity ROC AUC:     %g"%roc_auc
+    print "PolyPhen2 Pathogenicity Predictions:"
+    t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
+    for i,name in enumerate(hgvs):
+      print "%s\t%11s\t%.3f"%(name,["Benign","Damaging"][int(t[i]>0.5)],t[i])
+    print ""
 
-  ## PFAM Prediction
-  hgvs = (df.ix[df["dcode"]==-1,"ref"]+(df.ix[df["dcode"]==-1,"pos"].map(str))+df.ix[df["dcode"]==-1,"alt"]).values
-  pfam = set(range(111,273)+range(545,732)) # RTEL1 DEAD2 and HelicaseC2 domains
-  p = df.ix[df["dcode"]==2,"pos"].isin(pfam).astype(int)
-  n = df.ix[df["dcode"].isin([0,1]),"pos"].isin(pfam).astype(int)
-  t = df.ix[df["dcode"]==-1,"pos"].isin(pfam).astype(int)
-  mwu,mwu_p,auc,tpr,fpr = eval_pred(p,n,t,hgvs,"PFAM")
-  all_pred["PFAM"] = (p,n,t)
-  all_pred_roc["PFAM"] = (fpr,tpr)
-  print "\nPFAM Pathogenicity MWU p-value: %g"%mwu_p
-  print "PFAM Pathogenicity ROC AUC:     %g"%auc
-  print "PFAM Pathogenicity Predictions:"
-  t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
-  for i,name in enumerate(hgvs):
-    print "%s\t%11s"%(name,["Benign","Deleterious"][t[i]])
-  print ""
+  # ## PFAM Prediction
+  # hgvs = (df.ix[df["dcode"]==-1,"ref"]+(df.ix[df["dcode"]==-1,"pos"].map(str))+df.ix[df["dcode"]==-1,"alt"]).values
+  # pfam = set(range(111,273)+range(545,732)) # RTEL1 DEAD2 and HelicaseC2 domains
+  # p = df.ix[df["dcode"]==2,"pos"].isin(pfam).astype(int)
+  # n = df.ix[df["dcode"].isin([0,1]),"pos"].isin(pfam).astype(int)
+  # t = df.ix[df["dcode"]==-1,"pos"].isin(pfam).astype(int)
+  # mwu,mwu_p,roc_auc,tpr,fpr = eval_pred(p,n,t,hgvs,"PFAM")
+  # all_pred["PFAM"] = (p,n,t)
+  # all_pred_roc["PFAM"] = (fpr,tpr)
+  # print "\nPFAM Pathogenicity MWU p-value: %g"%mwu_p
+  # print "PFAM Pathogenicity ROC AUC:     %g"%roc_auc
+  # print "PFAM Pathogenicity Predictions:"
+  # t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
+  # for i,name in enumerate(hgvs):
+  #   print "%s\t%11s"%(name,["Benign","Deleterious"][t[i]])
+  # print ""
 
   ## Prediction by Relative Colocalization
   ## Neutral/Natural background is the same for all analyses
   c = df[df["dcode"]==-1]
   n = df[df["dcode"].isin([0,1])]
 
+  print "\nTesting datasets for clustering..."
   score = CLUMPS(sdf,col="dcode",val=[0,1])
   fperm = [CLUMPS(sdf,col="dcode",val=[0,1],permute=True) for i in xrange(999)]+[score]
   pval = 1-percentileofscore(fperm,score,'strict')/100.
-  print "\nNeutral CLUMPS: %.2f (p=%.3g)"%(score,pval)
+  print "Neutral Clustering: %.2f (p=%.3g)"%(score,pval)
 
   ## Pathogenicity score w.r.t. ClinVar pathogenic variants
   p = df[df["dcode"]==2]
@@ -921,7 +945,7 @@ for sid,bio,cf in flist:
     score = CLUMPS(sdf,col="dcode",val=2)
     fperm = [CLUMPS(sdf,col="dcode",val=2,permute=True) for i in xrange(999)]+[score]
     pval = 1-percentileofscore(fperm,score,'strict')/100.
-    print "Pathogenic CLUMPS: %.2f (p=%.3g)"%(score,pval)
+    print "Pathogenic Clustering: %.2f (p=%.3g)"%(score,pval)
     print "\nCalculating pathogenicity score..."
     tpr,fpr,p,n,t = colocalization(c,n,p,label="%s Colocalization"%label)
     # Store the tpr/fpr for composite ROC
@@ -929,12 +953,10 @@ for sid,bio,cf in flist:
     all_pred_roc["Colocalization"] = (fpr,tpr)
 
   # ## Composite Predictor
-  # from sklearn.linear_model import LogisticRegression as LR
   # pmatrix = np.array([list(p) for p,n,t in all_pred.values()]).T
   # nmatrix = np.array([list(n) for p,n,t in all_pred.values()]).T
   # tmatrix = np.array([list(t) for p,n,t in all_pred.values()]).T
   # dmatrix = np.vstack((pmatrix,nmatrix))
-  # from sklearn.preprocessing import scale
   # dmatrix = scale(dmatrix,axis=0) # normalize each feature
   # labels  = np.array([1]*pmatrix.shape[0]+[0]*nmatrix.shape[0])
   # # Train logistic regression classifer using scores from each 
@@ -953,9 +975,9 @@ for sid,bio,cf in flist:
   #   # Predict class and probability of variant
   #   loo[labels[idx]].append(tclf.predict_proba(dmatrix[idx].reshape(1,-1))[:,1])
   # p,n = loo[1],loo[0]
-  # mwu,mwu_p,auc,tpr,fpr = eval_pred(p,n,t,hgvs,"Composite")
+  # mwu,mwu_p,roc_auc,tpr,fpr = eval_pred(p,n,t,hgvs,"Composite")
   # print "\nComposite Pathogenicity MWU p-value: %g"%mwu_p
-  # print "Composite Pathogenicity ROC AUC:     %g"%auc
+  # print "Composite Pathogenicity ROC AUC:     %g"%roc_auc
   # print "Composite Logistic Regression Coefficients:"
   # print '  '.join(all_pred.keys())
   # print '\t'.join(["%.3f"%c for c in clf.coef_[0,:]])
@@ -968,7 +990,6 @@ for sid,bio,cf in flist:
   # print ""
 
   # ## Colocalization + BLOSUM62 Composite
-  # from sklearn.linear_model import LogisticRegression as LR
   # pmatrix = np.array([list(p) for p,n,t in [all_pred["ClinVar"],all_pred["BLOSUM62"]]]).T
   # nmatrix = np.array([list(n) for p,n,t in [all_pred["ClinVar"],all_pred["BLOSUM62"]]]).T
   # tmatrix = np.array([list(t) for p,n,t in [all_pred["ClinVar"],all_pred["BLOSUM62"]]]).T
@@ -990,9 +1011,9 @@ for sid,bio,cf in flist:
   #   # Predict class and probability of variant
   #   loo[labels[idx]].append(tclf.predict_proba(dmatrix[idx].reshape(1,-1))[:,1])
   # p,n = loo[1],loo[0]
-  # mwu,mwu_p,auc,tpr,fpr = eval_pred(p,n,t,hgvs,"ColoBLOSUM")
+  # mwu,mwu_p,roc_auc,tpr,fpr = eval_pred(p,n,t,hgvs,"ColoBLOSUM")
   # print "\nColoBLOSUM Pathogenicity MWU p-value: %g"%mwu_p
-  # print "ColoBLOSUM Pathogenicity ROC AUC:     %g"%auc
+  # print "ColoBLOSUM Pathogenicity ROC AUC:     %g"%roc_auc
   # print "ColoBLOSUM Logistic Regression Coefficients:"
   # print "ClinVar  BLOSUM62"
   # print '\t'.join(["%.3f"%c for c in clf.coef_[0,:]])
@@ -1004,13 +1025,12 @@ for sid,bio,cf in flist:
   #   print "%s\t%11s\t%.2f"%(name,["Benign","Deleterious"][int(t[i]>=0.5)],t[i])
   # print ""
 
-  # ## Colocalization + PolyPhen2 + ConSurf Composite
-  # from sklearn.linear_model import LogisticRegression as LR
-  # pmatrix = np.array([list(p) for p,n,t in [all_pred["ClinVar"],all_pred["PolyPhen2"],all_pred["ConSurf"]]]).T
-  # nmatrix = np.array([list(n) for p,n,t in [all_pred["ClinVar"],all_pred["PolyPhen2"],all_pred["ConSurf"]]]).T
-  # tmatrix = np.array([list(t) for p,n,t in [all_pred["ClinVar"],all_pred["PolyPhen2"],all_pred["ConSurf"]]]).T
+  # ## Colocalization + ConSurf Composite
+  # pmatrix = np.array([np.array(p) for p,n,t in [all_pred["Colocalization"],all_pred["ConSurf"]]]).T
+  # nmatrix = np.array([np.array(n) for p,n,t in [all_pred["Colocalization"],all_pred["ConSurf"]]]).T
+  # tmatrix = np.array([np.array(t) for p,n,t in [all_pred["Colocalization"],all_pred["ConSurf"]]]).T
   # dmatrix = np.vstack((pmatrix,nmatrix))
-  # from sklearn.preprocessing import scale
+  # print "\n",dmatrix.shape,"\n"
   # dmatrix = scale(dmatrix,axis=0) # normalize each feature
   # labels  = np.array([1]*pmatrix.shape[0]+[0]*nmatrix.shape[0])
   # # Train logistic regression classifer using scores from each 
@@ -1029,59 +1049,19 @@ for sid,bio,cf in flist:
   #   # Predict class and probability of variant
   #   loo[labels[idx]].append(tclf.predict_proba(dmatrix[idx].reshape(1,-1))[:,1])
   # p,n = loo[1],loo[0]
-  # mwu,mwu_p,auc,tpr,fpr = eval_pred(p,n,t,hgvs,"ColoPolyPhen2EvoCons")
-  # print "\nColoPolyPhen2EvoCons Pathogenicity MWU p-value: %g"%mwu_p
-  # print "ColoPolyPhen2EvoCons Pathogenicity ROC AUC:     %g"%auc
-  # print "ColoPolyPhen2EvoCons Logistic Regression Coefficients:"
-  # print "ClinVar  PolyPhen2  EvoCons"
+  # mwu,mwu_p,roc_auc,tpr,fpr = eval_pred(p,n,t,hgvs,"ColoEvoCons")
+  # print "\nColoEvoCons Pathogenicity MWU p-value: %g"%mwu_p
+  # print "ColoEvoCons Pathogenicity ROC AUC:     %g"%roc_auc
+  # print "ColoEvoCons Logistic Regression Coefficients:"
+  # print "Colocalization  EvoCons"
   # print '\t'.join(["%.3f"%c for c in clf.coef_[0,:]])
-  # all_pred["ColoPolyPhen2EvoCons"] = (p,n,t)
-  # all_pred_roc["ColoPolyPhen2EvoCons"] = (fpr,tpr)
-  # print "ColoPolyPhen2EvoCons Pathogenicity Predictions:"
+  # all_pred["ColoEvoCons"] = (p,n,t)
+  # all_pred_roc["ColoEvoCons"] = (fpr,tpr)
+  # print "ColoEvoCons Pathogenicity Predictions:"
   # t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
   # for i,name in enumerate(hgvs):
   #   print "%s\t%11s\t%.2f"%(name,["Benign","Deleterious"][int(t[i]>=0.5)],t[i])
   # print ""
-
-  ## Colocalization + ConSurf Composite
-  from sklearn.linear_model import LogisticRegression as LR
-  pmatrix = np.array([list(p) for p,n,t in [all_pred["Colocalization"],all_pred["ConSurf"]]]).T
-  nmatrix = np.array([list(n) for p,n,t in [all_pred["Colocalization"],all_pred["ConSurf"]]]).T
-  tmatrix = np.array([list(t) for p,n,t in [all_pred["Colocalization"],all_pred["ConSurf"]]]).T
-  dmatrix = np.vstack((pmatrix,nmatrix))
-  from sklearn.preprocessing import scale
-  dmatrix = scale(dmatrix,axis=0) # normalize each feature
-  labels  = np.array([1]*pmatrix.shape[0]+[0]*nmatrix.shape[0])
-  # Train logistic regression classifer using scores from each 
-  # predictor as a feature. Weight pathogenic variants over neutral.
-  clf  = LR().fit(dmatrix,labels)#,sample_weight=1+9*labels)
-  t    = clf.predict_proba(tmatrix)[:,1]
-  hgvs = (df.ix[df["dcode"]==-1,"ref"]+(df.ix[df["dcode"]==-1,"pos"].map(str))+df.ix[df["dcode"]==-1,"alt"]).values
-  # LOO Train/Test for training data
-  loo = {1:[],0:[]}
-  for idx in range(dmatrix.shape[0]):
-    # Remove the variant from the training data
-    tempM = np.delete(dmatrix,idx,0)
-    tempL = np.delete(labels,idx)
-    # Fit the logistic regression model
-    tclf  = LR().fit(tempM,tempL)#,sample_weight=1+9*tempL)
-    # Predict class and probability of variant
-    loo[labels[idx]].append(tclf.predict_proba(dmatrix[idx].reshape(1,-1))[:,1])
-  p,n = loo[1],loo[0]
-  mwu,mwu_p,auc,tpr,fpr = eval_pred(p,n,t,hgvs,"ColoEvoCons")
-  print "\nColoEvoCons Pathogenicity MWU p-value: %g"%mwu_p
-  print "ColoEvoCons Pathogenicity ROC AUC:     %g"%auc
-  print "ColoEvoCons Logistic Regression Coefficients:"
-  print "Colocalization  EvoCons"
-  print '\t'.join(["%.3f"%c for c in clf.coef_[0,:]])
-  all_pred["ColoEvoCons"] = (p,n,t)
-  all_pred_roc["ColoEvoCons"] = (fpr,tpr)
-  print "ColoEvoCons Pathogenicity Predictions:"
-  t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
-  for i,name in enumerate(hgvs):
-    print "%s\t%11s\t%.2f"%(name,["Benign","Deleterious"][int(t[i]>=0.5)],t[i])
-  print ""
-
 
   ## Plot a comparison ROC for all predictors
   l = "Colocalization"
@@ -1118,3 +1098,4 @@ for sid,bio,cf in flist:
 
   ## Return to the original directory
   os.chdir(cwd)
+  print ""
