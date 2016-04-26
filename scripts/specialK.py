@@ -174,8 +174,10 @@ def k_plot(T,K,Kzp,lce,hce,ax=None,w=False):
   ax.set_ylabel("K (Simulation 95% CI)",fontsize=25)
   ax.set_xlim([0,max(T)])
   # Add a vertical line a the most extreme threshold
-  dK = np.nanmax([K-hce,lce-K],axis=0) # directional K-99%
-  t  = np.nanargmax(dK) # t where K is most outside the 99% interval
+  dK = np.nanmax(np.abs(Kz),axis=0) # studentized maximum K
+  t  = np.nanargmax(np.abs(Kz),axis=0) # t where studentized K is maximized
+  # dK = np.nanmax([K-hce,lce-K],axis=0) # directional K-99%
+  # t  = np.nanargmax(dK) # t where K is most outside the 99% interval
   T,K = T[t],K[t]
   ax.axvline(T,color=c,lw=2,ls="dashed",label="t=%4.1f,K=%.2f"%(T,K))
   return ax
@@ -239,7 +241,7 @@ for s in structs:
     W = (y==0).sum()+(y==1).sum() != y[~np.isnan(y)].size
     N = o.sum()
     # Distance thresholds to test (5 Angstrom minimum)
-    T = np.arange(5,.75*np.around(np.nanmax(D)),1)
+    T = np.arange(5,.50*np.around(np.nanmax(D)),1)
 
     ## Run the unweighted and weighted univariate analyses
     # Un-Weighted K-Function
@@ -280,8 +282,10 @@ for s in structs:
 
     ## Concatenate and save a summary of results with most significant K and wK
     # Optimal T
-    dK = np.nanmax([K-hce,lce-K],axis=0) # directional K-99%
-    t  = np.nanargmax(dK) # t where K is most outside the 99% interval
+    dK = np.nanmax(np.abs(Kz),axis=0) # studentized maximum K
+    t  = np.nanargmax(np.abs(Kz),axis=0) # t where studentized K is maximized
+    # dK = np.nanmax([K-hce,lce-K],axis=0) # directional K-99%
+    # t  = np.nanargmax(dK) # t where K is most outside the 99% interval
     wT = T.copy()
     T,K,Kp,Kz,Kzp = T[t],K[t],Kp[t],Kz[t],Kzp[t]
     # Optimal wT (if a weighted analysis was performed)

@@ -674,7 +674,9 @@ for sid,bio,cf in flist:
           print "%s => %s"%(key,val)
       print ""
 
-  print "\nStructure contains %d residues.\n"%len(list(s.get_residues()))
+  r = list(s.get_residues())
+  print "\nStructure contains residues %d to %d.\n"%(r[0].id[1],r[-1].id[1])
+  # print "\nStructure contains %d residues.\n"%len(list(s.get_residues()))
 
   # Determine the relevant protein chain
   if bio > 0:
@@ -885,7 +887,7 @@ for sid,bio,cf in flist:
     t = -evocons.ix[evocons["dcode"]==-1,"score"]
     mwu,mwu_p,roc_auc,tpr,fpr = eval_pred(p,n,t,hgvs,"ConSurf")
     all_pred["ConSurf"] = (p,n,t)
-    # all_pred_roc["ConSurf"] = (fpr,tpr)
+    all_pred_roc["ConSurf"] = (fpr,tpr)
     print "\nConSurf Pathogenicity MWU p-value: %g"%mwu_p
     print "ConSurf Pathogenicity ROC AUC:     %g"%roc_auc
     print "ConSurf Pathogenicity Predictions:"
@@ -911,22 +913,25 @@ for sid,bio,cf in flist:
       print "%s\t%11s\t%.3f"%(name,["Benign","Damaging"][int(t[i]>0.5)],t[i])
     print ""
 
-  # ## PFAM Prediction
-  # hgvs = (df.ix[df["dcode"]==-1,"ref"]+(df.ix[df["dcode"]==-1,"pos"].map(str))+df.ix[df["dcode"]==-1,"alt"]).values
-  # pfam = set(range(111,273)+range(545,732)) # RTEL1 DEAD2 and HelicaseC2 domains
-  # p = df.ix[df["dcode"]==2,"pos"].isin(pfam).astype(int)
-  # n = df.ix[df["dcode"].isin([0,1]),"pos"].isin(pfam).astype(int)
-  # t = df.ix[df["dcode"]==-1,"pos"].isin(pfam).astype(int)
-  # mwu,mwu_p,roc_auc,tpr,fpr = eval_pred(p,n,t,hgvs,"PFAM")
-  # all_pred["PFAM"] = (p,n,t)
-  # all_pred_roc["PFAM"] = (fpr,tpr)
-  # print "\nPFAM Pathogenicity MWU p-value: %g"%mwu_p
-  # print "PFAM Pathogenicity ROC AUC:     %g"%roc_auc
-  # print "PFAM Pathogenicity Predictions:"
-  # t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
-  # for i,name in enumerate(hgvs):
-  #   print "%s\t%11s"%(name,["Benign","Deleterious"][t[i]])
-  # print ""
+  ## PFAM Prediction
+  if args.pfam:
+    hgvs = (df.ix[df["dcode"]==-1,"ref"]+(df.ix[df["dcode"]==-1,"pos"].map(str))+df.ix[df["dcode"]==-1,"alt"]).values
+    with open(args.pfam,'rb') as fin:
+      reader = csv.reader(fin,delimiter='\t')
+      pfam = set([range(int(r[0]),int(r[1])) for r in reader])
+    p = df.ix[df["dcode"]==2,"pos"].isin(pfam).astype(int)
+    n = df.ix[df["dcode"].isin([0,1]),"pos"].isin(pfam).astype(int)
+    t = df.ix[df["dcode"]==-1,"pos"].isin(pfam).astype(int)
+    mwu,mwu_p,roc_auc,tpr,fpr = eval_pred(p,n,t,hgvs,"PFAM")
+    all_pred["PFAM"] = (p,n,t)
+    all_pred_roc["PFAM"] = (fpr,tpr)
+    print "\nPFAM Pathogenicity MWU p-value: %g"%mwu_p
+    print "PFAM Pathogenicity ROC AUC:     %g"%roc_auc
+    print "PFAM Pathogenicity Predictions:"
+    t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
+    for i,name in enumerate(hgvs):
+      print "%s\t%11s"%(name,["Benign","Deleterious"][t[i]])
+    print ""
 
   ## Prediction by Relative Colocalization
   ## Neutral/Natural background is the same for all analyses
