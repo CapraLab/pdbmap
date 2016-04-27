@@ -139,7 +139,7 @@ class PDBMapStructure(Structure):
       # print "Structure position #%d:%d.%s is aligned with pose position..."%(model,seqid,chain),
       if seqid in self._pdb2pose[model][chain]:
         seqid = self._pdb2pose[model][chain][seqid]
-        print seqid
+        # print seqid
       else:
         if strict: raise Exception("Pose cannot map position %d"%seqid)
         # else: print 'NA'; return None
