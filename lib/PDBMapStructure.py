@@ -135,17 +135,22 @@ class PDBMapStructure(Structure):
         if strict: raise Exception("PDB cannot map position %d"%seqid)
         # else: print 'NA'; return None
         else: return None
-      # Adjust for alignment between structure and pose
+      #FIXME: This is only necessary if the underlying structure *is* a pose
+      #     : There's nothing to say that this is an appropriate expectation
+      # # Adjust for alignment between structure and pose
       # print "Structure position #%d:%d.%s is aligned with pose position..."%(model,seqid,chain),
-      if seqid in self._pdb2pose[model][chain]:
-        seqid = self._pdb2pose[model][chain][seqid]
-        # print seqid
-      else:
-        if strict: raise Exception("Pose cannot map position %d"%seqid)
-        # else: print 'NA'; return None
-        else: return None
+      # if seqid in self._pdb2pose[model][chain]:
+      #   seqid = self._pdb2pose[model][chain][seqid]
+      #   print seqid
+      # else:
+      #   if strict: raise Exception("Pose cannot map position %d"%seqid)
+      #   # else: print 'NA'; return None
+      #   else: return None
       # print ""
-      return self.structure[model][chain][seqid]
+      try:
+        return self.structure[model][chain][seqid]
+      except:
+        return None
 
   def align2refseq(self,sid,refseq):
     for c in self.get_chains():
