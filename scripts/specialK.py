@@ -42,7 +42,7 @@ from warnings import filterwarnings,resetwarnings
 np.random.seed(10)
 random.seed(10)
 TOL = 1e-10 # zero tolerance threshold
-PERMUTATIONS = 99 # 100k
+PERMUTATIONS = 99999 # 100k
 HEADER = '\t'.join(["structid","chain","R","N","P","T","K","Kp","Kz","Kzp","wP","wT","wK","wKp","wKz","wKzp"])
 #=============================================================================#
 ## Parse Command Line Options ##
@@ -262,6 +262,10 @@ for s in structs:
     # Distance thresholds to test (5 Angstrom minimum)
     minT = max(5,min(10,np.around(np.nanmax(np.nanmin(D,axis=0)))))
     maxT = np.around(np.nanmax(D)/3.)
+    # Verify that the structure is large enough to analyze multiple distances
+    if maxT <= minT:
+      sys.stderr.write("Skipped %s.%s: Structure is too small to analyze.\n"%(sid,chain))
+      continue
     T = np.arange(minT,maxT,1)
     print "Evaluating distance thresholds %.1f to %.1f"%(T[0],T[-1])
 
