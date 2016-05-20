@@ -289,6 +289,16 @@ class PDBMap():
     elif entity_type == 'model' and not biounits:
       biounits = [-1]
     eps,mins = False,False
+    synonymous_flag = False
+    if any(['.synonymous' in a for a in anno_list]):
+      # Replace synonymous with DAF and set the flag
+      synonymous_flag = True
+      idx = ['.synonymous' in a for i,a in enumerate(anno_list)].index(True)
+      anno_list[idx] = anno_list[idx].replace('.synonymous','')
+      print "\n%s will be plotted for synonymous variants."%anno_list[idx]
+      # idx = anno_list.index('synonymous')
+      # anno_list  = anno_list[0:idx]+anno_list[idx+1:]
+      # anno_list.append('daf')
     if 'popdaf' in anno_list:
       idx = anno_list.index('popdaf')
       anno_list  = anno_list[0:idx]+anno_list[idx+1:]
@@ -314,15 +324,15 @@ class PDBMap():
     try:
       if entity_type in ['structure','model']:
         for biounit in biounits:
-          v.visualize_structure(entity,biounit,anno_list,eps,mins,spectrum_range,colors=colors)
+          v.visualize_structure(entity,biounit,anno_list,eps,mins,spectrum_range,colors=colors,syn=synonymous_flag)
       elif entity_type == 'unp':
-        v.visualize_unp(entity,anno_list,eps,mins,spectrum_range,colors=colors)
+        v.visualize_unp(entity,anno_list,eps,mins,spectrum_range,colors=colors,syn=synonymous_flag)
       elif entity_type == 'all':
-        v.visualize_all(anno_list,eps,mins,spectrum_range,colors=colors)
+        v.visualize_all(anno_list,eps,mins,spectrum_range,colors=colors,syn=synonymous_flag)
       elif entity_type:
         print "%s matched with UniProt ID: %s"%(entity.upper(),entity_type)
         entity = entity_type # An HGNC ID was detected and converted to UNP ID
-        v.visualize_unp(entity,anno_list,eps,mins,spectrum_range,colors=colors)
+        v.visualize_unp(entity,anno_list,eps,mins,spectrum_range,colors=colors,syn=synonymous_flag)
       else:
         msg = "Sorry, but the specified entity is not in the PDBMap database.\n"
         sys.stderr.write(msg)

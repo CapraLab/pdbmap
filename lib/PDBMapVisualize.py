@@ -26,17 +26,22 @@ class PDBMapVisualize():
     self.pdb_dir = pdb_dir
     self.modbase_dir = modbase_dir
 
-  def visualize_structure(self,structid,biounit=0,anno_list=['maf'],eps=None,mins=None,spectrum_range=[],group=None,colors=[],permute=False):
+  def visualize_structure(self,structid,biounit=0,anno_list=['maf'],eps=None,mins=None,spectrum_range=[],group=None,colors=[],permute=False,syn=False):
     """ Visualize the annotated dataset within a structure """
     biounit = 0 if biounit<0 else biounit
     print "Visualizing %s.%s..."%(structid,biounit),
     structid = structid.lower()
-    res  = self.io.load_structure(structid,biounit,raw=True)
+    res  = self.io.load_structure(structid,biounit,raw=True,syn=syn)
     if not res:
       msg = "WARNING (PDBMapVisualize) No variants for %s, biounit %s\n"%(structid,biounit)
       sys.stderr.write(msg)
       return
     modelflag = True if res['mpqs'][0] else False
+
+    # If synonymous variants are requested, switch the issnp flag
+    if syn:
+      print "\nSwitching from nonsynonymous to synonymous variants..."
+      res['issnp'] = [int('synonymous_variant' in c) if c else 0 for c in res['consequence']]
 
     # Reduce to variable residues
     for key in res:
@@ -60,6 +65,10 @@ class PDBMapVisualize():
         if anno not in res:
           # Join with the user-supplied annotations
           nres = self.io.load_structure(structid,biounit,useranno=True,raw=True)
+          if syn:
+            # If synonymous variants are requested, switch the issnp flag
+            print "\nSwitching from nonsynonymous to synonymous variants..."
+            nres['issnp'] = [int(c.contains('synonymous_variant')) for c in nres['consequence']]
           if not res:
             # Initialize res with the first user-annotated result
             res = nres
@@ -121,7 +130,9 @@ class PDBMapVisualize():
     cols = ['model','seqid','chain']
     cols.extend(anno_list)
     timestamp = str(time.strftime("%Y%m%d-%H"))
-    params = {'structid':structid,'biounit':biounit,'annos':'-'.join(anno_list)}
+    params = {'structid':structid,'biounit':biounit,
+              'annos':'-'.join(anno_list),
+              'vtype':['nonsynonymous','synonymous'][int(syn)]}
     res_dir = 'results/pdbmap_%s_%s_%s'
     if group:
       res_dir = res_dir%(self.io.dlabel,group,timestamp)
@@ -130,7 +141,7 @@ class PDBMapVisualize():
     params['res_dir'] = res_dir
     if not os.path.exists(res_dir):
       os.system('mkdir -p %(res_dir)s'%params)
-    with open("%(res_dir)s/%(structid)s_biounit%(biounit)s_vars_%(annos)s.txt"%params,'wb') as fout:
+    with open("%(res_dir)s/%(structid)s_biounit%(biounit)s_%(annos)s_%(vtype)s.txt"%params,'wb') as fout:
       writer = csv.writer(fout,delimiter='\t')
       writer.writerow(cols)
       out = [res[col] for col in cols]    # Extract columns as rows
@@ -164,7 +175,7 @@ class PDBMapVisualize():
       except:
         pass
       minval,maxval = (999,-999)
-      attrf = "%(res_dir)s/%(structid)s_biounit%(biounit)s_vars_%%s.attr"%params%anno
+      attrf = "%(res_dir)s/%(structid)s_biounit%(biounit)s_%%s_%(vtype)s.attr"%params%anno
       # Write the mappings to a temp file
       with open(attrf,'w') as fout:
         fout.write("#%s\n"%'\t'.join(cols))
@@ -180,6 +191,23 @@ class PDBMapVisualize():
             fout.write("\t#0.%d:%d\t%0.6f\n"%(tuple(row[:2]+[row[-1]])))
           if -1 < value < minval: minval=value
           if value > maxval: maxval=value
+      # If the variant type is synonymous, create a second attribute file
+      # with "synonymous" as the attribute name. Useful when comparing
+      # one attribute between synonymous and nonsynonymous variants
+      if params['vtype'] == 'synonymous':
+        attrf = "%(res_dir)s/%(structid)s_biounit%(biounit)s_%(vtype)s.attr"%params
+        with open(attrf,'w') as fout:
+          fout.write("#%s\n"%'\t'.join(cols))
+          fout.write("attribute: synonymous\n")
+          fout.write("match mode: 1-to-1\n")
+          fout.write("recipient: residues\n")
+          for row in out:
+            # #0.model:resi.chain value [value ...]
+            value = -1 if row[-1] is None else float(row[-1])
+            if not modelflag:
+              fout.write("\t#0.%d:%d.%s\t%0.6f\n"%(tuple(row)))
+            else: # do not include chain specifier for models
+              fout.write("\t#0.%d:%d\t%0.6f\n"%(tuple(row[:2]+[row[-1]])))
       minval,maxval = (minval,maxval) if not spectrum_range else spectrum_range[a]
       colors = None if not colors else colors[a]
       # Locate the asymmetric unit or biological assembly
@@ -189,11 +217,11 @@ class PDBMapVisualize():
         struct_loc = "%s/structures/all/pdb/pdb%s.ent.gz"%(self.pdb_dir,structid)
       else:
         struct_loc = "%s/biounit/coordinates/all/%s.pdb%s.gz"%(self.pdb_dir,structid,biounit)
-      params = {'structid':structid,'biounit':biounit,'anno':anno,'attrf':attrf,'colors':colors,
+      params = {'structid':structid,'biounit':biounit,'anno':anno,'attrf':attrf,'colors':colors,'vtype':params['vtype'],
                 'minval':minval,'maxval':maxval,'resis':out,'struct_loc':struct_loc,'resrenumber':resrenumber}
       self.visualize(params,group=group)
 
-  def visualize_unp(self,unpid,anno_list=['maf'],eps=None,mins=None,spectrum_range=[],colors=[]):
+  def visualize_unp(self,unpid,anno_list=['maf'],eps=None,mins=None,spectrum_range=[],colors=[],syn=False):
     """ Visualize the annotated dataset associated with a protein """
     print "Visualizing protein %s"%(unpid)
     res_list  = self.io.load_unp(unpid)
@@ -209,18 +237,18 @@ class PDBMapVisualize():
           biounits = [r[0] for r in res]
         for biounit in biounits:
           print "Visualizing structure %s.%s"%(entity,biounit)
-          self.visualize_structure(entity,biounit,anno_list,eps,mins,spectrum_range,group=unpid,colors=colors)
+          self.visualize_structure(entity,biounit,anno_list,eps,mins,spectrum_range,group=unpid,colors=colors,syn=syn)
       elif entity_type == 'model':
         # Query all biological assemblies
         biounits = [-1]
         for biounit in biounits:
           print "Visualizing model %s.%s"%(entity,biounit)
-          self.visualize_structure(entity,biounit,anno_list,eps,mins,spectrum_range,group=unpid,colors=colors)
+          self.visualize_structure(entity,biounit,anno_list,eps,mins,spectrum_range,group=unpid,colors=colors,syn=syn)
       else:
         msg = "ERROR (PDBMapVisualize) Invalid entity_type for %s: %s"%(entity,entity_type)
         raise Exception(msg)
 
-  def visualize_all(self,anno_list=['maf'],eps=None,mins=None,spectrum_range=[],colors=[]):
+  def visualize_all(self,anno_list=['maf'],eps=None,mins=None,spectrum_range=[],colors=[],syn=False):
     """ Visualize all structures and models for the annotated dataset """
     print "Visualizing dataset %s"%self.io.dlabel
     query = "SELECT DISTINCT structid FROM GenomicIntersection WHERE dlabel=%s"
@@ -234,14 +262,14 @@ class PDBMapVisualize():
         bres   = self.io.secure_query(query,(s,),cursorclass='Cursor')
         biounits = [r[0] for r in bres]
       for b in biounits:
-        self.visualize_structure(s,b,anno_list,eps,mins,spectrum_range,group='all',colors=colors)
+        self.visualize_structure(s,b,anno_list,eps,mins,spectrum_range,group='all',colors=colors,syn=syn)
     models = [r[0] for r in res if self.io.detect_entity_type(r[0]) == 'model']
     for m in models:
       biounits = [-1]
       bres   = self.io.secure_query(query,(m,),cursorclass='Cursor')
       biounits = [r[0] for r in bres]
       for b in biounits:
-        self.visualize_model(m,b,anno_list,eps,mins,spectrum_range,group='all',colors=colors)
+        self.visualize_model(m,b,anno_list,eps,mins,spectrum_range,group='all',colors=colors,syn=syn)
 
   def visualize(self,params,group=None):
     # Visualize with PyMol
@@ -259,7 +287,7 @@ class PDBMapVisualize():
     params['minval'] = "%0.6f"%params['minval']
     params['maxval'] = "%0.6f"%params['maxval']
     params['colors'] = '-' if not params['colors'] else ','.join(params['colors'])
-    keys   = ['structid','biounit','anno','attrf','minval','maxval','struct_loc','res_dir','colors','resrenumber']
+    keys   = ['structid','biounit','anno','attrf','minval','maxval','struct_loc','res_dir','colors','resrenumber','vtype']
     script = '"lib/PDBMapVisualize.py %s"'%' '.join([str(params[key]).translate(None,' ') for key in keys])
     cmd    = "TEMP=$PYTHONPATH; unset PYTHONPATH; chimera --nogui --silent --script %s; export PYTHONPATH=$TEMP"%script
     # Allow Mac OSX to use the GUI window
@@ -430,7 +458,7 @@ if __name__ == '__main__':
   args = sys.argv
   params = {'structid':args[1],'biounit':int(args[2]),'anno':args[3],'attrf':args[4],
             'minval':float(args[5]),'maxval':float(args[6]),'struct_loc':args[7],
-            'res_dir':args[8],'colors':args[9],'resis':[],'resrenumber':args[10]}
+            'res_dir':args[8],'colors':args[9],'resis':[],'resrenumber':args[10],'vtype':args[11]}
   params["resrenumber"] = eval(params["resrenumber"])
   if params['colors'] != '-':
     params['colors'] = params['colors'].split(',')
@@ -443,7 +471,7 @@ if __name__ == '__main__':
         params['resis'].append(line.strip().split('\t'))
 
   # Visualize with Chimera
-  replyobj.status("Chimera: Visualizing %(structid)s_biounit%(biounit)d_vars_%(anno)s"%params)
+  replyobj.status("Chimera: Visualizing %(structid)s_biounit%(biounit)d_%(anno)s_%(vtype)s"%params)
   # Assign the annotation to relevant residues
   rc("open %(struct_loc)s"%params)
   rc("defattr %(attrf)s raiseTool false"%params)
@@ -490,12 +518,12 @@ if __name__ == '__main__':
   # for chain,seqid in params["resrenumber"].iteritems():
   #   rc("resrenumber %s :.%d"%(chain,seqid))
   # Export the scene
-  rc("save %(res_dir)s/%(structid)s_biounit%(biounit)d_%(anno)s.py"%params)
+  rc("save %(res_dir)s/%(structid)s_biounit%(biounit)d_%(anno)s_%(vtype)s.py"%params)
   # Export the image
-  rc("copy file %(res_dir)s/%(structid)s_biounit%(biounit)d_struct_%(anno)s.png width 1600 height 1600 units points dpi 72"%params)
+  rc("copy file %(res_dir)s/%(structid)s_biounit%(biounit)d_struct_%(anno)s_%(vtype)s.png width 1600 height 1600 units points dpi 72"%params)
   # remove the structure, leaving only the variants
   rc("bonddisplay off")
-  rc("copy file %(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(anno)s.png width 1600 height 1600 units points dpi 72"%params)
+  rc("copy file %(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(anno)s_%(vtype)s.png width 1600 height 1600 units points dpi 72"%params)
   rc("close all")
   rc("stop now")
   # Export the movie 
