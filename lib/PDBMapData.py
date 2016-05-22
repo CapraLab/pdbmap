@@ -239,18 +239,18 @@ class PDBMapData():
     # Determine Consequence headers
     csq_headers  = parser.infos['CSQ'].desc.split(': ')[-1].split('|')
     snpcount = 0
-    # Do not load non-PASS variants
-    if not record.FILTER:
-        snpcount += 1
+    for record in parser:
+      # Do not load non-PASS variants
+      if not record.FILTER:
         # If position refers to a haplotype chromosome, ignore
-        if record.CHROM not in ['chr1','chr2','chr3',
+        if record.CHROM in ['chr1','chr2','chr3',
                           'chr4','chr5','chr6','chr7','chr8',
                           'chr9','chr10','chr11','chr12','chr13',
                           'chr14','chr15','chr16','chr17','chr18',
                           'chr19','chr20','chr21','chr22',
                           'chrX','chrY','chrMT']:
-          continue
-        yield self.record_parser(record,info_headers,csq_headers)
+          snpcount += 1
+          yield self.record_parser(record,info_headers,csq_headers)
     ## We are now allowing Synonymous SNPs to be mapped ##
     print "Total SNPs (syn+nonsyn) in %s: %d"%(fname,snpcount)
     # print "Nonsynonymous SNPs in %s: %d"%(fname,nscount)
