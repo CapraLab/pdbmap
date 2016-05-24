@@ -176,6 +176,7 @@ class PDBMap():
     # Process and accordingly
     if ext == 'vcf':
       if upload:
+        print "\nUploading VCF to supplemental database..."
         nrows = d.load_vcffile(dfile,io,args.buffer_size)
         print "%d VCF records uploaded to supplemental database before processing"%nrows
       generator = d.load_vcf(dfile,usevep)
@@ -1291,14 +1292,18 @@ __  __  __
 
   ## intersect ##
   elif args.cmd == "intersect":
-    # if not (args.slabel and args.dlabel):
-    msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> --dlabel=<data_name> intersect [quick]\n"
-      # print msg; sys.exit(1)
+    if not (args.slabel and args.dlabel):
+      msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> --dlabel=<data_name> intersect [quick]\n"
+      print msg; sys.exit(1)
     pdbmap = PDBMap()
     # msg  = "WARNING (PDBMap) If loading data, intersections may be automatically applied.\n"
     # sys.stderr.write(msg)
     dname  = args.dlabel
+    if dname == 'all':
+      dname = None
     slabel = args.slabel
+    if slabel == 'all':
+      slabel = None
     quick  = True if len(args.args)>0 and args.args[0].lower() in ['1','true','yes','quick','fast'] else False
     # nrows = QUICK_THRESH+1 if len(args.args) < 3 else int(args.args[2])
     if dname and slabel:

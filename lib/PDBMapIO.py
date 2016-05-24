@@ -636,7 +636,8 @@ class PDBMapIO(PDBIO):
     filterwarnings('ignore', category = MySQLdb.Warning)
     i=0 # ensure initialization
     for i,record in enumerate(dstream):
-      # sys.stdout.write("\rRecord %4d"%i)
+      if not i%1000:
+        sys.stdout.write("\rRecords uploaded: %5d"%i)
       # Upload all but the consequences and optional Fst information to GenomicData
       record.INFO['LABEL'] = dname
       query  = "INSERT IGNORE INTO GenomicData "
