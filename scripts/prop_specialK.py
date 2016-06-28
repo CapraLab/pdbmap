@@ -64,14 +64,6 @@ parser.add_argument("--ppart",type=int,default=1,
                     help="Number of parallel partitions")
 parser.add_argument("--ppidx",type=int,default=0,
                     help="Assigned partition")
-parser.add_argument("--unp",action='store_true',default=False,
-                    help="Is there a UNP column between chain and seqid?")
-parser.add_argument("--pdf",action='store_true',default=False,
-                    help="Generate a PDF version of the multi-distance K plot")
-parser.add_argument("--png",action='store_true',default=False,
-                    help="Generate a PNG version of the multi-distance K plot")
-parser.add_argument("--saveperm",action='store_true',default=False,
-                    help="Saves a compressed copy of the permutation matrix")
 args = parser.parse_args()
 print "\nActive options:"
 for arg in vars(args):
@@ -93,30 +85,19 @@ else:
 ## Function Definitions ##
 def read_infile(sfile):
   """ Reads structural coordinate-mapped genotypes """
-  if args.unp:
-    dtypes = OrderedDict([("structid",str),("biounit",int),("model",int),
-                        ("chain",str),("unp",str),("seqid",int),("icode",str),
-                        ("x",float),("y",float),("z",float),('rsa',float),
-                        ('ss',str),(args.aname,float)])
-    df = pd.read_csv(sfile,sep='\t',header=None,na_values=["nan"],
-                    index_col=False,usecols=range(12)+[args.acol])
-  else:
-    dtypes  = OrderedDict([("structid",str),("biounit",str),("model",str),
-                        ("chain",str),("seqid",int),("icode",str),
-                        ("x",float),("y",float),("z",float),('rsa',float),
-                        ('ss',str),(args.aname,float)])
-    df = pd.read_csv(sfile,sep='\t',header=None,na_values=["nan"],
-                      index_col=False,usecols=range(11)+[args.acol])
+  dtypes  = OrderedDict([("structid",str),("biounit",str),("model",str),
+                        ("chain",str),("seqid",int),
+                        ("icode",str),("x",float),("y",float),("z",float),
+                        (args.aname,float)])
+  df = pd.read_csv(sfile,sep='\t',header=None,na_values=["nan"],
+                    index_col=False,usecols=range(9)+[args.acol])
   # Update the data frame names and data types
   df.columns  = dtypes.keys()
   for name,dtype in dtypes.iteritems():
     df[name] = df[name].astype(dtype)
-  # If dataset is binary, set 0-valued residues to NaN
-  # DO NOT set 0-valued residues to NaN for real-weighted datasets
-  if len(df[args.aname].drop_duplicates())<=2:
-    df.ix[df[args.aname]==0,args.aname] = np.nan
+  # Set all 0-weights to NaN to reduce computation (does not affect result)
+  df.ix[df[args.aname]==0,args.aname] = np.nan
   # Remove duplicates to enforce one value per residue (no multi-model chains)
-  # The sort ensures that the first model is chosen for all residues
   df = df.sort_values(by=["structid","biounit","model","chain","seqid","icode"])
   return df.drop_duplicates(["structid","biounit","chain","seqid","icode"]).reset_index()
 
@@ -124,7 +105,7 @@ def perm(y,N):
   """ Support function for Kest simulations """
   for i in range(N):
     yield np.random.permutation(y)
-def Kest(D,y,T=[],P=9999):
+def Kest(D,y,T=[],P=9595):
   """ Ripley's K-Function Estimator for Spatial Cluster Analysis (w/ Positional Constraints) (w/o Edge Correction)
       D: Distance matrix for all possible point pairs (observed and unobserved)
       y: Weight vector for all possible points (un-observed points must have NaN weight)
@@ -138,17 +119,26 @@ def Kest(D,y,T=[],P=9999):
     y[y==0]         = np.nan
     y[~np.isnan(y)] = 1.
   Do  = D[~np.isnan(y),:][:,~np.isnan(y)] # Distance of observed points
+  Dp  = D[~np.isnan(y),:]                 # Distance of all possible points
   yo  = y[~np.isnan(y)]  # Values of observed points
-  R   = y.size           # Number of protein residues
-  N   = yo.size          # Number of observed points
+  R   = float(y.size)    # Number of protein residues
+  N   = float(yo.size)   # Number of observed points
+  @np.vectorize
+  def div(x,y):
+    return x/y if y!=0. else 0.
   if weighted:
     if P:
       Kest.DT = [Do>=t for t in T] # Precompute distance masks
     Y  = np.outer(yo,yo) # NaN distance diagonal handles i=j pairs
-    Y /= Y.sum() # normalize by all-pairs product-sum
-    K  =  np.array([np.ma.masked_where(dt,Y).sum() for dt in Kest.DT])
+    Y /= (Y.sum()/N)       # Normalize by all-pairs product-sum to variant ratio
+    K  =  np.array([div(np.ma.masked_where(dt,Y).sum(axis=1),(~dt).sum(axis=1,dtype=np.float64)).sum() for dt in Kest.DT])
   else:
-    K = np.array([(Do<t).sum() for t in T],dtype=np.float64) / (N*(N-1))
+    # Original
+    # K = np.array([(Do<t).sum() for t in T],dtype=np.float64) / (N*(N-1))
+    # Ratio of sums
+    # K = np.array([(Do<t).sum()/(Dp<t).sum(dtype=np.float64) for t in T],dtype=np.float64)
+    # Sum of ratios
+    K = np.array([(div((Do<t).sum(axis=1),(Dp<t).sum(dtype=np.float64,axis=1))).sum()/(N**2/R) for t in T],dtype=np.float64)
   if P:
     if weighted:
       # If weighted, shuffle values for observed points
@@ -173,8 +163,8 @@ def Kest(D,y,T=[],P=9999):
     K_p = p
     K_pz = norm.sf(abs(K_z))*2 # two-sided simulated p-value
     # Calculate the confidence envelope
-    hce  = (np.percentile(K_perm,99.5,axis=0),np.max(K_perm[1:,:],axis=0))
-    lce  = (np.percentile(K_perm, 0.05,axis=0),np.min(K_perm[1:,:],axis=0))
+    hce  = (np.percentile(K_perm,97.5,axis=0),np.max(K_perm[1:,:],axis=0))
+    lce  = (np.percentile(K_perm,2.5,axis=0),np.min(K_perm[1:,:],axis=0))
     return K,K_p,K_z,K_pz,hce,lce,K_perm
   else:
     return K
@@ -187,8 +177,7 @@ def pstat(Pvec):
   o = Pvec[0] # observed value
   # Calculate the simulation z-score
   o_z = zscore(Pvec)[0]
-  P   = np.unique(Pvec).size
-  print "%4d permutations resulted in %4d unique permuted scores."%(Pvec.size,P)
+  print "%4d permutations resulted in %4d unique permuted scores."%(Pvec.size,np.unique(Pvec).size)
   print "RawP (+): %.3g"%(2*(1.-percentileofscore(Pvec,o,'strict')/100.))
   print "RawP (-): %.3g"%(2*(1.-percentileofscore(-Pvec,-o,'strict')/100.))
   print "Observed z-score: % .3g"%o_z
@@ -196,29 +185,29 @@ def pstat(Pvec):
   # Calculate one-sided permutation p-values
   o_p = min(1.,min(2*(1.-percentileofscore(-Pvec,-o,'strict')/100.),2*(1.-percentileofscore(Pvec,o,'strict')/100.)))
   o_pz = norm.sf(abs(o_z))*2 # two-sided simulated p-value
-  return P,o_p,o_z,o_pz
+  return o_p,o_z,o_pz
 
 def k_plot(T,K,Kz,lce,hce,ax=None,w=False):
   if not ax:
     fig,ax = plt.subplots(1,1,figsize=(20,7))
   c = "darkred" if w else "mediumblue"
-  # # Min / Max
+  # Min / Max
   # ax.fill_between(T,lce[0],hce[0],alpha=0.1,
   #                     edgecolor=c,facecolor=c,
   #                     interpolate=True,antialiased=True)
-  # 99% Confidence
-  ax.fill_between(T,lce[1],hce[1],alpha=0.2,
+  # 95% Confidence
+  ax.fill_between(T,lce[1],hce[1],alpha=0.1,
                       edgecolor=c,facecolor=c,
                       interpolate=True,antialiased=True)
   ax.scatter(T,K,s=50,color=c,edgecolor='white',lw=1,label=["Un-Weighted K","Weighted K"][w])
   ax.set_xlabel("Distance Threshold (t)",fontsize=25)
-  ax.set_ylabel("K (Simulation 99% CI)",fontsize=25)
+  ax.set_ylabel("K (Simulation 95% CI)",fontsize=25)
   ax.set_xlim([min(T),max(T)])
   # Add a vertical line a the most extreme threshold
   dK = np.nanmax(np.abs(Kz),axis=0) # studentized maximum K
   t  = np.nanargmax(np.abs(Kz),axis=0) # t where studentized K is maximized
-  # dK = np.nanmax([K-hce,lce-K],axis=0) # directional K-99%
-  # t  = np.nanargmax(dK) # t where K is most outside the 99% interval
+  # dK = np.nanmax([K-hce,lce-K],axis=0) # directional K-95%
+  # t  = np.nanargmax(dK) # t where K is most outside the 95% interval
   T,K = T[t],K[t]
   ax.axvline(T,color=c,lw=2,ls="dashed",label="Optimal T=%.0f"%T)
   return ax
@@ -242,7 +231,7 @@ if args.ppart > 1:
   random.seed() # reset the seed to current time for actual analysis
   structs = [s for i,s in enumerate(structs) if i%args.ppart==args.ppidx]
   print "Partition %d contains %d structures."%(args.ppidx,len(structs))
-  # Shuffle the order of structure subset to prevent multi-run bottlen cks
+  # Shuffle the order of structure subset to prevent multi-run bottlenecks
   np.random.shuffle(structs)
   # Stagger process start times
   time.sleep(args.ppidx%50)
@@ -256,10 +245,7 @@ for s in structs:
     # Read the data 
     df = read_infile(s)
     sid,bio,model,chain = df[["structid","biounit","model","chain"]].values[0]
-    fname = "%s/%s-%s_%s_K_complete.txt.gz"%(args.outdir,sid,chain,args.aname)
-    if os.path.exists(fname) and not args.overwrite:
-      sys.stderr.write("Skipped. %s.%s: Structure has already been processed.\n"%(sid,chain))
-      continue
+    fname = "%s/%s-%s_%s_K_complete.txt"%(args.outdir,sid,chain,args.aname)
     print "\n###########################\nEvaluating  %s.%s..."%(sid,chain)
 
     # Very if that the structure contains at least three residues with valid attribute values (>0.01)
@@ -316,30 +302,28 @@ for s in structs:
       k_plot(T,wK,wKz,wlce,whce,ax,w=True)
     ax.set_title("Ripley's K-Function",fontsize=25)
     ax.legend(loc="lower right",fontsize=18)
-    if args.pdf:
-      plt.savefig("%s/%s-%s_%s_K_plot.pdf"%(args.outdir,sid,chain,args.aname),dpi=300)
-    if args.png:
-      plt.savefig("%s/%s-%s_%s_K_plot.png"%(args.outdir,sid,chain,args.aname),dpi=300)
+    plt.savefig("%s/%s-%s_%s_K_plot.pdf"%(args.outdir,sid,chain,args.aname),dpi=300)
+    plt.savefig("%s/%s-%s_%s_K_plot.png"%(args.outdir,sid,chain,args.aname),dpi=300)
     plt.close(fig)
 
      ## Protein summary statistics
     # Determine the optimal T for each statistic
     Ks_t = T[np.nanargmax(np.abs(Kz),axis=0)] 
-    # Calculate the studentized-max
-    Ks   = np.max(K / np.std(K_perm,axis=0))
+    # Calculate the studentized-mean
+    Ks   = np.mean(K / np.std(K_perm,axis=0))
     # Calculate protein summary p-value and z-score
-    Ksp  = np.max(K_perm / np.std(K_perm,axis=0), axis=1)
+    Ksp  = np.mean(K_perm / np.std(K_perm,axis=0), axis=1)
     print "\nUnweighted Permutation Statistics"
-    P,Ks_p,Ks_z,Ks_zp    = pstat(Ksp)
+    Ks_p,Ks_z,Ks_zp    = pstat(Ksp)
     if W:
       # Determine the optimal T for each statistic
       wKs_t = T[np.nanargmax(np.abs(wKz),axis=0)]
-      # Calculate the studentized-max
-      wKs   = np.max(wK / np.std(wK_perm,axis=0))
+      # Calculate the studentized-mean
+      wKs   = np.mean(wK / np.std(wK_perm,axis=0))
       # Calculate protein summary p-value and z-score
-      wKsp  = np.max(wK_perm / np.std(wK_perm,axis=0), axis=1)
+      wKsp  = np.mean(wK_perm / np.std(wK_perm,axis=0), axis=1)
       print "\nWeighted Permutation Statistics"
-      wP,wKs_p,wKs_z,wKs_zp = pstat(wKsp)
+      wKs_p,wKs_z,wKs_zp = pstat(wKsp)
     res =  [sid,chain,R,N]
     res += [P,Ks_t,Ks,Ks_p,Ks_z,Ks_zp]
     if W:
@@ -359,8 +343,7 @@ for s in structs:
     ## Concatenate and save the complete permutation results
     if W:
       K_perm = np.concatenate((K_perm,wK_perm),axis=1)
-    if args.saveperm:
-      np.savetxt("%s/%s-%s_%s_Kperm.txt.gz"%(args.outdir,sid,chain,args.aname),
+    np.savetxt("%s/%s-%s_%s_Kperm.txt.gz"%(args.outdir,sid,chain,args.aname),
                   K_perm,"%.4g",'\t',header='\t'.join(HEADER.split('\t')[6:]))
 
     ## Concatenate and save the complete analysis results
@@ -374,11 +357,11 @@ for s in structs:
                   res.T,"%.4g",'\t',header='\t'.join(h))
 
   except Exception as e:
-    print "Error in %s"%s
-    print str(e)
-    print e
+    # print "Error in %s"%s
+    # print str(e)
+    # print e
     # continue   # continue to next structure
     raise       # raise exception
-    # import pdb  # drop into debugger
-    # pdb.set_trace()
+    import pdb  # drop into debugger
+    pdb.set_trace()
 
