@@ -69,10 +69,8 @@ class PDBMapIntersect():
         query  = "SELECT a.chr,a.start-1,a.end-1,a.gc_id,a.transcript,a.label FROM "
         query += "GenomicConsequence as a INNER JOIN GenomicData as b "
         query += "ON a.label=b.label AND a.chr=b.chr AND a.start=b.start AND a.end=b.end "
-        query += "AND a.transcript!='' "
         if dlabel:
           query += "WHERE a.label=%s "
-        #query += "WHERE (a.consequence LIKE '%%missense_variant' OR a.consequence LIKE '%%synonymous_variant')"
       elif dtype == 'Protein':
         msg = "ERROR (PDBMapIntersect) Protein intersection not implemented."
         raise Exception(msg)
@@ -159,7 +157,7 @@ def parse_intersection(parser):
     line = line.strip()
     if not line or line[0] == "#": continue
     row = line.split('\t')
-    if len(row) < 14 or not row[4]:
+    if len(row) < 14:
       # No transcript info from GenomicConsequence
       d_chr,d_start,d_end,gc_id,d_label,t_chr,t_start,t_end, \
       pdbid,chain,seqid,t_trans,slabel = row
@@ -167,7 +165,7 @@ def parse_intersection(parser):
       # Transcript checks only if transcript info available
       d_chr,d_start,d_end,gc_id,d_trans,d_label,t_chr,t_start,t_end, \
       pdbid,chain,seqid,t_trans,s_label = row
-      if d_trans != t_trans: continue # Not the same transcript
+      if d_trans and d_trans != t_trans: continue # Not the same transcript
     seqid = int(seqid)
     gc_id = int(gc_id)
     # Return the direct reference

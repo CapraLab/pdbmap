@@ -233,19 +233,26 @@ def perm_plot(K_perm,T,ax=None):
 
 #=============================================================================#
 ## Select Partition ##
-print "Reading data..."
-structs = [s.rstrip() for s in args.infile]
-args.infile.close()
-# Shuffle, partition, and subset to assigned partition
-if args.ppart > 1:
-  # np.random.shuffle(structs) # all processes produce the same shuffle
-  random.seed() # reset the seed to current time for actual analysis
-  structs = [s for i,s in enumerate(structs) if i%args.ppart==args.ppidx]
-  print "Partition %d contains %d structures."%(args.ppidx,len(structs))
-  # Shuffle the order of structure subset to prevent multi-run bottlen cks
-  np.random.shuffle(structs)
-  # Stagger process start times
-  time.sleep(args.ppidx%50)
+try:
+  df = read_infile(args.infile)
+  # This will fail if infile is a list of structure files
+  print "Input file is a structure file. Processing independently...\n"
+  structs = [args.infile]
+except:
+  print "\nReading structure file list from input file...\n"
+  df = pd.DataFrame()
+  structs = [s.rstrip() for s in args.infile]
+  args.infile.close()
+  # Shuffle, partition, and subset to assigned partition
+  if args.ppart > 1:
+    # np.random.shuffle(structs) # all processes produce the same shuffle
+    random.seed() # reset the seed to current time for actual analysis
+    structs = [s for i,s in enumerate(structs) if i%args.ppart==args.ppidx]
+    print "Partition %d contains %d structures."%(args.ppidx,len(structs))
+    # Shuffle the order of structure subset to prevent multi-run bottlen cks
+    np.random.shuffle(structs)
+    # Stagger process start times
+    time.sleep(args.ppidx%50)
 #=============================================================================#
 ## Begin Analysis ##
 res = []
@@ -253,8 +260,9 @@ res = []
 for s in structs:
   sys.stdout.flush() # flush the stdout buffer after each structure
   try:
-    # Read the data 
-    df = read_infile(s)
+    # Read the data
+    if df.empty: # df pre-populated if single-structure input
+      df = read_infile(s)
     sid,bio,model,chain = df[["structid","biounit","model","chain"]].values[0]
     fname = "%s/%s-%s_%s_K_complete.txt.gz"%(args.outdir,sid,chain,args.aname)
     if os.path.exists(fname) and not args.overwrite:
@@ -382,3 +390,6 @@ for s in structs:
     # import pdb  # drop into debugger
     # pdb.set_trace()
 
+  finally:
+    # Manually reset the data frame
+    df = pd.DataFrame()

@@ -67,15 +67,17 @@ parser.add_argument("--unp",action='store_true',default=False,
                     help="Is there a UNP column between chain and seqid?")
 parser.add_argument("--pdf",action='store_true',default=False,
                     help="Generate a PDF version of the multi-distance K plot")
+parser.add_argument("--png",action='store_true',default=False,
+                    help="Generate a PNG version of the multi-distance K plot")
 parser.add_argument("--saveperm",action='store_true',default=False,
                     help="Saves a compressed copy of the permutation matrix")
 args = parser.parse_args()
 print "\nActive options:"
 for arg in vars(args):
   try:
-    print "  %s:\t%s"%(arg,getattr(args,arg).name)
+    print "  %10s: %s"%(arg,getattr(args,arg).name)
   except:
-    print "  %s:\t%s"%(arg,getattr(args,arg))
+    print "  %10s: %s"%(arg,getattr(args,arg))
 print ""
 args.outdir = args.outdir.rstrip('/')
 if not os.path.exists(args.outdir):
@@ -93,15 +95,15 @@ def read_infile(sfile):
   if args.unp:
     dtypes = OrderedDict([("structid",str),("biounit",int),("model",int),
                         ("chain",str),("unp",str),("seqid",int),("icode",str),
-                        ("x",float),("y",float),("z",float),('rsa',float),
-                        ('ss',str)])
-    df = pd.read_csv(sfile,sep='\t',header=None,index_col=False,usecols=range(12))
+                        ("x",float),("y",float),("z",float)])#,('rsa',float),
+                        # ('ss',str)]) #HACK: run cosmic-exac analysis w/ missing rsa/ss
+    df = pd.read_csv(sfile,sep='\t',header=None,index_col=False,usecols=range(10))
   else:
     dtypes  = OrderedDict([("structid",str),("biounit",str),("model",str),
                         ("chain",str),("seqid",int),("icode",str),
-                        ("x",float),("y",float),("z",float),('rsa',float),
-                        ('ss',str)])
-    df = pd.read_csv(sfile,sep='\t',header=None,index_col=False,usecols=range(11))
+                        ("x",float),("y",float),("z",float)])#,('rsa',float),
+                        # ('ss',str)]) #HACK: run cosmic-exac analysis w/ missing rsa/ss
+    df = pd.read_csv(sfile,sep='\t',header=None,index_col=False,usecols=range(9))
   # Update the data frame names and data types
   df.columns  = dtypes.keys()
   for name,dtype in dtypes.iteritems():
@@ -196,45 +198,60 @@ def perm_plot(K_perm,T,ax=None):
 
 #=============================================================================#
 ## Select Partition ##
-print "Reading data..."
-with open(args.a,'rb') as fin:
-  s1 = set(s.rstrip() for s in fin)
-with open(args.b,'rb') as fin:
-  s2 = set(s.rstrip() for s in fin)
-# Structure -> file dictionary
-structs1 = dict((tuple(os.path.basename(s).split('_')[:2]),s) for s in s1)
-structs2 = dict((tuple(os.path.basename(s).split('_')[:2]),s) for s in s2)
-# Susbtring intersection
-structs1 = dict([s1 for s1 in structs1.iteritems() if s1[0] in structs2])
-structs2 = dict([s2 for s2 in structs2.iteritems() if s2[0] in structs1])
-structs  = sorted(structs1.keys())
-# Verify that the list of structure tuples is fully paired
-if not structs:
-  raise Exception("Datasets included none of the same structures.")
-print "Proteins containing data from both datasets: %4d"%len(structs)
+try:
+  A = read_infile(args.a)
+  B = read_infile(args.b)
+  print "Input files are structure files. Processing independently...\n"
+  structs   = [args.a]
+  sid,chain = args.label,""
+except:
+  print "\nReading structure file lists from input files...\n"
+  A = np.array([])
+  B = np.array([])
+  with open(args.a,'rb') as fin:
+    s1 = set(s.rstrip() for s in fin)
+  with open(args.b,'rb') as fin:
+    s2 = set(s.rstrip() for s in fin)
+  # Structure -> file dictionary
+  structs1 = dict((tuple(os.path.basename(s).split('_')[:2]),s) for s in s1)
+  structs2 = dict((tuple(os.path.basename(s).split('_')[:2]),s) for s in s2)
+  # Susbtring intersection
+  structs1 = dict([s1 for s1 in structs1.iteritems() if s1[0] in structs2])
+  structs2 = dict([s2 for s2 in structs2.iteritems() if s2[0] in structs1])
+  structs  = sorted(structs1.keys())
+  # Verify that the list of structure tuples is fully paired
+  if not structs:
+    raise Exception("Datasets included none of the same structures.")
+  print "Proteins containing data from both datasets: %4d"%len(structs)
 
-# Shuffle, partition, and subset to assigned partition
-if args.ppart > 1:
-  # np.random.shuffle(structs) # all processes produce the same shuffle
-  random.seed() # reset the seed to current time for actual analysis
-  structs = [s for i,s in enumerate(structs) if i%args.ppart==args.ppidx]
-  print "Partition %d contains %d structures."%(args.ppidx,len(structs))
-  # Shuffle the order of structure subset to prevent multi-run bottlenecks
-  np.random.shuffle(structs)
-  # Stagger process start times
-  time.sleep(args.ppidx%50)
+  # Shuffle, partition, and subset to assigned partition
+  if args.ppart > 1:
+    # np.random.shuffle(structs) # all processes produce the same shuffle
+    random.seed() # reset the seed to current time for actual analysis
+    structs = [s for i,s in enumerate(structs) if i%args.ppart==args.ppidx]
+    print "Partition %d contains %d structures."%(args.ppidx,len(structs))
+    # Shuffle the order of structure subset to prevent multi-run bottlenecks
+    np.random.shuffle(structs)
+    # Stagger process start times
+    time.sleep(args.ppidx%50)
 #=============================================================================#
 ## Begin Analysis ##
 res = []
 # Only evaluate structures assigned to this process
 for s in structs:
-  sid,chain = s      # unlist the structure and chain IDs
   sys.stdout.flush() # flush the stdout buffer after each structure
   t0 = time.time()
   try:
-    # Read the data 
-    A = read_infile(structs1[s])
-    B = read_infile(structs2[s])
+    # Read the data
+    if not A.size and not B.size: # A/B pre-populated if single-structure input
+      sid,chain = s               # unlist the structure and chain IDs
+      A = read_infile(structs1[s])
+      B = read_infile(structs2[s])
+
+    fname = "%s/%s-%s_%s_D_complete.txt.gz"%(args.outdir,sid,chain,args.label)
+    if os.path.exists(fname) and not args.overwrite:
+      sys.stderr.write("Skipped. %s.%s: Structure has already been processed.\n"%(sid,chain))
+      continue
     print "\n###########################\nEvaluating  %s.%s..."%(sid,chain)
 
     # Verify that the structure contains at least three residues with valid attribute values (>0.01)
@@ -247,8 +264,9 @@ for s in structs:
       sys.stderr.write("Skipped %s.%s: Dataset 2 contains fewer than three residues with valid attribute values.\n"%(sid,chain))
       continue
     else:
-      print "%4s.%1s: Dataset 1 contains %d residues with valid attribute values"%(sid,chain,NA)
-      print "      : Dataset 2 contains %d residues with valid attribute values\n"%NB
+      l = len(sid)+len(chain)+1
+      print "%s.%s: Dataset 1 contains %3d residues with valid attribute values"%(sid,chain,NA)
+      print "%s: Dataset 2 contains %3d residues with valid attribute values\n"%(' '*l,NB)
 
     ## The structure is valid. Prepare the data for analysis.
     # All pairs (i,j) distance (i!=j)
@@ -335,7 +353,9 @@ for s in structs:
     ax.legend(loc="lower right",fontsize=18)
     if args.pdf:
       plt.savefig("%s/%s-%s_%s_D_plot.pdf"%(args.outdir,sid,chain,args.label),dpi=300)
-      plt.close(fig)
+    if args.png:
+      plt.savefig("%s/%s-%s_%s_D_plot.png"%(args.outdir,sid,chain,args.label),dpi=300)
+    plt.close(fig)
 
     ## Plot K*
     fig,ax = plt.subplots(1,1,figsize=(20,7))
@@ -346,7 +366,9 @@ for s in structs:
     ax.legend(loc="lower right",fontsize=18)
     if args.pdf:
       plt.savefig("%s/%s-%s_%s_Kstar_plot.pdf"%(args.outdir,sid,chain,args.label),dpi=300)
-      plt.close(fig)
+    if args.png:
+      plt.savefig("%s/%s-%s_%s_Kstar_plot.png"%(args.outdir,sid,chain,args.label),dpi=300)
+    plt.close(fig)
 
     ## Plot KA - K*
     fig,ax = plt.subplots(1,1,figsize=(20,7))
@@ -355,7 +377,9 @@ for s in structs:
     ax.legend(loc="lower right",fontsize=18)
     if args.pdf:
       plt.savefig("%s/%s-%s_%s_KAD_plot.pdf"%(args.outdir,sid,chain,args.label),dpi=300)
-      plt.close(fig)
+    if args.png:
+      plt.savefig("%s/%s-%s_%s_KAD_plot.png"%(args.outdir,sid,chain,args.label),dpi=300)
+    plt.close(fig)
 
     ## Plot KB - K*
     fig,ax = plt.subplots(1,1,figsize=(20,7))
@@ -364,7 +388,9 @@ for s in structs:
     ax.legend(loc="lower right",fontsize=18)
     if args.pdf:
       plt.savefig("%s/%s-%s_%s_KBD_plot.pdf"%(args.outdir,sid,chain,args.label),dpi=300)
-      plt.close(fig)
+    if args.png:
+      plt.savefig("%s/%s-%s_%s_KBD_plot.png"%(args.outdir,sid,chain,args.label),dpi=300)
+    plt.close(fig)
 
     ## Save the permutation matrices
     if args.saveperm:
@@ -427,11 +453,11 @@ for s in structs:
     print ""
 
   except Exception as e:
+    raise       # raise exception
     print "Error in %s"%sid
     print str(e)
     print e
     continue   # continue to next structure
-    # raise       # raise exception
-    # import pdb  # drop into debugger
-    # pdb.set_trace()
-
+  finally:
+    A = np.array([])
+    B = np.array([])
