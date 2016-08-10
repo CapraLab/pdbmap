@@ -46,9 +46,12 @@ resetwarnings()
 # Plotting
 import matplotlib.pyplot as plt
 from cycler import cycler
-cycle = ["darkred","darkblue","orange","darkgreen"]#,"magenta","grey","purple","cyan"]
-color_cycle = cycler('color',cycle)
-plt.rc('axes',prop_cycle=color_cycle)
+ccycle = ["darkred","darkblue","orange","forestgreen","orchid","steelblue"]
+lcycle = ["-","--","--","--","--","--"]
+# lcycle = ["-","-","-","-","-","-"]
+color_cycle = cycler('color',ccycle)
+line_cycle  = cycler('linestyle',lcycle)
+plt.rc('axes',prop_cycle=(color_cycle + line_cycle))
 
 # PDBMap
 from Bio.PDB.PDBParser import PDBParser
@@ -107,6 +110,10 @@ parser.add_argument("--polyphen",type=str,
                     help="Location of file with PolyPhen2 scores")
 parser.add_argument("--consurf",type=str,
                     help="Location of file with ConSurf scores")
+parser.add_argument("--sift", type=str,
+                    help="Location of file with SIFT scores")
+parser.add_argument("--cadd", type=str,
+                    help="Location of file with CADD scores")
 parser.add_argument("--domains",type=str,
                     help="Location of file with protein domain boundaries")
 parser.add_argument("--replace",action="store_true",default=False,
@@ -409,11 +416,13 @@ def get_polyphen(df,fname):
   tdf = pd.read_csv(fname,header=0,sep='\t',skipinitialspace=True)
   tdf.rename(columns={"aa1":"ref","aa2":"alt","prediction":"pph2_pred"},inplace=True)
   tdf = tdf[["pos","ref","alt","pph2_prob","pph2_pred"]].dropna()
-  df_len = len(df)
+  df_len = len(df.index)
+  temp = df.copy()
   df = df.merge(tdf,how='left',on=["pos","ref","alt"],suffixes=['','_y'])
   df.ix[df["pph2_prob"].isnull(),"pph2_prob"] = df.ix[df["pph2_prob"].isnull(),"pph2_prob_y"]
   df = df.drop_duplicates(["chain","pos","ref","alt","dcode","pph2_prob"])
-  if df_len != len(df):
+  if df_len != len(df.index): # tdf left join df, find null rows
+    pd.set_option('display.width', 5000)
     raise Exception("PolyPhen2 merge changed the dataframe size: %d => %d"%(df_len,len(df)))
   return df
 
@@ -429,6 +438,25 @@ def get_consurf(df,fname):
     raise Exception("ConSurf merge changed the dataframe size: %d => %d"%(df_len,len(df)))
   return df
 
+# Accepts a tab-delimited file with 4 columns: amino acid position, ref allele, alt allele, and SIFT score. 
+def get_sift(df,fname):
+  tdf = pd.read_csv(fname, sep='\t')
+  df_len = len(df)
+  df = df.merge(tdf, how='left', on=['pos', 'ref', 'alt'])
+  if df_len != len(df):
+    raise Exception("SIFT merge changed the dataframe size: %d => %d"%(df_len,len(df)))
+  return df
+
+# Accepts a tab-delimited file with 4 columns: amino acid position, ref allele, alt allele, and PHRED (CADD) score.
+def get_cadd(df,fname):
+  tdf = pd.read_csv(fname, sep='\t')
+  tdf.rename(columns={"phred":"CADD"},inplace=True)
+  df_len = len(df)
+  df = df.merge(tdf, how='left', on=['pos', 'ref', 'alt'])
+  if df_len != len(df):
+    raise Exception("CADD merge changed the dataframe size: %d => %d"%(df_len,len(df)))
+  return df
+  
 def resicom(resi):
   if resi==None: return [None,None,None]
   return np.array([np.array(a.get_coord()) for a in resi.get_unpacked_list()]).mean(axis=0)
@@ -546,7 +574,7 @@ def mwu_pvalue(nscores,pscores):
 def plot_hist(nscores,pscores,cscores,title,label):
   ## Plot the histogram of scores w/ candidates marked in red
   fig = plt.figure(figsize=(15,7))
-  plt.title("Natural and %s Score Distributions"%title)
+  # plt.title("Natural and %s Score Distributions"%title)
   if cscores and max(cscores) > 20:
     print "\nExtreme scores reduced to 20 for histogram.\n"
   change  = len(nscores+pscores)
@@ -571,13 +599,13 @@ def plot_roc(fpr,tpr,label,fig=None,save=True):
   roc_auc = auc(fpr,tpr)
   if not fig:
     fig = plt.figure(figsize=(7,7))
-    plt.title("%s ROC"%label)
+    # plt.title("%s ROC"%label)
     plt.plot([0,1],[0,1],'k--')
     plt.xlim([0.,1.])
     plt.ylim([0.,1.])
     plt.xlabel("False Positive Rate")
     plt.ylabel("True Positive Rate")
-  l = "%15s (AUC: %.3f)"%(label.replace(' ','_'),roc_auc)
+  l = "%s (AUC: %5.3f)"%(label,roc_auc)
   plt.plot(fpr,tpr,label=l,linewidth=3)
   if save:
     plt.legend(loc="lower right",fontsize=10)
@@ -590,12 +618,12 @@ def plot_pr(rec,prec,pr_auc,label,fig=None,save=True):
   ## Plot the PR curve
   if not fig:
     fig = plt.figure(figsize=(7,7))
-    plt.title("%s PR"%label)
+    # plt.title("%s PR"%label)
     plt.xlim([0.,1.])
     plt.ylim([0.,1.])
     plt.xlabel("Recall")
     plt.ylabel("Precision")
-  l = "%15s (AUC: %.3f)"%(label.replace(' ','_'),pr_auc)
+  l = "%s (AUC: %5.3f)"%(label,pr_auc)
   plt.plot(rec,prec,label=l,linewidth=3)
   if save:
     plt.legend(loc="lower left",fontsize=10)
@@ -654,7 +682,7 @@ def colocalization(cands,neuts,paths,label=""):
   print "\nColocalization Pathogenicity MWU p-value: %g"%mwu_p
   print "Colocalization Pathogenicity ROC AUC:     %g"%roc_auc
   print "Colocalization Pathogenicity PR  AUC:     %g"%pr_auc
-  if c.size:
+  if len(c):
     preds  = predict(c)
     print "\nWriting colocalization results to file..."
     write_results(hgvs,c,pv,preds,conf,len(n)+len(p),mwu_p,roc_auc,pr_auc,label=label)
@@ -794,6 +822,9 @@ for sid,bio,cf in flist:
     tdf["dcode"]  = 2
     df = df.append(tdf)
 
+  # Drop duplicates after chain-mapping
+  df = df.drop_duplicates(["chain","pos","ref","alt","dcode"]).reset_index(drop=True)
+
   # Skip if the structure contains no candidate variants
   if not any(check_coverage(s,v["chain"],v["pos"],refpos=not bool(aln)) for _,v in df.iterrows()):
     msg = "%s.%s contains none of the candidate variants.\n"
@@ -806,17 +837,16 @@ for sid,bio,cf in flist:
     df = df.append(get_pathogenic(io,sid,refid))
     df = df.append(get_somatic(io,sid,refid))
     df = df.append(get_drug(io,sid,refid))
+    df = df.drop_duplicates(["chain","pos","ref","alt","dcode"]).reset_index(drop=True)
   if not (args.replace and (df["dcode"]==1).sum()):
     df = df.append(get_natural(io,sid,refid))
     df = df.append(get_benign(io,sid,refid))
-    df = df.reset_index(drop=True)
+    df = df.drop_duplicates(["chain","pos","ref","alt","dcode"]).reset_index(drop=True)
     def pathdefer(g):
       # Defer to pathogenic annotation if conflicted. DO NOT OVERWRITE CANDIDATES!
       return g if all(g["dcode"]<2) else g[(g["dcode"]>1) | (g["dcode"]<0)]
     df = df.groupby(["pos","ref","alt"]).apply(pathdefer)
   df["pos"] = df["pos"].astype(int)
-  # Drop duplicates (known variants also specified via command line)
-  df = df.drop_duplicates(["chain","pos","ref","alt","dcode"]).reset_index(drop=True)
 
   if bio < 0:
     # If user-defined model, map reference variants to each chain
@@ -827,6 +857,8 @@ for sid,bio,cf in flist:
       haschain = haschain.append(nochain)
     df = haschain
   
+  # Drop duplicates (known variants also specified via command line)
+  df = df.drop_duplicates(["chain","pos","ref","alt","dcode"])
   # Reset the index once all modifications have finished
   df = df.sort_values(by=["chain","pos"]).reset_index(drop=True)
 
@@ -881,6 +913,11 @@ for sid,bio,cf in flist:
   if args.polyphen:
     df = get_polyphen(df,args.polyphen)
 
+  if args.sift:
+    df = get_sift(df, args.sift)
+  if args.cadd:
+    df = get_cadd(df, args.cadd)
+
   ## Add ConSurf scores
   if args.consurf:
     sdf = get_consurf(sdf,args.consurf)
@@ -930,7 +967,7 @@ for sid,bio,cf in flist:
 
   ## BLOSUM62 Prediction
   print "\n############# BLOSUM62 ###########"
-  blosum = pd.read_csv("/dors/capra_lab/sivleyrm/bin/BLOSUM62.txt",
+  blosum = pd.read_csv("/dors/capra_lab/doux/pdbmap/data/udn/BLOSUM62.txt",
                         index_col=0,header=0,comment="#",sep='\t')
   # Generate the predictions (flip low to high for increasing likelihood)
   hgvs = (df.ix[df["dcode"]==-1,"ref"]+(df.ix[df["dcode"]==-1,"pos"].map(str))+df.ix[df["dcode"]==-1,"alt"]).values
@@ -956,6 +993,33 @@ for sid,bio,cf in flist:
     for i,name in enumerate(hgvs):
       print "%s\t%11s\t%.2f"%(name,["Benign","Deleterious"][int(t[i]>0)],-t[i])
     print ""
+
+  ## Evolutionary Conservation Prediction
+  if args.consurf:
+    print "\n############# Conservation ###########"
+    hgvs = (sdf.ix[sdf["dcode"]==-1,"ref"]+(sdf.ix[sdf["dcode"]==-1,"pos"].map(str))+sdf.ix[sdf["dcode"]==-1,"alt"]).values
+    # Generate predictions (flip low to high for increasing likelihood)
+    p = -sdf.ix[sdf["dcode"]==2         ,"consurf"]
+    n = -sdf.ix[sdf["dcode"].isin([0,1]),"consurf"]
+    t = -sdf.ix[sdf["dcode"]==-1        ,"consurf"]
+    p[np.isnan(p)] = 0.
+    n[np.isnan(n)] = 0.
+    t[np.isnan(t)] = 0.
+    mwu,mwu_p,roc_auc,tpr,fpr,pr_auc,prec,rec = eval_pred(p,n,t,hgvs,"ConSurf")
+    all_pred["ConSurf"] = (p,n,t)
+    all_pred_roc["ConSurf"] = (fpr,tpr)
+    all_pred_pr["ConSurf"]  = (rec,prec)
+    all_pred_rocauc["ConSurf"] = roc_auc
+    all_pred_prauc["ConSurf"]  = pr_auc
+    print "\nConSurf Pathogenicity MWU p-value: %g"%mwu_p
+    print "ConSurf Pathogenicity ROC AUC:     %g"%roc_auc
+    print "ConSurf Pathogenicity PR  AUC:     %g"%pr_auc
+    print "ConSurf Pathogenicity Predictions:"
+    if not t.empty:
+      t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
+      for i,name in enumerate(hgvs):
+        print "%s\t%11s\t%.2f"%(name,["Benign","Deleterious"][int(t[i]>0.5)],-t[i])
+      print ""
 
   ## Domain (PFAM,SCOP) Prediction
   if args.domains:
@@ -984,6 +1048,28 @@ for sid,bio,cf in flist:
         print "%s\t%11s"%(name,["Benign","Deleterious"][t[i]])
       print ""
 
+  if args.cadd:
+    print "\n############# CADD ###########"
+    hgvs = (df.ix[df["dcode"]==-1,"ref"]+(df.ix[df["dcode"]==-1,"pos"].map(str))+df.ix[df["dcode"]==-1,"alt"]).values
+    p = df.ix[df["dcode"]==2,"CADD"].values
+    n = df.ix[df["dcode"].isin([0,1]),"CADD"].values
+    t = df.ix[df["dcode"]==-1,"CADD"].values
+    mwu,mwu_p,roc_auc,tpr,fpr,pr_auc,prec,rec = eval_pred(p,n,t,hgvs,"CADD")
+    all_pred["CADD"] = (p,n,t)
+    all_pred_roc["CADD"] = (fpr,tpr)
+    all_pred_pr["CADD"]  = (rec,prec)
+    all_pred_rocauc["CADD"] = roc_auc
+    all_pred_prauc["CADD"]  = pr_auc
+    print "\nCADD Pathogenicity MWU p-value: %g"%mwu_p
+    print "CADD Pathogenicity ROC AUC:     %g"%roc_auc
+    print "CADD Pathogenicity PR  AUC:     %g"%pr_auc
+    print "CADD Pathogenicity Predictions:"
+    if t.size:
+      t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
+      for i,name in enumerate(hgvs):
+        print "%s\t%11s\t%.3f"%(name,["Benign","Damaging"][int(t[i]<15)],t[i])
+      print ""
+
   ## PolyPhen2 Prediction
   if args.polyphen:
     print "\n############# PolyPhen2 ###########"
@@ -1007,32 +1093,27 @@ for sid,bio,cf in flist:
         print "%s\t%11s\t%.3f"%(name,["Benign","Damaging"][int(t[i]>0.5)],t[i])
       print ""
 
-  ## Evolutionary Conservation Prediction
-  if args.consurf:
-    print "\n############# Conservation ###########"
-    hgvs = (sdf.ix[sdf["dcode"]==-1,"ref"]+(sdf.ix[sdf["dcode"]==-1,"pos"].map(str))+sdf.ix[sdf["dcode"]==-1,"alt"]).values
-    # Generate predictions (flip low to high for increasing likelihood)
-    p = -sdf.ix[sdf["dcode"]==2         ,"consurf"]
-    n = -sdf.ix[sdf["dcode"].isin([0,1]),"consurf"]
-    t = -sdf.ix[sdf["dcode"]==-1        ,"consurf"]
-    p[np.isnan(p)] = 0.
-    n[np.isnan(n)] = 0.
-    t[np.isnan(t)] = 0.
-    mwu,mwu_p,roc_auc,tpr,fpr,pr_auc,prec,rec = eval_pred(p,n,t,hgvs,"ConSurf")
-    all_pred["ConSurf"] = (p,n,t)
-    all_pred_roc["ConSurf"] = (fpr,tpr)
-    all_pred_pr["ConSurf"]  = (rec,prec)
-    all_pred_rocauc["ConSurf"] = roc_auc
-    all_pred_prauc["ConSurf"]  = pr_auc
-    print "\nConSurf Pathogenicity MWU p-value: %g"%mwu_p
-    print "ConSurf Pathogenicity ROC AUC:     %g"%roc_auc
-    print "ConSurf Pathogenicity PR  AUC:     %g"%pr_auc
-    print "ConSurf Pathogenicity Predictions:"
-    if not t.empty:
-      t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
-      for i,name in enumerate(hgvs):
-        print "%s\t%11s\t%.2f"%(name,["Benign","Deleterious"][int(t[i]>0.5)],-t[i])
-      print ""
+  if args.sift:
+      print "\n############# SIFT ###########"
+      hgvs = (df.ix[df["dcode"]==-1,"ref"]+(df.ix[df["dcode"]==-1,"pos"].map(str))+df.ix[df["dcode"]==-1,"alt"]).values
+      p = [-x for x in df.ix[df["dcode"]==2,"sift"].values]
+      n = [-x for x in df.ix[df["dcode"].isin([0,1]),"sift"].values]
+      t = [-x for x in df.ix[df["dcode"]==-1,"sift"].values]
+      mwu,mwu_p,roc_auc,tpr,fpr,pr_auc,prec,rec = eval_pred(p,n,t,hgvs,"SIFT")
+      all_pred["SIFT"] = (p,n,t)
+      all_pred_roc["SIFT"] = (fpr,tpr)
+      all_pred_pr["SIFT"]  = (rec,prec)
+      all_pred_rocauc["SIFT"] = roc_auc
+      all_pred_prauc["SIFT"]  = pr_auc
+      print "\nSIFT Pathogenicity MWU p-value: %g"%mwu_p
+      print "SIFT Pathogenicity ROC AUC:     %g"%roc_auc
+      print "SIFT Pathogenicity PR  AUC:     %g"%pr_auc
+      print "SIFT Pathogenicity Predictions:"
+      if len(t):
+        t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
+        for i,name in enumerate(hgvs):
+          print "%s\t%11s\t%.3f"%(name,["Benign","Damaging"][int(t[i]>.05)],-t[i])
+        print ""
 
   ## Prediction by Relative Colocalization
   print "\n############# Colocalization ###########"
@@ -1116,8 +1197,12 @@ for sid,bio,cf in flist:
   fig = plot_roc(*all_pred_roc[l],label=l,save=False)
   for l in predictors[1:]:
     fig = plot_roc(*all_pred_roc[l],label=l,fig=fig,save=False)
-  plt.legend(loc="lower right",fontsize=10)
-  plt.title("Comparison of Pathogenicity Prediction Methods (ROC)")
+  legend = plt.legend(loc="lower right",fontsize=10)
+  # Right-justification hack
+  for t in legend.get_texts():
+    t.set_ha("right")
+    t.set_position((560,0))
+  # plt.title("Comparison of Pathogenicity Prediction Methods (ROC)")
   plt.savefig("%s_Colocalization_Comparison_roc.pdf"%args.label,dpi=300)
   plt.savefig("%s_Colocalization_Comparison_roc.png"%args.label,dpi=300)
   plt.close(fig)
@@ -1130,8 +1215,12 @@ for sid,bio,cf in flist:
   fig = plot_pr(*all_pred_pr[l],pr_auc=all_pred_prauc[l],label=l,save=False)
   for l in predictors[1:]:
     fig = plot_pr(*all_pred_pr[l],pr_auc=all_pred_prauc[l],label=l,fig=fig,save=False)
-  plt.legend(loc="lower left",fontsize=10)
-  plt.title("Comparison of Pathogenicity Prediction Methods (PR)")
+  legend = plt.legend(loc="lower left",fontsize=10)
+  # Right-justification hack
+  for t in legend.get_texts():
+    t.set_ha("right")
+    t.set_position((560,0))
+  # plt.title("Comparison of Pathogenicity Prediction Methods (PR)")
   plt.savefig("%s_Colocalization_Comparison_pr.pdf"%args.label,dpi=300)
   plt.savefig("%s_Colocalization_Comparison_pr.png"%args.label,dpi=300)
   plt.close(fig)
@@ -1160,7 +1249,7 @@ for sid,bio,cf in flist:
   #   colocalization(c,n,d,label="%s ClinVar Drug Response"%label)
 
   ## Output the fully annotated data to file
-  print "\nWriting analysis data to file..."
+  print "\nWriting analysis data to %s/%s_data.txt..."%(args.outdir,args.label)
   df.to_csv("%s_data.txt"%args.label,sep="\t",index=False,header=True)
 
   ## Return to the original directory
