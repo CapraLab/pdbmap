@@ -46,9 +46,12 @@ resetwarnings()
 # Plotting
 import matplotlib.pyplot as plt
 from cycler import cycler
-cycle = ["darkred","darkblue","orange","darkgreen","magenta","grey","purple","cyan"]
-color_cycle = cycler('color',cycle)
-plt.rc('axes',prop_cycle=color_cycle)
+ccycle = ["darkred","darkblue","orange","forestgreen","orchid","steelblue"]
+lcycle = ["-","--","--","--","--","--"]
+# lcycle = ["-","-","-","-","-","-"]
+color_cycle = cycler('color',ccycle)
+line_cycle  = cycler('linestyle',lcycle)
+plt.rc('axes',prop_cycle=(color_cycle + line_cycle))
 
 # PDBMap
 from Bio.PDB.PDBParser import PDBParser
@@ -87,7 +90,7 @@ parser = argparse.ArgumentParser(parents=[conf_parser],description=__doc__,forma
 parser.set_defaults(**defaults)
 parser.add_argument("entity",type=str,
                     help="Gene ID, UniProt AC, PDB ID, or PDB filename")
-parser.add_argument("variants",type=str,
+parser.add_argument("variants",type=str,nargs='?',
                     help="comma-separated list of protein-level HGVS, \
                           rsID, chromosomal position identifiers; or \
                           a filename containing one identifier per line")
@@ -107,12 +110,18 @@ parser.add_argument("--polyphen",type=str,
                     help="Location of file with PolyPhen2 scores")
 parser.add_argument("--consurf",type=str,
                     help="Location of file with ConSurf scores")
+parser.add_argument("--sift", type=str,
+                    help="Location of file with SIFT scores")
+parser.add_argument("--cadd", type=str,
+                    help="Location of file with CADD scores")
 parser.add_argument("--domains",type=str,
                     help="Location of file with protein domain boundaries")
 parser.add_argument("--replace",action="store_true",default=False,
                     help="User-defined variant sets are intersected by default")
 parser.add_argument("--no-timestamp","-nt",action="store_true",default=False,
                     help="Disables output directory timestamping")
+parser.add_argument("--use-residues",type=str,
+                    help="Specify a range of residues to analyze in the form: `-500` or `1-500` or `500-`")
 parser.add_argument("--slabel",type=str,default="uniprot-pdb",
                     help="PDBMap structure label to use for queries")
 parser.add_argument("--verbose",action="store_true",default=False,
@@ -120,6 +129,13 @@ parser.add_argument("--verbose",action="store_true",default=False,
 args = parser.parse_args()
 if not args.label:
   args.label = args.entity.split('.')[0] # strip extensions from filenames
+if args.use_residues:
+  try:
+    args.use_residues = tuple(args.use_residues.split('-'))
+  except:
+    msg = "Incorrect formatting for --use-residues. See help for details."
+    sys.stderr.write(msg)
+    sys.exit(1)
 print "\nActive options:"
 for arg in vars(args):
   try:
@@ -273,7 +289,7 @@ def check_coverage(s,chain,pos,refpos=True):
 
 def default_var_query():
   """ Default string for variant queries """
-  s  = "SELECT distinct protein_pos,ref_amino_acid,alt_amino_acid,chain FROM GenomicConsequence a "
+  s  = "SELECT distinct protein_pos,ref_amino_acid,alt_amino_acid,chain,polyphen FROM GenomicConsequence a "
   s += "INNER JOIN GenomicIntersection b ON a.gc_id=b.gc_id "
   s += "INNER JOIN GenomicData c ON a.gd_id=c.gd_id "
   w  = "WHERE b.slabel=%s and a.label=%s AND consequence LIKE '%%missense_variant%%' "
@@ -282,7 +298,7 @@ def default_var_query():
 
 def sequence_var_query():
   """ Alternate string for custom protein models """
-  s  = "SELECT distinct protein_pos,ref_amino_acid,alt_amino_acid FROM GenomicConsequence a "
+  s  = "SELECT distinct protein_pos,ref_amino_acid,alt_amino_acid,polyphen FROM GenomicConsequence a "
   s += "INNER JOIN GenomicData c on a.gd_id=c.gd_id "
   w  = "WHERE a.label=%s and consequence LIKE '%%missense_variant%%' "
   w += "AND a.uniprot=%s AND LENGTH(ref_amino_acid)=1 "
@@ -300,11 +316,11 @@ def get_natural(io,sid,refid=None):
   if not refid:
     s,w = default_var_query()
     f   = (args.slabel,"1kg3",sid)
-    c   = ["pos","ref","alt","chain"]
+    c   = ["pos","ref","alt","chain","pph2_prob"]
   else:
     s,w = sequence_var_query()
     f   = ("1kg3",refid)
-    c   = ["pos","ref","alt"]
+    c   = ["pos","ref","alt","pph2_prob"]
   q   = s+w
   res = list(io.secure_query(q,f,cursorclass="Cursor"))
   df  = pd.DataFrame(res,columns=c)
@@ -317,11 +333,11 @@ def get_somatic(io,sid,refid=None):
   if not refid:
     s,w = default_var_query()
     f   = (args.slabel,"cosmic",sid)
-    c   = ["pos","ref","alt","chain"]
+    c   = ["pos","ref","alt","chain","pph2_prob"]
   else:
     s,w = sequence_var_query()
     f   = ("cosmic",refid)
-    c   = ["pos","ref","alt"]
+    c   = ["pos","ref","alt","pph2_prob"]
   m   = "INNER JOIN pdbmap_supp.cosmic d "
   m  += "ON c.chr=d.chr and c.start=d.start "
   m  += "AND d.cnt>1 "
@@ -337,11 +353,11 @@ def get_benign(io,sid,refid=None):
   if not refid:
     s,w = default_var_query()
     f   = (args.slabel,"clinvar",sid)
-    c   = ["pos","ref","alt","chain"]
+    c   = ["pos","ref","alt","chain","pph2_prob"]
   else:
     s,w = sequence_var_query()
     f   = ("clinvar",refid)
-    c   = ["pos","ref","alt"]
+    c   = ["pos","ref","alt","pph2_prob"]
   s  += "INNER JOIN pdbmap_supp.clinvar d "
   s  += "ON c.chr=d.chr and c.start=d.start "
   b   = "AND d.clnsig in (2,3)"
@@ -357,11 +373,11 @@ def get_pathogenic(io,sid,refid=None):
   if not refid:
     s,w = default_var_query()
     f   = (args.slabel,"clinvar",sid)
-    c   = ["pos","ref","alt","chain"]
+    c   = ["pos","ref","alt","chain","pph2_prob"]
   else:
     s,w = sequence_var_query()
     f   = ("clinvar",refid)
-    c   = ["pos","ref","alt"]
+    c   = ["pos","ref","alt","pph2_prob"]
   s  += "INNER JOIN pdbmap_supp.clinvar d "
   s  += "ON c.chr=d.chr and c.start=d.start "
   p   = "AND d.clnsig in (4,5)"
@@ -377,11 +393,11 @@ def get_drug(io,sid,refid=None):
   if not refid:
     s,w = default_var_query()
     f   = (args.slabel,"clinvar",sid)
-    c   = ["pos","ref","alt","chain"]
+    c   = ["pos","ref","alt","chain","pph2_prob"]
   else:
     s,w = sequence_var_query()
     f   = ("clinvar",refid)
-    c   = ["pos","ref","alt"]
+    c   = ["pos","ref","alt","pph2_prob"]
   s  += "INNER JOIN pdbmap_supp.clinvar d "
   s  += "ON c.chr=d.chr and c.start=d.start "
   d   = "AND d.clnsig=7"
@@ -394,12 +410,19 @@ def get_drug(io,sid,refid=None):
 
 def get_polyphen(df,fname):
   """ Appends polyphen2 scores to a dataframe """
+  if "pph2_prob" not in df.columns:
+    df["pph2_prob"] = np.nan
+  df  = df.drop_duplicates(["chain","pos","ref","alt","dcode","pph2_prob"])
   tdf = pd.read_csv(fname,header=0,sep='\t',skipinitialspace=True)
-  tdf = tdf[["pos","aa1","aa2","pph2_prob","prediction"]].dropna()
-  df_len = len(df)
-  df  = df.merge(tdf,how="left",left_on=["pos","ref","alt"],right_on=["pos","aa1","aa2"])
-  df  = df.drop_duplicates(["pos","ref","alt","dcode","pph2_prob"])
-  if df_len != len(df):
+  tdf.rename(columns={"aa1":"ref","aa2":"alt","prediction":"pph2_pred"},inplace=True)
+  tdf = tdf[["pos","ref","alt","pph2_prob","pph2_pred"]].dropna()
+  df_len = len(df.index)
+  temp = df.copy()
+  df = df.merge(tdf,how='left',on=["pos","ref","alt"],suffixes=['','_y'])
+  df.ix[df["pph2_prob"].isnull(),"pph2_prob"] = df.ix[df["pph2_prob"].isnull(),"pph2_prob_y"]
+  df = df.drop_duplicates(["chain","pos","ref","alt","dcode","pph2_prob"])
+  if df_len != len(df.index): # tdf left join df, find null rows
+    pd.set_option('display.width', 5000)
     raise Exception("PolyPhen2 merge changed the dataframe size: %d => %d"%(df_len,len(df)))
   return df
 
@@ -415,6 +438,25 @@ def get_consurf(df,fname):
     raise Exception("ConSurf merge changed the dataframe size: %d => %d"%(df_len,len(df)))
   return df
 
+# Accepts a tab-delimited file with 4 columns: amino acid position, ref allele, alt allele, and SIFT score. 
+def get_sift(df,fname):
+  tdf = pd.read_csv(fname, sep='\t')
+  df_len = len(df)
+  df = df.merge(tdf, how='left', on=['pos', 'ref', 'alt'])
+  if df_len != len(df):
+    raise Exception("SIFT merge changed the dataframe size: %d => %d"%(df_len,len(df)))
+  return df
+
+# Accepts a tab-delimited file with 4 columns: amino acid position, ref allele, alt allele, and PHRED (CADD) score.
+def get_cadd(df,fname):
+  tdf = pd.read_csv(fname, sep='\t')
+  tdf.rename(columns={"phred":"CADD"},inplace=True)
+  df_len = len(df)
+  df = df.merge(tdf, how='left', on=['pos', 'ref', 'alt'])
+  if df_len != len(df):
+    raise Exception("CADD merge changed the dataframe size: %d => %d"%(df_len,len(df)))
+  return df
+  
 def resicom(resi):
   if resi==None: return [None,None,None]
   return np.array([np.array(a.get_coord()) for a in resi.get_unpacked_list()]).mean(axis=0)
@@ -492,22 +534,25 @@ def rank_cand_mutations(cands,neuts,paths):
     for i,score in enumerate(pscores):
       if score < 1:
         print " %s\t%.2f"%(paths.iloc[i][["pos","ref","alt"]].values,score)
+  if not cands.empty:
   # Calculate pathogenicity score of candidate mutations
-  cscores  = pathprox(cands,neuts,paths)
-  print "Calculating permutation p-value..."
-  cpermute = np.array([pathprox(cands,neuts,paths,perm=True) \
-                        for i in xrange(9999)]+[cscores])
-  cpvaluesL = np.array([1.-percentileofscore(cpermute[:,c],cscores[c],'strict')/100. \
-                                            for c in range(len(cscores))])
-  cpvaluesR = np.array([1.-percentileofscore(-cpermute[:,c],-cscores[c],'strict')/100. \
-                                            for c in range(len(cscores))])
-  cpvalues  = cpvaluesL
-  cpvalues[cpvalues>0.5] = cpvaluesR[cpvalues>0.5]
-  @np.vectorize
-  def ceil(x):
-    """ Adjust p-values for two-tailed permutation test """
-    return min(1.,x*2.)
-  cpvalues = ceil(cpvalues)
+    cscores  = pathprox(cands,neuts,paths)
+    print "Calculating permutation p-value..."
+    cpermute = np.array([pathprox(cands,neuts,paths,perm=True) \
+                          for i in xrange(9999)]+[cscores])
+    cpvaluesL = np.array([1.-percentileofscore(cpermute[:,c],cscores[c],'strict')/100. \
+                                              for c in range(len(cscores))])
+    cpvaluesR = np.array([1.-percentileofscore(-cpermute[:,c],-cscores[c],'strict')/100. \
+                                              for c in range(len(cscores))])
+    cpvalues  = cpvaluesL
+    cpvalues[cpvalues>0.5] = cpvaluesR[cpvalues>0.5]
+    @np.vectorize
+    def ceil(x):
+      """ Adjust p-values for two-tailed permutation test """
+      return min(1.,x*2.)
+    cpvalues = ceil(cpvalues)
+  else:
+    cscores,cpvalues = [],[]
   # cpvalues[cpvalues>0.5] = 1.-cpvalues[cpvalues>0.5]
   return nscores,pscores,cscores,cpvalues
 
@@ -518,6 +563,7 @@ def calc_auc(nscores,pscores):
   fpr,tpr,_  = roc_curve(labels,preds,drop_intermediate=False)
   roc_auc    = auc(fpr,tpr)
   prec,rec,_ = pr_curve(labels,preds)
+  prec       = np.maximum.accumulate(prec)
   pr_auc     = average_precision_score(labels,preds,average="micro")
   return fpr,tpr,roc_auc,prec,rec,pr_auc
 
@@ -528,8 +574,8 @@ def mwu_pvalue(nscores,pscores):
 def plot_hist(nscores,pscores,cscores,title,label):
   ## Plot the histogram of scores w/ candidates marked in red
   fig = plt.figure(figsize=(15,7))
-  plt.title("Natural and %s Score Distributions"%title)
-  if max(cscores) > 20:
+  # plt.title("Natural and %s Score Distributions"%title)
+  if cscores and max(cscores) > 20:
     print "\nExtreme scores reduced to 20 for histogram.\n"
   change  = len(nscores+pscores)
   nscores = np.array(nscores)
@@ -545,6 +591,7 @@ def plot_hist(nscores,pscores,cscores,title,label):
     plt.axvline(s,label=label[i],linewidth=4,color=cycle[i%len(cycle)])
   plt.legend(loc="upper right")
   plt.savefig("%s_hist.pdf"%title.replace(' ','_'),dpi=300)
+  plt.savefig("%s_hist.png"%title.replace(' ','_'),dpi=300)
   plt.close(fig)
 
 def plot_roc(fpr,tpr,label,fig=None,save=True):
@@ -552,17 +599,18 @@ def plot_roc(fpr,tpr,label,fig=None,save=True):
   roc_auc = auc(fpr,tpr)
   if not fig:
     fig = plt.figure(figsize=(7,7))
-    plt.title("%s ROC"%label)
+    # plt.title("%s ROC"%label)
     plt.plot([0,1],[0,1],'k--')
     plt.xlim([0.,1.])
     plt.ylim([0.,1.])
     plt.xlabel("False Positive Rate")
     plt.ylabel("True Positive Rate")
-  l = "%15s (AUC: %.3f)"%(label.replace(' ','_'),roc_auc)
+  l = "%s (AUC: %5.3f)"%(label,roc_auc)
   plt.plot(fpr,tpr,label=l,linewidth=3)
   if save:
     plt.legend(loc="lower right",fontsize=10)
     plt.savefig("%s_roc.pdf"%label,dpi=300)
+    plt.savefig("%s_roc.png"%label,dpi=300)
     plt.close(fig)
   return fig
 
@@ -570,17 +618,17 @@ def plot_pr(rec,prec,pr_auc,label,fig=None,save=True):
   ## Plot the PR curve
   if not fig:
     fig = plt.figure(figsize=(7,7))
-    plt.title("%s PR"%label)
-    plt.plot([1,0],[1,0],'k--')
+    # plt.title("%s PR"%label)
     plt.xlim([0.,1.])
     plt.ylim([0.,1.])
     plt.xlabel("Recall")
     plt.ylabel("Precision")
-  l = "%15s (AUC: %.3f)"%(label.replace(' ','_'),pr_auc)
+  l = "%s (AUC: %5.3f)"%(label,pr_auc)
   plt.plot(rec,prec,label=l,linewidth=3)
   if save:
     plt.legend(loc="lower left",fontsize=10)
     plt.savefig("%s_pr.pdf"%label,dpi=300)
+    plt.savefig("%s_pr.png"%label,dpi=300)
     plt.close(fig)
   return fig
 
@@ -596,6 +644,8 @@ def predict(cscores):
   return [["Neutral","Deleterious"][int(float(c>0))] for c in cscores]
 
 def write_results(cands,cscores,cpvalues,preds,conf,N,mwu_p,roc_auc,pr_auc,label):
+  if not cands.size: return
+  # If evaluating candidate mutations, continue...
   h = ["mut","score","pvalue","N","mwu_p","roc_auc","pr_auc","conf","prediction"]
   with open("%s_results.txt"%label.replace(' ','_'),'wb') as fout:
     writer = csv.writer(fout,delimiter='\t')
@@ -605,9 +655,6 @@ def write_results(cands,cscores,cpvalues,preds,conf,N,mwu_p,roc_auc,pr_auc,label
       row = [cands[i]]+["%.4f"%cscores[i],"%.3g"%cpvalues[i],"%d"%N,"%.3g"%mwu_p,"%.2f"%roc_auc,"%.2f"%pr_auc,conf,preds[i]]
       res.append(row)
     res = sorted(res,key=lambda x: float(x[1]),reverse=True)
-    print "\nColocalization Pathogenicity MWU p-value: %g"%mwu_p
-    print "Colocalization Pathogenicity ROC AUC:     %g"%roc_auc
-    print "Colocalization Pathogenicity PR  AUC:     %g"%pr_auc
     print "\t".join(h[:3]+h[-2:])
     for row in res:
       writer.writerow(row)
@@ -631,13 +678,14 @@ def colocalization(cands,neuts,paths,label=""):
   hgvs = (cands["ref"]+(cands["pos"].map(str))+cands["alt"]).values
   n,p,c,pv = rank_cand_mutations(cands,neuts,paths)
   mwu,mwu_p,roc_auc,tpr,fpr,pr_auc,prec,rec = eval_pred(p,n,c,label=hgvs,desc=label)
-  # mwu,mwu_p = mwu_pvalue(n,p)
-  # fpr,tpr,roc_auc = calc_auc(n,p)
-  # plot_roc(fpr,tpr,label=label)
-  # plot_hist(n,p,c,title=label,label=hgvs)
   conf   = confidence(roc_auc)
-  preds  = predict(c)
-  write_results(hgvs,c,pv,preds,conf,len(n)+len(p),mwu_p,roc_auc,pr_auc,label=label)
+  print "\nColocalization Pathogenicity MWU p-value: %g"%mwu_p
+  print "Colocalization Pathogenicity ROC AUC:     %g"%roc_auc
+  print "Colocalization Pathogenicity PR  AUC:     %g"%pr_auc
+  if len(c):
+    preds  = predict(c)
+    print "\nWriting colocalization results to file..."
+    write_results(hgvs,c,pv,preds,conf,len(n)+len(p),mwu_p,roc_auc,pr_auc,label=label)
   return tpr,fpr,roc_auc,p,n,c,prec,rec,pr_auc
 
 # Conversion from short-code to explicit description
@@ -667,25 +715,29 @@ if not flist:
   sys.stderr.write(msg); exit(1)
 
 # Load the candidate variants
-if os.path.isfile(args.variants):
-  variants = [l.strip() for l in open(args.variants,'rb')]
-  try:
-    cands = [[int(v[1:-1]),v[0],v[-1]] for v in variants]
-  except:
-    # 3Letter code-handling
-    cands = [[int(v[3:-3]),
-              amino_acids.longer_names[v[:3].upper()],
-              amino_acids.longer_names[v[-3:].upper()]] \
-              for v in variants]
+if not args.variants:
+  print "\nNo VUS provided. Evaluating cross-validation performance only."
+  cands = []
 else:
-  try:
-    cands = [[int(v[1:-1]),v[0],v[-1]] for v in args.variants.split(',')]
-  except:
-    # 3Letter code-handling
-    cands = [[int(v[3:-3]),
-              amino_acids.longer_names[v[:3].upper()],
-              amino_acids.longer_names[v[-3:].upper()]] \
-              for v in args.variants.split(',')]
+  if os.path.isfile(args.variants):
+    variants = [l.strip() for l in open(args.variants,'rb')]
+    try:
+      cands = [[int(v[1:-1]),v[0],v[-1]] for v in variants]
+    except:
+      # 3Letter code-handling
+      cands = [[int(v[3:-3]),
+                amino_acids.longer_names[v[:3].upper()],
+                amino_acids.longer_names[v[-3:].upper()]] \
+                for v in variants]
+  else:
+    try:
+      cands = [[int(v[1:-1]),v[0],v[-1]] for v in args.variants.split(',')]
+    except:
+      # 3Letter code-handling
+      cands = [[int(v[3:-3]),
+                amino_acids.longer_names[v[:3].upper()],
+                amino_acids.longer_names[v[-3:].upper()]] \
+                for v in args.variants.split(',')]
 
 # Load any user-defined benign variants
 if args.benign:
@@ -719,8 +771,7 @@ for sid,bio,cf in flist:
     aln = {}
     s = read_coord_file(cf,sid,refseq=refseq)
 
-  # Dirty hack: Reset pdb2pose to null
-  #FIXME: didn't work
+  # Dirty hack: Reset pdb2pose
   s._pdb2pose = dict((key,key) for key,val in s._pdb2pose.iteritems())
 
   if args.verbose:
@@ -734,9 +785,16 @@ for sid,bio,cf in flist:
           print "%s => %s"%(key,val)
       print ""
 
-  r = list(s.get_residues())
-  print "\nStructure contains residues %d to %d.\n"%(r[0].id[1],r[-1].id[1])
-  # print "\nStructure contains %d residues.\n"%len(list(s.get_residues()))
+  # Reduce to specified residue range if given
+  if args.use_residues:
+    print "\nReducing structure to residues %d to %d."%args.use_residues
+    for c in s.get_chains():
+      for r in c:
+        if (args.use_residues[0] and r.id[1] < args.use_residues[0]) or \
+            (args.use_residues[1] and r.id[1] > args.use_residues[1]):
+          c.detach_child(r.id)
+  r = [r.id[1] for r in s.get_residues()]
+  print "\nStructure contains residues %d to %d.\n"%(min(r),max(r))
 
   # Determine the relevant protein chain
   if bio > 0:
@@ -745,10 +803,12 @@ for sid,bio,cf in flist:
     chains = [c.id for c in s.get_chains()]
 
   # Map all user-defined variants to the relevant chains
-  c   = [v+[ch] for ch in chains for v in cands]
-  df  = pd.DataFrame(c,columns=["pos","ref","alt","chain"])
-  df["dclass"] = "candidate"
-  df["dcode"]  = -1
+  df = pd.DataFrame(columns=["pos","ref","alt","chain"])
+  if cands:
+    c   = [v+[ch] for ch in chains for v in cands]
+    df  = pd.DataFrame(c,columns=["pos","ref","alt","chain"])
+    df["dclass"] = "candidate"
+    df["dcode"]  = -1
   if benign:
     benign  = [v+[ch] for ch in chains for v in benign]
     tdf  = pd.DataFrame(benign,columns=["pos","ref","alt","chain"])
@@ -762,6 +822,9 @@ for sid,bio,cf in flist:
     tdf["dcode"]  = 2
     df = df.append(tdf)
 
+  # Drop duplicates after chain-mapping
+  df = df.drop_duplicates(["chain","pos","ref","alt","dcode"]).reset_index(drop=True)
+
   # Skip if the structure contains no candidate variants
   if not any(check_coverage(s,v["chain"],v["pos"],refpos=not bool(aln)) for _,v in df.iterrows()):
     msg = "%s.%s contains none of the candidate variants.\n"
@@ -774,17 +837,16 @@ for sid,bio,cf in flist:
     df = df.append(get_pathogenic(io,sid,refid))
     df = df.append(get_somatic(io,sid,refid))
     df = df.append(get_drug(io,sid,refid))
+    df = df.drop_duplicates(["chain","pos","ref","alt","dcode"]).reset_index(drop=True)
   if not (args.replace and (df["dcode"]==1).sum()):
     df = df.append(get_natural(io,sid,refid))
     df = df.append(get_benign(io,sid,refid))
-    df = df.reset_index(drop=True)
+    df = df.drop_duplicates(["chain","pos","ref","alt","dcode"]).reset_index(drop=True)
     def pathdefer(g):
       # Defer to pathogenic annotation if conflicted. DO NOT OVERWRITE CANDIDATES!
       return g if all(g["dcode"]<2) else g[(g["dcode"]>1) | (g["dcode"]<0)]
     df = df.groupby(["pos","ref","alt"]).apply(pathdefer)
   df["pos"] = df["pos"].astype(int)
-  # Drop duplicates (known variants also specified via command line)
-  df = df.drop_duplicates(["pos","ref","alt","dcode"]).reset_index(drop=True)
 
   if bio < 0:
     # If user-defined model, map reference variants to each chain
@@ -795,8 +857,10 @@ for sid,bio,cf in flist:
       haschain = haschain.append(nochain)
     df = haschain
   
+  # Drop duplicates (known variants also specified via command line)
+  df = df.drop_duplicates(["chain","pos","ref","alt","dcode"])
   # Reset the index once all modifications have finished
-  df = df.sort_values(by="pos").reset_index(drop=True)
+  df = df.sort_values(by=["chain","pos"]).reset_index(drop=True)
 
   # Load structural coordinates for each variant
   if aln:
@@ -843,18 +907,24 @@ for sid,bio,cf in flist:
   # Add pathogenicity annotations for known residues
   sdf = sdf.merge(df[["pos","ref","alt","dclass","dcode"]],how="left",on="pos")
   # Ensure that no duplicate residues were introduced by the merge
-  sdf = sdf.drop_duplicates(["pos","ref","alt","dcode"]).reset_index(drop=True)
+  sdf = sdf.drop_duplicates(["chain","pos","ref","alt","dcode"]).reset_index(drop=True)
 
   ## Add PolyPhen2 scores
   if args.polyphen:
     df = get_polyphen(df,args.polyphen)
 
+  if args.sift:
+    df = get_sift(df, args.sift)
+  if args.cadd:
+    df = get_cadd(df, args.cadd)
+
   ## Add ConSurf scores
   if args.consurf:
     sdf = get_consurf(sdf,args.consurf)
+    # Add conservation scores to the original dataframe
+    df = df.merge(sdf[["pos","consurf"]],how="left",on="pos").drop_duplicates(["chain","pos","ref","alt","dcode"])
 
   # Create the output directory and determine output labels
-  label  = "%s_%s_%s"%(args.label,sid,bio)
   if not args.outdir:
     args.outdir = "../results/Colocalization_%s"%(args.label)
     # Only timestamp if no output directory explicitly specified
@@ -871,7 +941,7 @@ for sid,bio,cf in flist:
 
   print "\n################################"
   print "Variant Counts:"
-  with open("%s_variant_counts.txt"%label,'wb') as fout:
+  with open("%s_variant_counts.txt"%args.label,'wb') as fout:
     writer = csv.writer(fout,delimiter='\t')
     cnts   = df.groupby("dcode").apply(lambda x: (x["dcode"].values[0],len(x)))
     for dcode,cnt in cnts:
@@ -880,7 +950,7 @@ for sid,bio,cf in flist:
   print ""
 
   if args.verbose:
-    print "All variants used for analysis:"
+    print "\nAll variants used for analysis:"
     for _,row in df.sort("dcode").iterrows():
       print unp+' '+' '.join([str(x) for x in row[["pos","ref","alt","dcode"]].values])
     print ""
@@ -897,10 +967,11 @@ for sid,bio,cf in flist:
 
   ## BLOSUM62 Prediction
   print "\n############# BLOSUM62 ###########"
-  blosum = pd.read_csv("/dors/capra_lab/sivleyrm/bin/BLOSUM62.txt",
+  blosum = pd.read_csv("/dors/capra_lab/doux/pdbmap/data/udn/BLOSUM62.txt",
                         index_col=0,header=0,comment="#",sep='\t')
   # Generate the predictions (flip low to high for increasing likelihood)
   hgvs = (df.ix[df["dcode"]==-1,"ref"]+(df.ix[df["dcode"]==-1,"pos"].map(str))+df.ix[df["dcode"]==-1,"alt"]).values
+  df["blosum62"] = [blosum.ix[ref,alt] for _,ref,alt in df[["ref","alt"]].itertuples()]
   p = [-blosum.ix[ref,alt] for _,ref,alt in \
           df.ix[df["dcode"]==2,["ref","alt"]].itertuples()]
   n = [-blosum.ix[ref,alt] for _,ref,alt in \
@@ -916,11 +987,12 @@ for sid,bio,cf in flist:
   print "\nBLOSUM62 Pathogenicity MWU p-value: %g"%mwu_p
   print "BLOSUM62 Pathogenicity ROC AUC:     %g"%roc_auc
   print "BLOSUM62 Pathogenicity PR  AUC:     %g"%pr_auc
-  print "BLOSUM62 Pathogenicity Predictions:"
-  t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
-  for i,name in enumerate(hgvs):
-    print "%s\t%11s\t%.2f"%(name,["Benign","Deleterious"][int(t[i]>0)],-t[i])
-  print ""
+  if t:
+    print "BLOSUM62 Pathogenicity Predictions:"
+    t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
+    for i,name in enumerate(hgvs):
+      print "%s\t%11s\t%.2f"%(name,["Benign","Deleterious"][int(t[i]>0)],-t[i])
+    print ""
 
   ## Evolutionary Conservation Prediction
   if args.consurf:
@@ -943,10 +1015,60 @@ for sid,bio,cf in flist:
     print "ConSurf Pathogenicity ROC AUC:     %g"%roc_auc
     print "ConSurf Pathogenicity PR  AUC:     %g"%pr_auc
     print "ConSurf Pathogenicity Predictions:"
-    t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
-    for i,name in enumerate(hgvs):
-      print "%s\t%11s\t%.2f"%(name,["Benign","Deleterious"][int(t[i]>0.5)],-t[i])
-    print ""
+    if not t.empty:
+      t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
+      for i,name in enumerate(hgvs):
+        print "%s\t%11s\t%.2f"%(name,["Benign","Deleterious"][int(t[i]>0.5)],-t[i])
+      print ""
+
+  ## Domain (PFAM,SCOP) Prediction
+  if args.domains:
+    print "\n############# Domains ###########"
+    hgvs = (df.ix[df["dcode"]==-1,"ref"]+(df.ix[df["dcode"]==-1,"pos"].map(str))+df.ix[df["dcode"]==-1,"alt"]).values
+    with open(args.domains,'rb') as fin:
+      reader = csv.reader(fin,delimiter='\t')
+      d = set([range(int(r[0]),int(r[1])) for r in reader])
+    df["in_domain"] = df["pos"].isin(d).astype(int)
+    p = df.ix[df["dcode"]==2,"pos"].isin(d).astype(int)
+    n = df.ix[df["dcode"].isin([0,1]),"pos"].isin(d).astype(int)
+    t = df.ix[df["dcode"]==-1,"pos"].isin(d).astype(int)
+    mwu,mwu_p,roc_auc,tpr,fpr,pr_auc,prec,rec = eval_pred(p,n,t,hgvs,"PFAM")
+    all_pred["PFAM"] = (p,n,t)
+    all_pred_roc["PFAM"] = (fpr,tpr)
+    all_pred_pr["PFAM"]  = (rec,prec)
+    all_pred_rocauc["PFAM"] = roc_auc
+    all_pred_prauc["PFAM"]  = pr_auc
+    print "\nPFAM Pathogenicity MWU p-value: %g"%mwu_p
+    print "PFAM Pathogenicity ROC AUC:     %g"%roc_auc
+    print "PFAM Pathogenicity PR  AUC:     %g"%pr_auc
+    if not t.empty:
+      print "PFAM Pathogenicity Predictions:"
+      t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
+      for i,name in enumerate(hgvs):
+        print "%s\t%11s"%(name,["Benign","Deleterious"][t[i]])
+      print ""
+
+  if args.cadd:
+    print "\n############# CADD ###########"
+    hgvs = (df.ix[df["dcode"]==-1,"ref"]+(df.ix[df["dcode"]==-1,"pos"].map(str))+df.ix[df["dcode"]==-1,"alt"]).values
+    p = df.ix[df["dcode"]==2,"CADD"].values
+    n = df.ix[df["dcode"].isin([0,1]),"CADD"].values
+    t = df.ix[df["dcode"]==-1,"CADD"].values
+    mwu,mwu_p,roc_auc,tpr,fpr,pr_auc,prec,rec = eval_pred(p,n,t,hgvs,"CADD")
+    all_pred["CADD"] = (p,n,t)
+    all_pred_roc["CADD"] = (fpr,tpr)
+    all_pred_pr["CADD"]  = (rec,prec)
+    all_pred_rocauc["CADD"] = roc_auc
+    all_pred_prauc["CADD"]  = pr_auc
+    print "\nCADD Pathogenicity MWU p-value: %g"%mwu_p
+    print "CADD Pathogenicity ROC AUC:     %g"%roc_auc
+    print "CADD Pathogenicity PR  AUC:     %g"%pr_auc
+    print "CADD Pathogenicity Predictions:"
+    if t.size:
+      t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
+      for i,name in enumerate(hgvs):
+        print "%s\t%11s\t%.3f"%(name,["Benign","Damaging"][int(t[i]<15)],t[i])
+      print ""
 
   ## PolyPhen2 Prediction
   if args.polyphen:
@@ -965,35 +1087,33 @@ for sid,bio,cf in flist:
     print "PolyPhen2 Pathogenicity ROC AUC:     %g"%roc_auc
     print "PolyPhen2 Pathogenicity PR  AUC:     %g"%pr_auc
     print "PolyPhen2 Pathogenicity Predictions:"
-    t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
-    for i,name in enumerate(hgvs):
-      print "%s\t%11s\t%.3f"%(name,["Benign","Damaging"][int(t[i]>0.5)],t[i])
-    print ""
+    if t.size:
+      t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
+      for i,name in enumerate(hgvs):
+        print "%s\t%11s\t%.3f"%(name,["Benign","Damaging"][int(t[i]>0.5)],t[i])
+      print ""
 
-  ## Domain (PFAM,SCOP) Prediction
-  if args.domains:
-    print "\n############# Domains ###########"
-    hgvs = (df.ix[df["dcode"]==-1,"ref"]+(df.ix[df["dcode"]==-1,"pos"].map(str))+df.ix[df["dcode"]==-1,"alt"]).values
-    with open(args.domains,'rb') as fin:
-      reader = csv.reader(fin,delimiter='\t')
-      d = set([range(int(r[0]),int(r[1])) for r in reader])
-    p = df.ix[df["dcode"]==2,"pos"].isin(d).astype(int)
-    n = df.ix[df["dcode"].isin([0,1]),"pos"].isin(d).astype(int)
-    t = df.ix[df["dcode"]==-1,"pos"].isin(d).astype(int)
-    mwu,mwu_p,roc_auc,tpr,fpr,pr_auc,prec,rec = eval_pred(p,n,t,hgvs,"PFAM")
-    all_pred["PFAM"] = (p,n,t)
-    all_pred_roc["PFAM"] = (fpr,tpr)
-    all_pred_pr["PFAM"]  = (rec,prec)
-    all_pred_rocauc["PFAM"] = roc_auc
-    all_pred_prauc["PFAM"]  = pr_auc
-    print "\nPFAM Pathogenicity MWU p-value: %g"%mwu_p
-    print "PFAM Pathogenicity ROC AUC:     %g"%roc_auc
-    print "PFAM Pathogenicity PR  AUC:     %g"%pr_auc
-    print "PFAM Pathogenicity Predictions:"
-    t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
-    for i,name in enumerate(hgvs):
-      print "%s\t%11s"%(name,["Benign","Deleterious"][t[i]])
-    print ""
+  if args.sift:
+      print "\n############# SIFT ###########"
+      hgvs = (df.ix[df["dcode"]==-1,"ref"]+(df.ix[df["dcode"]==-1,"pos"].map(str))+df.ix[df["dcode"]==-1,"alt"]).values
+      p = [-x for x in df.ix[df["dcode"]==2,"sift"].values]
+      n = [-x for x in df.ix[df["dcode"].isin([0,1]),"sift"].values]
+      t = [-x for x in df.ix[df["dcode"]==-1,"sift"].values]
+      mwu,mwu_p,roc_auc,tpr,fpr,pr_auc,prec,rec = eval_pred(p,n,t,hgvs,"SIFT")
+      all_pred["SIFT"] = (p,n,t)
+      all_pred_roc["SIFT"] = (fpr,tpr)
+      all_pred_pr["SIFT"]  = (rec,prec)
+      all_pred_rocauc["SIFT"] = roc_auc
+      all_pred_prauc["SIFT"]  = pr_auc
+      print "\nSIFT Pathogenicity MWU p-value: %g"%mwu_p
+      print "SIFT Pathogenicity ROC AUC:     %g"%roc_auc
+      print "SIFT Pathogenicity PR  AUC:     %g"%pr_auc
+      print "SIFT Pathogenicity Predictions:"
+      if len(t):
+        t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
+        for i,name in enumerate(hgvs):
+          print "%s\t%11s\t%.3f"%(name,["Benign","Damaging"][int(t[i]>.05)],-t[i])
+        print ""
 
   ## Prediction by Relative Colocalization
   print "\n############# Colocalization ###########"
@@ -1015,13 +1135,17 @@ for sid,bio,cf in flist:
     pval = 1-percentileofscore(fperm,score,'strict')/100.
     print "Pathogenic Clustering:\t%.2f (p=%.3g)"%(score,pval)
     print "\nCalculating pathogenicity score..."
-    tpr,fpr,roc_auc,p,n,t,prec,rec,pr_auc = colocalization(c,n,p,label="%s Colocalization"%label)
+    tpr,fpr,roc_auc,p,n,t,prec,rec,pr_auc = colocalization(c,n,p,label="%s Colocalization"%args.label)
     # Store the tpr/fpr for colocalation ROC
     all_pred["Colocalization"] = (p,n,t)
     all_pred_roc["Colocalization"] = (fpr,tpr)
     all_pred_pr["Colocalization"]  = (rec,prec)
     all_pred_rocauc["Colocalization"] = roc_auc
     all_pred_prauc["Colocalization"]  = pr_auc
+    # Record colocalization scores for each variant
+    df.ix[df["dcode"]==-1,"pathprox"] = t
+    df.ix[df["dcode"].isin([0,1]),"pathprox"] = n
+    df.ix[df["dcode"]==2,"pathprox"] = p
 
   # ## Composite Predictor
   # print "\n############# Composite Predictor ###########"
@@ -1066,25 +1190,39 @@ for sid,bio,cf in flist:
   # print ""
 
   ## Plot a comparison ROC curves for all predictors
-  predictors = sorted([(roc_auc,pred) for pred,roc_rocauc in all_pred_rocauc.iteritems()])
-  predictors = [pred for roc_auc,pred in predictors[::-1]]
+  # predictors = sorted([(roc_auc,pred) for pred,roc_rocauc in all_pred_rocauc.iteritems()])
+  # predictors = [pred for roc_auc,pred in predictors[::-1]]
+  predictors = all_pred_rocauc.keys()[::-1]  
   l = predictors[0]
   fig = plot_roc(*all_pred_roc[l],label=l,save=False)
   for l in predictors[1:]:
     fig = plot_roc(*all_pred_roc[l],label=l,fig=fig,save=False)
-  plt.legend(loc="lower right",fontsize=10)
-  plt.savefig("%s_Colocalization_Comparison_roc.pdf"%label,dpi=300)
+  legend = plt.legend(loc="lower right",fontsize=10)
+  # Right-justification hack
+  for t in legend.get_texts():
+    t.set_ha("right")
+    t.set_position((560,0))
+  # plt.title("Comparison of Pathogenicity Prediction Methods (ROC)")
+  plt.savefig("%s_Colocalization_Comparison_roc.pdf"%args.label,dpi=300)
+  plt.savefig("%s_Colocalization_Comparison_roc.png"%args.label,dpi=300)
   plt.close(fig)
 
   ## Plot a comparison PR curves for all predictors
-  predictors = sorted([(pr_auc,pred) for pred,pr_auc in all_pred_prauc.iteritems()])
-  predictors = [pred for pr_auc,pred in predictors[::-1]]
+  # predictors = sorted([(pr_auc,pred) for pred,pr_auc in all_pred_prauc.iteritems()])
+  # predictors = [pred for pr_auc,pred in predictors[::-1]]
+  predictors = all_pred_prauc.keys()[::-1]
   l = predictors[0]
   fig = plot_pr(*all_pred_pr[l],pr_auc=all_pred_prauc[l],label=l,save=False)
   for l in predictors[1:]:
     fig = plot_pr(*all_pred_pr[l],pr_auc=all_pred_prauc[l],label=l,fig=fig,save=False)
-  plt.legend(loc="lower left",fontsize=10)
-  plt.savefig("%s_Colocalization_Comparison_pr.pdf"%label,dpi=300)
+  legend = plt.legend(loc="lower left",fontsize=10)
+  # Right-justification hack
+  for t in legend.get_texts():
+    t.set_ha("right")
+    t.set_position((560,0))
+  # plt.title("Comparison of Pathogenicity Prediction Methods (PR)")
+  plt.savefig("%s_Colocalization_Comparison_pr.pdf"%args.label,dpi=300)
+  plt.savefig("%s_Colocalization_Comparison_pr.png"%args.label,dpi=300)
   plt.close(fig)
 
   ## For the time being, do not include the somatic and drug response-affecting
@@ -1109,6 +1247,10 @@ for sid,bio,cf in flist:
   #   print "\nDrug Response CLUMPS: %.2f (p=%.3e)"%(score,pval)
   #   print "\nCalculating drug response score..."
   #   colocalization(c,n,d,label="%s ClinVar Drug Response"%label)
+
+  ## Output the fully annotated data to file
+  print "\nWriting analysis data to %s/%s_data.txt..."%(args.outdir,args.label)
+  df.to_csv("%s_data.txt"%args.label,sep="\t",index=False,header=True)
 
   ## Return to the original directory
   os.chdir(cwd)

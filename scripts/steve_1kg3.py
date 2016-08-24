@@ -41,7 +41,7 @@ filterwarnings('ignore', category = MySQLdb.Warning)
 # Hard code database credentials and connect for intermediate tables
 def connect(cc=MySQLdb.cursors.Cursor):
   return MySQLdb.connect(host='chgr2.accre.vanderbilt.edu',user='sivleyrm',
-                  passwd='global-trifecta',db='pdbmap_v12',
+                  passwd='global-trifecta',db='pdbmap_v11',
                   cursorclass=cc)
 
 # Initialize NN dictionary
@@ -70,12 +70,11 @@ chroms.append('Y')
 
 # Process each chromosome separately to reduce space complexity
 con = connect(cc=MySQLdb.cursors.SSCursor) # open connection
-for chrom in chroms[::-1]:
-  print "Evaluating chromosome %2s"%chrom
+for chrom in chroms:
   q  = "SELECT DISTINCT name,chr,start,end FROM GenomicConsequence as a "
   q += "INNER JOIN GenomicIntersection as b "
   q += "ON a.gc_id=b.gc_id " # only include mapped missense SNPs
-  q += "WHERE chr='chr%s' AND start=end-1 AND label='exac' "%chrom
+  q += "WHERE chr='chr%s' AND start=end-1 AND label='1kg3' "%chrom
   q += "AND a.consequence LIKE '%missense_variant%' "
   q += "ORDER BY chr,start,end;"
   c  = con.cursor() # open cursor
@@ -136,7 +135,7 @@ num_biounits = len(structs)
 print "Number of biological assemblies: %d"%num_biounits
 
 # ## Process all ModBase models
-# with open('../temp/pdbmap_v12_exac_models.txt','rb') as fin:
+# with open('../temp/pdbmap_v10_1kg3_models.txt','rb') as fin:
 #   fin.readline() # burn header
 #   structs += [row.strip().split('\t') for row in fin.readlines()]
 # num_models = len(structs)-num_biounits
@@ -157,7 +156,7 @@ for label,unp,structid,biounit in structs:
   q += "INNER JOIN GenomicConsequence as c "
   q += "ON b.dlabel=c.label AND b.gc_id=c.gc_id "
   q += "WHERE a.label='uniprot-pdb' AND b.slabel='uniprot-pdb' "
-  q += "AND b.dlabel='exac' AND c.label='exac' "
+  q += "AND b.dlabel='1kg3' AND c.label='1kg3' "
   q += "AND c.consequence LIKE '%missense_variant%' "
   q += "AND a.structid='%s' "%structid
   q += "AND a.biounit=%s "%int(biounit) # Consider each biological assembly
@@ -308,7 +307,7 @@ print "Done."
 #####################################
 
 timestamp = str(time.strftime("%Y%m%d-%H"))
-res_dir   = '../results/pdbmap-exac_v12_steve_%s'%timestamp
+res_dir   = '../results/pdbmap-1kg3_v11_steve_%s'%timestamp
 os.system('mkdir -p %s'%res_dir)
 # Write the GNN and SNN for each variant to file
 with open('%s/nearest_neighbors.txt'%res_dir,'wb') as fout:

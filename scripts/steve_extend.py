@@ -7,11 +7,11 @@
 import sys,os,csv,MySQLdb,math
 
 # Adds GD to SNN and SD to GNN to the provided STEVE results file
-# Uses chgr2 pdbmap_v11
+# Uses chgr2 pdbmap_v12
 steve_finname = sys.argv[1]
-# steve_finname = '../results/pdbmap-v11_steve_20140616-13/nearest_neighbors.txt'
+# steve_finname = '../results/pdbmap-v12_steve_20140616-13/nearest_neighbors.txt'
 steve_foutname = "%s.extended.txt"%'.'.join(steve_finname.split('.')[:-1])
-con = MySQLdb.connect(host='chgr2.accre.vanderbilt.edu',user='sivleyrm',passwd='global-trifecta',db='pdbmap_v11')
+con = MySQLdb.connect(host='chgr2.accre.vanderbilt.edu',user='sivleyrm',passwd='global-trifecta',db='pdbmap_v12')
 c = con.cursor()
 fout = open(steve_foutname,'wb')
 writer = csv.writer(fout,delimiter='\t')

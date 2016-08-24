@@ -4,7 +4,6 @@ config/
 results/
 qsub/
 temp/
-scripts/
 
 ## File types ##
 *.pdb
