@@ -140,7 +140,7 @@ def pathprox(cands,neut,path,cv=False):
   cscores = pscores - nscores # subtraction binds c to -1..1
   return cscores
 
-def calc_auc(nscores,pscores):
+def calc_auc(pscores,nscores):
   ## Calculate the AUC
   labels = [0]*len(nscores)+[1]*len(pscores)
   preds  = np.concatenate((nscores,pscores))

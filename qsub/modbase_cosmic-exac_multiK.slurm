@@ -3,8 +3,8 @@
 #SBATCH --mail-user=mike.sivley@vanderbilt.edu
 #SBATCH --mail-type=end
 #SBATCH --ntasks=1
-#SBATCH --time=12:0:0
-#SBATCH --mem=5GB
+#SBATCH --time=5-0
+#SBATCH --mem=10GB
 #SBATCH -o modbase_cosmic-exac_multiK/modbase_cosmic-exac_multiK.%A[%a].out
 #SBATCH -e modbase_cosmic-exac_multiK/modbase_cosmic-exac_multiK.%A[%a].err
 

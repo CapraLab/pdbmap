@@ -26,7 +26,7 @@ from warnings import filterwarnings,resetwarnings
 # Numerical
 import pandas as pd
 import numpy as np
-TOL = 1e-10 # zero-tolerance
+TOL = 1e-5 # zero-tolerance
 
 # Stats
 from scipy.spatial.distance import cdist,pdist,squareform
@@ -466,8 +466,19 @@ def WAP(dqr,nq=1,nr=1,t=10.):
   return nq*nr*np.exp(-dqr**2/(2*t**2))
 
 @np.vectorize
-def glf(t,A=1.,K=0.,B=0.2,v=0.05,Q=1.,C=1.):
-      return A + (K-A)/((C+Q*np.exp(-B*t))**(1./v))
+def glf(d,A=1.,K=0.,B=0.2,v=0.05,Q=1.,C=1.):
+  if d <= TOL:
+    return 1+1e-10
+  return A + (K-A)/((C+Q*np.exp(-B*d))**(1./v))
+
+@np.vectorize
+def nw(d,lb=4.,ub=11.4):
+  if d <= lb:
+    return 1.
+  elif d >= ub:
+    return 0.
+  else:
+    return 0.5*(np.cos(np.pi*(d-lb)/(ub-lb))+1)
 
 def perm(df,col):
   tdf  = df.copy()
@@ -483,14 +494,15 @@ def CLUMPS(df,col,val,permute=False,seq=False,t=10.):
   if not permute or not CLUMPS.d.size:
     CLUMPS.d = squareform(pdist(df[["x","y","z"]]))
     # CLUMPS.d = WAP(CLUMPS.d)
-    CLUMPS.d = glf(CLUMPS.d)
+    # CLUMPS.d = glf(CLUMPS.d)
+    CLUMPS.d = nw(CLUMPS.d,lb=8.,ub=24.)
   # WAP w/ t=6. precomputed, all weight equal to 1
   # GLF w/ B,v = 0.2,0.05 precomputed
   N = float(valid.sum())
   return sum([CLUMPS.d[q,r] for q,r in combinations(df[valid].index,2)]) / (N*(N-1.))
 CLUMPS.d = np.array([])
 
-def pathprox(cands,neut,path,cv=False,perm=False):
+def pathprox(cands,neut,path,cv=None,perm=False):
   """ Predicts pathogenicity of a mutation vector given observed neutral/pathogenic """
   ncount = len(neut)
   pcount = len(path)
@@ -500,9 +512,16 @@ def pathprox(cands,neut,path,cv=False,perm=False):
   if not perm:
     # Distance from each candidate to each neutral/pathogenic variant
     # D = WAP(cdist(cands[["x","y","z"]].values,df[["x","y","z"]].values))
-    D = glf(cdist(cands[["x","y","z"]].values,df[["x","y","z"]].values))
-    if cv:
-      D[D<=TOL] = np.inf # Do not include distance to self during cross-validation
+    # Dn = glf(cdist(cands[["x","y","z"]].values,neut[["x","y","z"]].values))
+    # Dp = glf(cdist(cands[["x","y","z"]].values,path[["x","y","z"]].values))
+    Dn = nw(cdist(cands[["x","y","z"]].values,neut[["x","y","z"]].values),lb=8.,ub=24.)
+    Dp = nw(cdist(cands[["x","y","z"]].values,path[["x","y","z"]].values),lb=8.,ub=24.)
+    # Set self-weights to 0. for cross-validation
+    if   cv == "N":
+      np.fill_diagonal(Dn,0.)
+    elif cv == "P":
+      np.fill_diagonal(Dp,0.)
+    D = np.hstack((Dn,Dp))
     pathprox.D = D
     nmask = np.zeros(N).astype(bool)
     nmask[:ncount] = True
@@ -521,14 +540,16 @@ pathprox.D = np.array([])
 
 def rank_cand_mutations(cands,neuts,paths):
   # Calculate pathogenicity score of neutral variants
-  nscores = pathprox(neuts,neuts,paths,cv=True)
+  print "Cross-validating neutral variants..."
+  nscores = pathprox(neuts,neuts,paths,cv="N")
   if args.verbose:
     print '"False positives" (negative w/ score >1)'
     for i,score in enumerate(nscores):
       if score > 1:
         print " %s\t%.2f"%(neuts.iloc[i][["pos","ref","alt"]].values,score)
   # Calculate pathogenicity score of variants
-  pscores = pathprox(paths,neuts,paths,cv=True)
+  print "Cross-validating pathogenic variants..."
+  pscores = pathprox(paths,neuts,paths,cv="P")
   if args.verbose:
     print '"False negatives" (positive w/ score <1)'
     for i,score in enumerate(pscores):
@@ -536,6 +557,7 @@ def rank_cand_mutations(cands,neuts,paths):
         print " %s\t%.2f"%(paths.iloc[i][["pos","ref","alt"]].values,score)
   if not cands.empty:
   # Calculate pathogenicity score of candidate mutations
+    print "Calculating candidate variant proximity scores..."
     cscores  = pathprox(cands,neuts,paths)
     print "Calculating permutation p-value..."
     cpermute = np.array([pathprox(cands,neuts,paths,perm=True) \
@@ -588,10 +610,10 @@ def plot_hist(nscores,pscores,cscores,title,label):
     print "\nWARNING: NaN values have been reassigned to 0.\n"
   plt.hist([nscores,pscores],alpha=0.5,label=["Neutral",title],color=["darkblue","darkred"])
   for i,s in enumerate(cscores):
-    plt.axvline(s,label=label[i],linewidth=4,color=cycle[i%len(cycle)])
+    plt.axvline(s,label=label[i],linewidth=4,color=ccycle[i%len(ccycle)])
   plt.legend(loc="upper right")
-  plt.savefig("%s_hist.pdf"%title.replace(' ','_'),dpi=300)
-  plt.savefig("%s_hist.png"%title.replace(' ','_'),dpi=300)
+  plt.savefig("%s_%s_hist.pdf"%(args.label,title.replace(' ','_')),dpi=300)
+  plt.savefig("%s_%s_hist.png"%(args.label,title.replace(' ','_')),dpi=300)
   plt.close(fig)
 
 def plot_roc(fpr,tpr,label,fig=None,save=True):
@@ -605,12 +627,12 @@ def plot_roc(fpr,tpr,label,fig=None,save=True):
     plt.ylim([0.,1.])
     plt.xlabel("False Positive Rate")
     plt.ylabel("True Positive Rate")
-  l = "%s (AUC: %5.3f)"%(label,roc_auc)
+  l = "%s (AUC: %5.2f)"%(label,roc_auc)
   plt.plot(fpr,tpr,label=l,linewidth=3)
   if save:
     plt.legend(loc="lower right",fontsize=10)
-    plt.savefig("%s_roc.pdf"%label,dpi=300)
-    plt.savefig("%s_roc.png"%label,dpi=300)
+    plt.savefig("%s_%s_roc.pdf"%(args.label,label),dpi=300)
+    plt.savefig("%s_%s_roc.png"%(args.label,label),dpi=300)
     plt.close(fig)
   return fig
 
@@ -623,12 +645,12 @@ def plot_pr(rec,prec,pr_auc,label,fig=None,save=True):
     plt.ylim([0.,1.])
     plt.xlabel("Recall")
     plt.ylabel("Precision")
-  l = "%s (AUC: %5.3f)"%(label,pr_auc)
+  l = "%s (AUC: %5.2f)"%(label,pr_auc)
   plt.plot(rec,prec,label=l,linewidth=3)
   if save:
     plt.legend(loc="lower left",fontsize=10)
-    plt.savefig("%s_pr.pdf"%label,dpi=300)
-    plt.savefig("%s_pr.png"%label,dpi=300)
+    plt.savefig("%s_%s_pr.pdf"%(args.label,label),dpi=300)
+    plt.savefig("%s_%s_pr.png"%(args.label,label),dpi=300)
     plt.close(fig)
   return fig
 
@@ -647,7 +669,7 @@ def write_results(cands,cscores,cpvalues,preds,conf,N,mwu_p,roc_auc,pr_auc,label
   if not cands.size: return
   # If evaluating candidate mutations, continue...
   h = ["mut","score","pvalue","N","mwu_p","roc_auc","pr_auc","conf","prediction"]
-  with open("%s_results.txt"%label.replace(' ','_'),'wb') as fout:
+  with open("%s_results.txt"%args.label.replace(' ','_'),'wb') as fout:
     writer = csv.writer(fout,delimiter='\t')
     writer.writerow(h)
     res = []
@@ -679,12 +701,12 @@ def colocalization(cands,neuts,paths,label=""):
   n,p,c,pv = rank_cand_mutations(cands,neuts,paths)
   mwu,mwu_p,roc_auc,tpr,fpr,pr_auc,prec,rec = eval_pred(p,n,c,label=hgvs,desc=label)
   conf   = confidence(roc_auc)
-  print "\nColocalization Pathogenicity MWU p-value: %g"%mwu_p
-  print "Colocalization Pathogenicity ROC AUC:     %g"%roc_auc
-  print "Colocalization Pathogenicity PR  AUC:     %g"%pr_auc
+  print "\nPathProx Pathogenicity MWU p-value: %g"%mwu_p
+  print "PathProx Pathogenicity ROC AUC:     %g"%roc_auc
+  print "PathProx Pathogenicity PR  AUC:     %g"%pr_auc
   if len(c):
     preds  = predict(c)
-    print "\nWriting colocalization results to file..."
+    print "\nWriting PathProx results to file..."
     write_results(hgvs,c,pv,preds,conf,len(n)+len(p),mwu_p,roc_auc,pr_auc,label=label)
   return tpr,fpr,roc_auc,p,n,c,prec,rec,pr_auc
 
@@ -926,7 +948,7 @@ for sid,bio,cf in flist:
 
   # Create the output directory and determine output labels
   if not args.outdir:
-    args.outdir = "../results/Colocalization_%s"%(args.label)
+    args.outdir = "../results/PathProx_%s"%(args.label)
     # Only timestamp if no output directory explicitly specified
     if not args.no_timestamp and timestamp not in args.outdir:
       args.outdir += "_%s"%timestamp
@@ -1090,7 +1112,13 @@ for sid,bio,cf in flist:
     if t.size:
       t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
       for i,name in enumerate(hgvs):
-        print "%s\t%11s\t%.3f"%(name,["Benign","Damaging"][int(t[i]>0.5)],t[i])
+        if int(t[i]<0.1):
+          pred = "Probably Damaging"
+        elif int(t[i]<0.2):
+          pred = "Possibly Damaging"
+        else:
+          pred = "Benign"
+        print "%s\t%11s\t%.3f"%(name,pred,t[i])
       print ""
 
   if args.sift:
@@ -1112,10 +1140,10 @@ for sid,bio,cf in flist:
       if len(t):
         t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
         for i,name in enumerate(hgvs):
-          print "%s\t%11s\t%.3f"%(name,["Benign","Damaging"][int(t[i]>.05)],-t[i])
+          print "%s\t%11s\t%.3f"%(name,["Benign","Damaging"][int(-t[i]<.05)],-t[i])
         print ""
 
-  ## Prediction by Relative Colocalization
+  ## Prediction by Relative Pathogenic Proximity
   print "\n############# Colocalization ###########"
   ## Neutral/Natural background is the same for all analyses
   c = df[df["dcode"]==-1]
@@ -1135,23 +1163,23 @@ for sid,bio,cf in flist:
     pval = 1-percentileofscore(fperm,score,'strict')/100.
     print "Pathogenic Clustering:\t%.2f (p=%.3g)"%(score,pval)
     print "\nCalculating pathogenicity score..."
-    tpr,fpr,roc_auc,p,n,t,prec,rec,pr_auc = colocalization(c,n,p,label="%s Colocalization"%args.label)
+    tpr,fpr,roc_auc,p,n,t,prec,rec,pr_auc = colocalization(c,n,p,label="PathProx")
     # Store the tpr/fpr for colocalation ROC
-    all_pred["Colocalization"] = (p,n,t)
-    all_pred_roc["Colocalization"] = (fpr,tpr)
-    all_pred_pr["Colocalization"]  = (rec,prec)
-    all_pred_rocauc["Colocalization"] = roc_auc
-    all_pred_prauc["Colocalization"]  = pr_auc
-    # Record colocalization scores for each variant
+    all_pred["PathProx"] = (p,n,t)
+    all_pred_roc["PathProx"] = (fpr,tpr)
+    all_pred_pr["PathProx"]  = (rec,prec)
+    all_pred_rocauc["PathProx"] = roc_auc
+    all_pred_prauc["PathProx"]  = pr_auc
+    # Record PathProx scores for each variant
     df.ix[df["dcode"]==-1,"pathprox"] = t
     df.ix[df["dcode"].isin([0,1]),"pathprox"] = n
     df.ix[df["dcode"]==2,"pathprox"] = p
 
   # ## Composite Predictor
   # print "\n############# Composite Predictor ###########"
-  # pmatrix = np.array([np.array(p) for p,n,t in [all_pred["Colocalization"],all_pred["PolyPhen2"]]]).T
-  # nmatrix = np.array([np.array(n) for p,n,t in [all_pred["Colocalization"],all_pred["PolyPhen2"]]]).T
-  # tmatrix = np.array([np.array(t) for p,n,t in [all_pred["Colocalization"],all_pred["PolyPhen2"]]]).T
+  # pmatrix = np.array([np.array(p) for p,n,t in [all_pred["PathProx"],all_pred["PolyPhen2"]]]).T
+  # nmatrix = np.array([np.array(n) for p,n,t in [all_pred["PathProx"],all_pred["PolyPhen2"]]]).T
+  # tmatrix = np.array([np.array(t) for p,n,t in [all_pred["PathProx"],all_pred["PolyPhen2"]]]).T
   # dmatrix = np.vstack((pmatrix,nmatrix))
   # dmatrix = scale(dmatrix,axis=0) # normalize each feature
   # labels  = np.array([1]*pmatrix.shape[0]+[0]*nmatrix.shape[0])
@@ -1201,10 +1229,10 @@ for sid,bio,cf in flist:
   # Right-justification hack
   for t in legend.get_texts():
     t.set_ha("right")
-    t.set_position((560,0))
+    t.set_position((480,0))
   # plt.title("Comparison of Pathogenicity Prediction Methods (ROC)")
-  plt.savefig("%s_Colocalization_Comparison_roc.pdf"%args.label,dpi=300)
-  plt.savefig("%s_Colocalization_Comparison_roc.png"%args.label,dpi=300)
+  plt.savefig("%s_PathProx_Comparison_roc.pdf"%args.label,dpi=300)
+  plt.savefig("%s_PathProx_Comparison_roc.png"%args.label,dpi=300)
   plt.close(fig)
 
   ## Plot a comparison PR curves for all predictors
@@ -1219,10 +1247,10 @@ for sid,bio,cf in flist:
   # Right-justification hack
   for t in legend.get_texts():
     t.set_ha("right")
-    t.set_position((560,0))
+    t.set_position((480,0))
   # plt.title("Comparison of Pathogenicity Prediction Methods (PR)")
-  plt.savefig("%s_Colocalization_Comparison_pr.pdf"%args.label,dpi=300)
-  plt.savefig("%s_Colocalization_Comparison_pr.png"%args.label,dpi=300)
+  plt.savefig("%s_PathProx_Comparison_pr.pdf"%args.label,dpi=300)
+  plt.savefig("%s_PathProx_Comparison_pr.png"%args.label,dpi=300)
   plt.close(fig)
 
   ## For the time being, do not include the somatic and drug response-affecting
