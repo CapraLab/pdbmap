@@ -29,7 +29,7 @@ class PDBMapVisualize():
   def visualize_structure(self,structid,biounit=0,anno_list=['maf'],eps=None,mins=None,spectrum_range=[],group=None,colors=[],permute=False,syn=False):
     """ Visualize the annotated dataset within a structure """
     biounit = 0 if biounit<0 else biounit
-    print "Visualizing %s.%s..."%(structid,biounit),
+    print "Visualizing %s.%s..."%(structid,biounit)
     structid = structid.lower()
     res  = self.io.load_structure(structid,biounit,raw=True,syn=syn)
     if not res:
@@ -38,16 +38,25 @@ class PDBMapVisualize():
       return
     modelflag = True if res['mpqs'][0] else False
 
+    if anno_list == ['.']:
+      anno = self.io.dlabel
+      # If anno starts with number, convert to number-name
+      try: 
+        int(anno[0])
+      except:
+        pass
+      else:
+        import inflect
+        convA = inflect.engine().number_to_words(anno[0]) + anno[1:]
+        anno = convA
+        print "\nConverted annotation label from %s to %s"%(anno,convA)
+      res[anno] = [1 if l==self.io.dlabel else None for l in res["dlabel"]]
+      anno_list = [anno]
+
     # If synonymous variants are requested, switch the issnp flag
     if syn:
       print "\nSwitching from nonsynonymous to synonymous variants..."
       res['issnp'] = [int('synonymous_variant' in c) if c else 0 for c in res['consequence']]
-
-    # Reduce to variable residues
-    for key in res:
-      if key != 'issnp':
-        res[key] = [r for i,r in enumerate(res[key]) if res['issnp'][i]]
-    del res['issnp']
 
     # Convert MAF values into DAF values
     for anno in anno_list:
@@ -72,20 +81,30 @@ class PDBMapVisualize():
           if not res:
             # Initialize res with the first user-annotated result
             res = nres
-          # Reduce to variable residues and add column to the structure
-          for key in nres:
-            if key!="issnp" and any(nres['issnp']):
-              res[key] = [r for i,r in enumerate(nres[key]) if nres['issnp'][i]]
-            elif key not in ("issnp",anno):
-              # Assume we're working with structural data
-              res[key] = [r for i,r in enumerate(nres[key]) if nres[anno][i]!=None]
-          if not any(nres['issnp']):
-            res[anno] = [r for i,r in enumerate(nres[anno]) if nres[anno][i]!=None]
-          # del nres
           break # all missing annotations filled when the first is found missing
+
+    # If no residues are marked as SNVs, but some have the requested annotation,
+    # print a warning and skip the consequence-checks
+    if any([a for anno in anno_list for a in res[anno]]) and not any(res["issnp"]):
+      msg = "\nWARNING: No residues flagged as SNVs. Visualizing all annotated variants.\n\n"
+      sys.stderr.write(msg)
+      res['issnp'] = [int(a!=None) for a in res[anno]]
+
+    # Reduce to variable residues
+    for key in res:
+      if key!="issnp" and any(res['issnp']):
+        res[key] = [r for i,r in enumerate(res[key]) if res['issnp'][i]]
+      elif key not in ("issnp",anno):
+        # Assume we're working with structural data
+        res[key] = [r for i,r in enumerate(res[key]) if res[anno][i]!=None]
+    if not any(res['issnp']):
+      res[anno] = [r for i,r in enumerate(res[anno]) if res[anno][i]!=None]
+    del res['issnp']
 
     # Report the final annotation count
     print "(%d annotated residues)"%len(res['seqid'])
+    print "(%d non-duplicate residues)"%len(set(zip(res['chain'],res['seqid'])))
+    print "(%d with non-zero/null values)"%len([x for x in res[anno] if x])
 
     # Determine the first residue for renumbering
     resrenumber = {}
@@ -184,13 +203,17 @@ class PDBMapVisualize():
         fout.write("recipient: residues\n")
         for row in out:
           # #0.model:resi.chain value [value ...]
-          value = -1 if row[-1] is None else float(row[-1])
+          value = -1 if row[-1] is None else row[-1]
           if not modelflag:
-            fout.write("\t#0.%d:%d.%s\t%0.6f\n"%(tuple(row)))
+            fout.write("\t#0.%d:%d.%s\t%s\n"%(tuple(row)))
           else: # do not include chain specifier for models
             fout.write("\t#0.%d:%d\t%0.6f\n"%(tuple(row[:2]+[row[-1]])))
-          if -1 < value < minval: minval=value
-          if value > maxval: maxval=value
+          try:
+            float(value)
+            if -1 < value < minval: minval=value
+            if value > maxval: maxval=value
+          except:
+            minval,maxval = -1,-1
       # If the variant type is synonymous, create a second attribute file
       # with "synonymous" as the attribute name. Useful when comparing
       # one attribute between synonymous and nonsynonymous variants
@@ -203,9 +226,9 @@ class PDBMapVisualize():
           fout.write("recipient: residues\n")
           for row in out:
             # #0.model:resi.chain value [value ...]
-            value = -1 if row[-1] is None else float(row[-1])
+            value = -1 if row[-1] is None else row[-1]
             if not modelflag:
-              fout.write("\t#0.%d:%d.%s\t%0.6f\n"%(tuple(row)))
+              fout.write("\t#0.%d:%d.%s\t%s\n"%(tuple(row)))
             else: # do not include chain specifier for models
               fout.write("\t#0.%d:%d\t%0.6f\n"%(tuple(row[:2]+[row[-1]])))
       minval,maxval = (minval,maxval) if not spectrum_range else spectrum_range[a]
@@ -490,7 +513,7 @@ if __name__ == '__main__':
   # Define variant representation
   rc("represent bs")
   rc("setattr m autochain 0")
-  rc("setattr m ballScale .5")
+  rc("setattr m ballScale .7")
   if params['colors']:
     crange = range(int(params['minval']),int(params['maxval'])+1)
     colors = params['colors']
@@ -512,6 +535,7 @@ if __name__ == '__main__':
     rc("color green,a :/%(anno)s>%(maxval)s"%params)
     rc("color gray,a :/%(anno)s=%(minval)s"%params)
     rc("color gray,a :/%(anno)s<%(minval)s"%params)
+  rc("transparency 70,r")
   # Renumber residues to reference sequence
   # This fails for discontinuous chains because numbering remains
   # sequential regardless of the gap length.
