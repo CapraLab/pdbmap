@@ -261,12 +261,12 @@ for s in structs:
       sys.stderr.write("Skipped %s.%s: Dataset 1 contains fewer than three residues with valid attribute values.\n"%(sid,chain))
       continue
     elif NB < 3:
-      sys.stderr.write("Skipped %s.%s: Dataset 2 contains fewer than three residues with valid attribute values.\n"%(sid,chain))
+      sys.stderr.write("Skipped %s.%s: Dataset 2 contains fewer than three residues with valid attribute values."%(sid,chain))
       continue
     else:
       l = len(sid)+len(chain)+1
       print "%s.%s: Dataset 1 contains %3d residues with valid attribute values"%(sid,chain,NA)
-      print "%s: Dataset 2 contains %3d residues with valid attribute values\n"%(' '*l,NB)
+      print "%s: Dataset 2 contains %3d residues with valid attribute values"%(' '*l,NB)
 
     ## The structure is valid. Prepare the data for analysis.
     # All pairs (i,j) distance (i!=j)
@@ -289,6 +289,7 @@ for s in structs:
     KBD = KB - KAB
 
     # Random label shuffling permutation test
+    print "\nGenerating emprical null distribution from %d permutations..."%PERMUTATIONS
     KAp,KBp,DABp,KABp,KADp,KBDp = [KA],[KB],[DAB],[KAB],[KAD],[KBD] # Initialize with observations
     for i,MA in enumerate(permute(MA,PERMUTATIONS)):
       # if not i % 1e2:
@@ -345,6 +346,8 @@ for s in structs:
     KABs_p,KABs_z,KABs_zp = pstat(KABsp)
     KADs_p,KADs_z,KADs_zp = pstat(KADsp)
     KBDs_p,KBDs_z,KBDs_zp = pstat(KBDsp)
+
+    print "\nWriting results to file and creating plots..."
 
     ## Plot D
     fig,ax = plt.subplots(1,1,figsize=(20,7))

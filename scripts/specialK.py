@@ -50,8 +50,10 @@ desc   = "Generalization of Ripley's K. Residues without an attribute "
 desc  += "should be given a value of NaN. Pseudo-discretizing attributes "
 desc +=  "using a hill function is recommended, but not required."
 parser = argparse.ArgumentParser(description=desc)
-parser.add_argument("infile",nargs='?',type=argparse.FileType('rb'),
-                    default=sys.stdin,help="Coordinate files residue annotations")
+# parser.add_argument("infile",nargs='?',type=argparse.FileType('rb'),
+#                     default=sys.stdin,help="Coordinate files residue annotations")
+parser.add_argument("infile",type=str,
+                    help="Coordinate file (or file of filenames) with residue annotations")
 parser.add_argument("--acol",type=int,default=9,
                     help="Attribute column index")
 parser.add_argument("--aname",type=str,default="attr",
@@ -241,8 +243,8 @@ try:
 except:
   print "\nReading structure file list from input file...\n"
   df = pd.DataFrame()
-  structs = [s.rstrip() for s in args.infile]
-  args.infile.close()
+  with open(args.infile,'rb') as fin:
+    structs = [s.rstrip() for s in fin]
   # Shuffle, partition, and subset to assigned partition
   if args.ppart > 1:
     # np.random.shuffle(structs) # all processes produce the same shuffle

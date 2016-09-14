@@ -94,6 +94,8 @@ parser.add_argument("variants",type=str,nargs='?',
                     help="comma-separated list of protein-level HGVS, \
                           rsID, chromosomal position identifiers; or \
                           a filename containing one identifier per line")
+parser.add_argument("--chain",type=str,
+                    help="Limit the analysis to a particular chain")
 parser.add_argument("--fasta",type=str,
                     help="Fasta file for the reference sequence")
 parser.add_argument("--isoform",type=str,
@@ -116,6 +118,10 @@ parser.add_argument("--cadd", type=str,
                     help="Location of file with CADD scores")
 parser.add_argument("--domains",type=str,
                     help="Location of file with protein domain boundaries")
+parser.add_argument("--lowerbound",type=float,default=8.,
+                    help="Lower bound on the NeighborWeight function")
+parser.add_argument("--upperbound",type=float,default=24.,
+                    help="Upper bound on the NeighborWeight function")
 parser.add_argument("--replace",action="store_true",default=False,
                     help="User-defined variant sets are intersected by default")
 parser.add_argument("--no-timestamp","-nt",action="store_true",default=False,
@@ -293,13 +299,13 @@ def default_var_query():
   s += "INNER JOIN GenomicIntersection b ON a.gc_id=b.gc_id "
   s += "INNER JOIN GenomicData c ON a.gd_id=c.gd_id "
   w  = "WHERE b.slabel=%s and a.label=%s AND consequence LIKE '%%missense_variant%%' "
-  w += "AND b.structid=%s AND LENGTH(ref_amino_acid)=1 "
+  w += "AND b.structid=%s "
   return s,w
 
 def sequence_var_query():
   """ Alternate string for custom protein models """
   s  = "SELECT distinct protein_pos,ref_amino_acid,alt_amino_acid,polyphen FROM GenomicConsequence a "
-  s += "INNER JOIN GenomicData c on a.gd_id=c.gd_id "
+  s += "INNER JOIN GenomicData c ON a.gd_id=c.gd_id "
   w  = "WHERE a.label=%s and consequence LIKE '%%missense_variant%%' "
   w += "AND a.uniprot=%s AND LENGTH(ref_amino_acid)=1 "
   if args.isoform:
@@ -312,14 +318,14 @@ def sequence_var_query():
   return s,w
 
 def get_natural(io,sid,refid=None):
-  """ Query natural variants (1000G) from PDBMap """
+  """ Query natural variants (ExAC) from PDBMap """
   if not refid:
     s,w = default_var_query()
-    f   = (args.slabel,"1kg3",sid)
+    f   = (args.slabel,"exac",sid)
     c   = ["pos","ref","alt","chain","pph2_prob"]
   else:
     s,w = sequence_var_query()
-    f   = ("1kg3",refid)
+    f   = ("exac",refid)
     c   = ["pos","ref","alt","pph2_prob"]
   q   = s+w
   res = list(io.secure_query(q,f,cursorclass="Cursor"))
@@ -495,7 +501,7 @@ def CLUMPS(df,col,val,permute=False,seq=False,t=10.):
     CLUMPS.d = squareform(pdist(df[["x","y","z"]]))
     # CLUMPS.d = WAP(CLUMPS.d)
     # CLUMPS.d = glf(CLUMPS.d)
-    CLUMPS.d = nw(CLUMPS.d,lb=8.,ub=24.)
+    CLUMPS.d = nw(CLUMPS.d,lb=args.lowerbound,ub=args.upperbound)
   # WAP w/ t=6. precomputed, all weight equal to 1
   # GLF w/ B,v = 0.2,0.05 precomputed
   N = float(valid.sum())
@@ -514,12 +520,14 @@ def pathprox(cands,neut,path,cv=None,perm=False):
     # D = WAP(cdist(cands[["x","y","z"]].values,df[["x","y","z"]].values))
     # Dn = glf(cdist(cands[["x","y","z"]].values,neut[["x","y","z"]].values))
     # Dp = glf(cdist(cands[["x","y","z"]].values,path[["x","y","z"]].values))
-    Dn = nw(cdist(cands[["x","y","z"]].values,neut[["x","y","z"]].values),lb=8.,ub=24.)
-    Dp = nw(cdist(cands[["x","y","z"]].values,path[["x","y","z"]].values),lb=8.,ub=24.)
+    Dn = nw(cdist(cands[["x","y","z"]].values,neut[["x","y","z"]].values),
+              lb=args.lowerbound,ub=args.upperbound)
+    Dp = nw(cdist(cands[["x","y","z"]].values,path[["x","y","z"]].values),
+              lb=args.lowerbound,ub=args.upperbound)
     # Set self-weights to 0. for cross-validation
-    if   cv == "N":
+    if   cv and "N" in cv:
       np.fill_diagonal(Dn,0.)
-    elif cv == "P":
+    elif cv and "P" in cv:
       np.fill_diagonal(Dp,0.)
     D = np.hstack((Dn,Dp))
     pathprox.D = D
@@ -625,12 +633,12 @@ def plot_roc(fpr,tpr,label,fig=None,save=True):
     plt.plot([0,1],[0,1],'k--')
     plt.xlim([0.,1.])
     plt.ylim([0.,1.])
-    plt.xlabel("False Positive Rate")
-    plt.ylabel("True Positive Rate")
+    plt.xlabel("False Positive Rate",fontsize=15)
+    plt.ylabel("True Positive Rate",fontsize=15)
   l = "%s (AUC: %5.2f)"%(label,roc_auc)
-  plt.plot(fpr,tpr,label=l,linewidth=3)
+  plt.plot(fpr,tpr,label=l,linewidth=4)
   if save:
-    plt.legend(loc="lower right",fontsize=10)
+    plt.legend(loc="lower right",fontsize=12)
     plt.savefig("%s_%s_roc.pdf"%(args.label,label),dpi=300)
     plt.savefig("%s_%s_roc.png"%(args.label,label),dpi=300)
     plt.close(fig)
@@ -643,12 +651,12 @@ def plot_pr(rec,prec,pr_auc,label,fig=None,save=True):
     # plt.title("%s PR"%label)
     plt.xlim([0.,1.])
     plt.ylim([0.,1.])
-    plt.xlabel("Recall")
-    plt.ylabel("Precision")
+    plt.xlabel("Recall",fontsize=15)
+    plt.ylabel("Precision",fontsize=15)
   l = "%s (AUC: %5.2f)"%(label,pr_auc)
-  plt.plot(rec,prec,label=l,linewidth=3)
+  plt.plot(rec,prec,label=l,linewidth=4)
   if save:
-    plt.legend(loc="lower left",fontsize=10)
+    plt.legend(loc="lower left",fontsize=12)
     plt.savefig("%s_%s_pr.pdf"%(args.label,label),dpi=300)
     plt.savefig("%s_%s_pr.png"%(args.label,label),dpi=300)
     plt.close(fig)
@@ -781,7 +789,7 @@ else: path = None
 
 # Perform the colocalization analysis for each structure
 for sid,bio,cf in flist:
-
+  print "\n#===========================#\n"
   # If no fasta provided, query Uniprot AC and alignment
   if not args.fasta:
     if bio < 0:
@@ -816,12 +824,18 @@ for sid,bio,cf in flist:
             (args.use_residues[1] and r.id[1] > args.use_residues[1]):
           c.detach_child(r.id)
   r = [r.id[1] for r in s.get_residues()]
-  print "\nStructure contains residues %d to %d.\n"%(min(r),max(r))
+  print "\nStructure contains residues %d to %d."%(min(r),max(r))
 
   # Determine the relevant protein chain
-  if bio > 0:
+  if args.chain:
+    # User-specified
+    print "\nOnly analyzing chain %s"%args.chain
+    chains = [args.chain]
+  elif bio > 0:
+    # Query matching chains
     chains = chain_match(io,unp,sid,bio)
   else:
+    # Assume all chains
     chains = [c.id for c in s.get_chains()]
 
   # Map all user-defined variants to the relevant chains
@@ -845,16 +859,18 @@ for sid,bio,cf in flist:
     df = df.append(tdf)
 
   # Drop duplicates after chain-mapping
-  df = df.drop_duplicates(["chain","pos","ref","alt","dcode"]).reset_index(drop=True)
+  if "dcode" in df.columns:
+    df = df.drop_duplicates(["chain","pos","ref","alt","dcode"]).reset_index(drop=True)
 
-  # Skip if the structure contains no candidate variants
-  if not any(check_coverage(s,v["chain"],v["pos"],refpos=not bool(aln)) for _,v in df.iterrows()):
-    msg = "%s.%s contains none of the candidate variants.\n"
-    sys.stderr.write(msg%(sid,bio))
-    continue
+  # Skip if the structure contains none of the mapped variants
+  if cands or benign or path:
+    if not any(check_coverage(s,v["chain"],v["pos"],refpos=not bool(aln)) for _,v in df.iterrows()):
+      msg = "%s[%s] contains none of the candidate variants.\n"
+      sys.stderr.write(msg%(sid,bio))
+      continue
 
   # Load the reference variant sets (already chain-annotated)
-  print "Identifying reference variants in %s..."%sid
+  print "\nIdentifying reference variants in %s..."%sid
   if not (args.replace and (df["dcode"]==2).sum()):
     df = df.append(get_pathogenic(io,sid,refid))
     df = df.append(get_somatic(io,sid,refid))
@@ -869,6 +885,8 @@ for sid,bio,cf in flist:
       return g if all(g["dcode"]<2) else g[(g["dcode"]>1) | (g["dcode"]<0)]
     df = df.groupby(["pos","ref","alt"]).apply(pathdefer)
   df["pos"] = df["pos"].astype(int)
+  # Drop variants mapped to excluded chains
+  df = df[df["chain"].isin(chains)]
 
   if bio < 0:
     # If user-defined model, map reference variants to each chain
@@ -988,33 +1006,33 @@ for sid,bio,cf in flist:
   print "Beginning analyses...\n"
 
   ## BLOSUM62 Prediction
-  print "\n############# BLOSUM62 ###########"
-  blosum = pd.read_csv("/dors/capra_lab/doux/pdbmap/data/udn/BLOSUM62.txt",
-                        index_col=0,header=0,comment="#",sep='\t')
-  # Generate the predictions (flip low to high for increasing likelihood)
-  hgvs = (df.ix[df["dcode"]==-1,"ref"]+(df.ix[df["dcode"]==-1,"pos"].map(str))+df.ix[df["dcode"]==-1,"alt"]).values
-  df["blosum62"] = [blosum.ix[ref,alt] for _,ref,alt in df[["ref","alt"]].itertuples()]
-  p = [-blosum.ix[ref,alt] for _,ref,alt in \
-          df.ix[df["dcode"]==2,["ref","alt"]].itertuples()]
-  n = [-blosum.ix[ref,alt] for _,ref,alt in \
-          df.ix[df["dcode"].isin([0,1]),["ref","alt"]].itertuples()]
-  t = [-blosum.ix[ref,alt] for _,ref,alt in \
-          df.ix[df["dcode"]==-1,["ref","alt"]].itertuples()]
-  mwu,mwu_p,roc_auc,tpr,fpr,pr_auc,prec,rec = eval_pred(p,n,t,hgvs,"BLOSUM62")
-  all_pred["BLOSUM62"] = (p,n,t)
-  all_pred_roc["BLOSUM62"] = (fpr,tpr)
-  all_pred_pr["BLOSUM62"]  = (rec,prec)
-  all_pred_rocauc["BLOSUM62"] = roc_auc
-  all_pred_prauc["BLOSUM62"]  = pr_auc
-  print "\nBLOSUM62 Pathogenicity MWU p-value: %g"%mwu_p
-  print "BLOSUM62 Pathogenicity ROC AUC:     %g"%roc_auc
-  print "BLOSUM62 Pathogenicity PR  AUC:     %g"%pr_auc
-  if t:
-    print "BLOSUM62 Pathogenicity Predictions:"
-    t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
-    for i,name in enumerate(hgvs):
-      print "%s\t%11s\t%.2f"%(name,["Benign","Deleterious"][int(t[i]>0)],-t[i])
-    print ""
+  # print "\n############# BLOSUM62 ###########"
+  # blosum = pd.read_csv("/dors/capra_lab/doux/pdbmap/data/udn/BLOSUM62.txt",
+  #                       index_col=0,header=0,comment="#",sep='\t')
+  # # Generate the predictions (flip low to high for increasing likelihood)
+  # hgvs = (df.ix[df["dcode"]==-1,"ref"]+(df.ix[df["dcode"]==-1,"pos"].map(str))+df.ix[df["dcode"]==-1,"alt"]).values
+  # df["blosum62"] = [blosum.ix[ref,alt] for _,ref,alt in df[["ref","alt"]].itertuples()]
+  # p = [-blosum.ix[ref,alt] for _,ref,alt in \
+  #         df.ix[df["dcode"]==2,["ref","alt"]].itertuples()]
+  # n = [-blosum.ix[ref,alt] for _,ref,alt in \
+  #         df.ix[df["dcode"].isin([0,1]),["ref","alt"]].itertuples()]
+  # t = [-blosum.ix[ref,alt] for _,ref,alt in \
+  #         df.ix[df["dcode"]==-1,["ref","alt"]].itertuples()]
+  # mwu,mwu_p,roc_auc,tpr,fpr,pr_auc,prec,rec = eval_pred(p,n,t,hgvs,"BLOSUM62")
+  # all_pred["BLOSUM62"] = (p,n,t)
+  # all_pred_roc["BLOSUM62"] = (fpr,tpr)
+  # all_pred_pr["BLOSUM62"]  = (rec,prec)
+  # all_pred_rocauc["BLOSUM62"] = roc_auc
+  # all_pred_prauc["BLOSUM62"]  = pr_auc
+  # print "\nBLOSUM62 Pathogenicity MWU p-value: %g"%mwu_p
+  # print "BLOSUM62 Pathogenicity ROC AUC:     %g"%roc_auc
+  # print "BLOSUM62 Pathogenicity PR  AUC:     %g"%pr_auc
+  # if t:
+  #   print "BLOSUM62 Pathogenicity Predictions:"
+  #   t,hgvs = zip(*sorted(zip(t,hgvs),reverse=True))
+  #   for i,name in enumerate(hgvs):
+  #     print "%s\t%11s\t%.2f"%(name,["Benign","Deleterious"][int(t[i]>0)],-t[i])
+  #   print ""
 
   ## Evolutionary Conservation Prediction
   if args.consurf:
@@ -1174,6 +1192,26 @@ for sid,bio,cf in flist:
     df.ix[df["dcode"]==-1,"pathprox"] = t
     df.ix[df["dcode"].isin([0,1]),"pathprox"] = n
     df.ix[df["dcode"]==2,"pathprox"] = p
+
+  ## Compute PathProx for all residues and output a Chimera attribute file
+  p = sdf[sdf["dcode"]==2]
+  if len(p) > 1:
+    print "\nGenerating PathProx attribute file..."
+    n = sdf[sdf["dcode"].isin([0,1])]
+    # All unique residues
+    c = sdf
+    cscores = pathprox(c,n,p,cv="NP")
+    c["pathprox"] = cscores
+    # Drop the lowest scores for multi-mapped residues
+    c = c.sort_values(by="pathprox").drop_duplicates()
+    c = c.sort_values(by=["chain","pos"])
+    with open("%s.attr"%args.label,'wb') as fout:
+      fout.write("attribute: pathprox\n")
+      fout.write("match mode: 1-to-1\n")
+      fout.write("recipient: residues\n")
+      for i,r in c.iterrows():
+        fout.write("\t:%d.%s\t%.3f\n"%(r["pos"],r["chain"],r["pathprox"]))
+
 
   # ## Composite Predictor
   # print "\n############# Composite Predictor ###########"
