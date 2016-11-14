@@ -259,37 +259,60 @@ for s in structs:
       print "%4s.%1s: ClinVar contains %d residues with valid attribute values"%(sid,chain,NA)
       print "      : ExAC    contains %d residues with valid attribute values\n"%NB
 
-    ascores = pathprox(A,A,B,cv="P")
-    bscores = pathprox(B,A,B,cv="N")
-    fpr,tpr,roc_auc,prec,rec,pr_auc = calc_auc(ascores,bscores)
-    print "Colocalization ROC AUC: %.2f"%roc_auc
-    print "Colocalization PR  AUC: %.2f\n"%pr_auc
-    res = np.c_[fpr,tpr]
-    np.savetxt("%s/%s-%s_%s_roc.txt.gz"%(args.outdir,sid,chain,args.label),res,"%.4g",'\t')
-    res = np.c_[prec,rec]
-    np.savetxt("%s/%s-%s_%s_pr.txt.gz"%(args.outdir,sid,chain,args.label),res,"%.4g",'\t')
+    try:
+      ascores = pathprox(A,A,B,cv="P")
+      bscores = pathprox(B,A,B,cv="N")
+      fpr,tpr,roc_auc,prec,rec,pr_auc = calc_auc(ascores,bscores)
+      print "Colocalization ROC AUC: %.2f"%roc_auc
+      print "Colocalization PR  AUC: %.2f\n"%pr_auc
+      res = np.c_[fpr,tpr]
+      np.savetxt("%s/%s-%s_%s_roc.txt.gz"%(args.outdir,sid,chain,args.label),res,"%.4g",'\t')
+      res = np.c_[prec,rec]
+      np.savetxt("%s/%s-%s_%s_pr.txt.gz"%(args.outdir,sid,chain,args.label),res,"%.4g",'\t')
+    except Exception as e:
+      print "\nError in %s -- Colocalization"%sid
 
     # Only compute ROC/PR with non-null Polyphen2 scores.
-    ascores = A.ix[A['polyphen'].notnull(), 'polyphen'].values
-    bscores = B.ix[B['polyphen'].notnull(), 'polyphen'].values
-    fpr,tpr,roc_auc,prec,rec,pr_auc = calc_auc(ascores, bscores)
-    print "PolyPhen ROC AUC: %.2f"%roc_auc
-    print "PolyPhen PR  AUC: %.2f\n"%pr_auc
-    res = np.c_[fpr,tpr]
-    np.savetxt("%s/%s-%s_%s_polyphen_roc.txt.gz"%(args.outdir,sid,chain,args.label),res,"%.4g",'\t')
-    res = np.c_[prec,rec]
-    np.savetxt("%s/%s-%s_%s_polyphen_pr.txt.gz"%(args.outdir,sid,chain,args.label),res,"%.4g",'\t')
+    try:
+      ascores = A.ix[A['polyphen'].notnull(), 'polyphen'].values
+      bscores = B.ix[B['polyphen'].notnull(), 'polyphen'].values
+      fpr,tpr,roc_auc,prec,rec,pr_auc = calc_auc(ascores, bscores)
+      print "PolyPhen ROC AUC: %.2f"%roc_auc
+      print "PolyPhen PR  AUC: %.2f\n"%pr_auc
+      res = np.c_[fpr,tpr]
+      np.savetxt("%s/%s-%s_%s_polyphen_roc.txt.gz"%(args.outdir,sid,chain,args.label),res,"%.4g",'\t')
+      res = np.c_[prec,rec]
+      np.savetxt("%s/%s-%s_%s_polyphen_pr.txt.gz"%(args.outdir,sid,chain,args.label),res,"%.4g",'\t')
+    except Exception as e:
+      print "\nError in %s -- Polyphen"%sid
 
     # Only compute ROC/PR with non-null SIFT scores. 
-    ascores = -A.ix[A['sift'].notnull(), 'sift'].values
-    bscores = -B.ix[B['sift'].notnull(), 'sift'].values
-    fpr,tpr,roc_auc,prec,rec,pr_auc = calc_auc(ascores, bscores)
-    print "SIFT ROC AUC: %.2f"%roc_auc
-    print "SIFT PR AUC: %.2f\n"%pr_auc
-    res = np.c_[fpr,tpr]
-    np.savetxt("%s/%s-%s_%s_sift_roc.txt.gz"%(args.outdir,sid,chain,args.label),res,"%.4g",'\t')
-    res = np.c_[prec,rec]
-    np.savetxt("%s/%s-%s_%s_sift_pr.txt.gz"%(args.outdir,sid,chain,args.label),res,"%.4g",'\t')
+    try: 
+      ascores = -A.ix[A['sift'].notnull(), 'sift'].values
+      bscores = -B.ix[B['sift'].notnull(), 'sift'].values
+      fpr,tpr,roc_auc,prec,rec,pr_auc = calc_auc(ascores, bscores)
+      print "SIFT ROC AUC: %.2f"%roc_auc
+      print "SIFT PR AUC: %.2f\n"%pr_auc
+      res = np.c_[fpr,tpr]
+      np.savetxt("%s/%s-%s_%s_sift_roc.txt.gz"%(args.outdir,sid,chain,args.label),res,"%.4g",'\t')
+      res = np.c_[prec,rec]
+      np.savetxt("%s/%s-%s_%s_sift_pr.txt.gz"%(args.outdir,sid,chain,args.label),res,"%.4g",'\t')
+    except Exception as e:
+      print "\nError in %s -- SIFT"%sid
+
+    # Only compute ROC/PR with non-null TonyCons scores.
+    try:
+      ascores = A.ix[A['score'].notnull(), 'score'].values
+      bscores = B.ix[B['score'].notnull(), 'score'].values
+      fpr,tpr,roc_auc,prec,rec,pr_auc = calc_auc(ascores, bscores)
+      print "TonyCons ROC AUC: %.2f"%roc_auc
+      print "TonyCons PR AUC: %.2f\n"%pr_auc
+      res = np.c_[fpr,tpr]
+      np.savetxt("%s/%s-%s_%s_cons_roc.txt.gz"%(args.outdir,sid,chain,args.label),res,"%.4g",'\t')
+      res = np.c_[prec,rec]
+      np.savetxt("%s/%s-%s_%s_cons_pr.txt.gz"%(args.outdir,sid,chain,args.label),res,"%.4g",'\t')
+    except Exception as e:
+      print "\nError in %s -- Conservation"%sid
 
   except Exception as e:
     print "\nError in %s"%sid

@@ -8,8 +8,9 @@
 #                : Vanderbilt University Medical Center
 # Email          : mike.sivley@vanderbilt.edu
 # Date           : 2016-05-02
-# Description    : Uses multivariate K functions to analyze the spatial
-#                : distribution of variants in protein structures.
+# Description    : Uses the bivariate D function to analyze the spatial
+#                : distribution of variants in protein structures and
+#                : uses these results to parameterize a PathProx anlaysis.
 #=============================================================================#
 # Input files must begin with the following columns...
 # Structure ID   : PDB structure ID
@@ -31,9 +32,13 @@ np.set_printoptions(precision=2,edgeitems=4)
 import time,os,sys,random,argparse,itertools,csv
 from time import strftime
 from collections import OrderedDict
-from scipy.spatial.distance import pdist,squareform
+from scipy.spatial.distance import cdist,pdist,squareform
+from sklearn.metrics import auc,roc_curve
+from sklearn.metrics import precision_recall_curve as pr_curve
+from sklearn.metrics import average_precision_score
 from scipy.stats.mstats import zscore
 from scipy.stats import norm,percentileofscore
+from scipy.integrate import simps # Simpsons integration rule
 from math import factorial
 from seaborn import violinplot
 from warnings import filterwarnings,resetwarnings
@@ -42,7 +47,6 @@ from warnings import filterwarnings,resetwarnings
 np.random.seed(10)
 random.seed(10)
 TOL = 1e-10 # zero tolerance threshold
-PERMUTATIONS = 99999 # 100k
 #=============================================================================#
 ## Parse Command Line Options ##
 desc   = "Generalization of Ripley's K. Residues without an attribute "
@@ -55,7 +59,7 @@ parser.add_argument("-b",type=str,
                     help="Coordinate files for dataset B")
 parser.add_argument("--overwrite",action='store_true',default=False,
                     help="Flag used to overwrite existing results.")
-parser.add_argument("--outdir",type=str,default="results/multiK/",
+parser.add_argument("--outdir",type=str,default="results/multiROK/",
                     help="Alternate output path (detail recommended)")
 parser.add_argument("--label",type=str,default="",
                     help="Unique label for dataset comparison")
@@ -69,6 +73,8 @@ parser.add_argument("--pdf",action='store_true',default=False,
                     help="Generate a PDF version of the multi-distance K plot")
 parser.add_argument("--png",action='store_true',default=False,
                     help="Generate a PNG version of the multi-distance K plot")
+parser.add_argument("--permutations",type=int,default=99999,
+                    help="Number of random permutations to perform")
 parser.add_argument("--saveperm",action='store_true',default=False,
                     help="Saves a compressed copy of the permutation matrix")
 args = parser.parse_args()
@@ -140,7 +146,8 @@ def pstat(Pvec):
   o_z = zscore(Pvec)[0]
   P   = np.unique(Pvec).size
   # Calculate one-sided permutation p-values based on the original z-score
-  print "Protein summary z-score: %.3f"%o
+  print "Difference in integrals: %.3f"%o
+  ## ## ## ## ## ## DO NOT SAVE THIS SCRIPT UNTIL THE RUNS FINISH ## ## ## ## ## ##
   print "RawP (+): %.3g"%(2.*(1.-percentileofscore(Pvec,o,'strict')/100.))
   print "RawP (-): %.3g"%(2.*(1.-percentileofscore(-Pvec,-o,'strict')/100.))
   if o < 0:
@@ -148,7 +155,7 @@ def pstat(Pvec):
   else:
     o_p = min(1.,2.*(1.-percentileofscore(Pvec,o,'strict')/100.))
   o_pz = norm.sf(abs(o_z))*2. # two-sided simulated p-value
-  return o_p,o_z,o_pz
+  return P,o_p,o_z,o_pz
 
 def pstats(Pmat):
   """ Calculates p-values and z-scores for each distance threshold.
@@ -188,8 +195,6 @@ def k_plot(T,K,Kz,lce,hce,ax=None):
   # Add a vertical line a the most extreme threshold
   dK = np.nanmax(np.abs(Kz),axis=0) # studentized maximum K
   t  = np.nanargmax(np.abs(Kz),axis=0) # t where studentized K is maximized
-  # dK = np.nanmax([K-hce,lce-K],axis=0) # directional K-99%
-  # t  = np.nanargmax(dK) # t where K is most outside the 99% interval
   T,K = T[t],K[t]
   ax.axvline(T,color=c,lw=2,ls="dashed",label="Optimal T=%.0f"%T)
   return ax
@@ -201,6 +206,50 @@ def perm_plot(K_perm,T,ax=None):
     plt.xticks(range(T.size),T)
     plt.title("K Permutations")
     return ax
+
+@np.vectorize
+def nw(d,lb=4.,ub=11.4):
+  if d <= TOL:
+    return 1+1e-10
+  elif d <= lb:
+    return 1.
+  elif d >= ub:
+    return 0.
+  else:
+    return 0.5*(np.cos(np.pi*(d-lb)/(ub-lb))+1)
+
+def pathprox(cands,path,neut,nwlb=8.,nwub=24.,cv=None):
+  """ Predicts pathogenicity of a mutation vector given observed neutral/pathogenic """
+  ncount = len(neut)
+  pcount = len(path)
+  ccount = len(cands)
+  N = ncount + pcount
+  # NeighborWeight of each candidate for each neutral/pathogenic variant
+  NWn = nw(cdist(cands,neut),lb=nwlb,ub=nwub)
+  NWp = nw(cdist(cands,path),lb=nwlb,ub=nwub)
+  # Set self-weights to 0. for cross-validation
+  if   cv == "N":
+    np.fill_diagonal(NWn,0.) # NeighborWeight of self = 0.0
+  elif cv == "P":
+    np.fill_diagonal(NWp,0.) # NeighborWeight of self = 0.0
+  NWs = np.hstack((NWn,NWp)) # NeighborWeight stack
+  nmask = np.zeros(N).astype(bool)
+  nmask[:ncount] = True
+  pmask = np.abs(nmask-1).astype(bool)
+  pscores = np.sum(NWs[:,pmask],axis=1)/pcount
+  nscores = np.sum(NWs[:,nmask],axis=1)/ncount
+  cscores = pscores - nscores # subtraction binds c to -1..1
+  return cscores
+
+def calc_auc(pscores,nscores):
+  ## Calculate the AUC
+  labels = [0]*len(nscores)+[1]*len(pscores)
+  preds  = np.concatenate((nscores,pscores))
+  fpr,tpr,_  = roc_curve(labels,preds,drop_intermediate=False)
+  roc_auc    = auc(fpr,tpr)
+  prec,rec,_ = pr_curve(labels,preds)
+  pr_auc     = average_precision_score(labels,preds,average="micro")
+  return fpr,tpr,roc_auc,prec,rec,pr_auc
 
 #=============================================================================#
 ## Select Partition ##
@@ -233,7 +282,7 @@ except:
       A = read_infile(structs1[s])
       B = read_infile(structs2[s])
     except ValueError:
-      return False # Push error handling to individual jobs
+      return False # push error handling to individual jobs
     fname = "%s/%s-%s_%s_D_complete.txt.gz"%(args.outdir,sid,chain,args.label)
     return os.path.exists(fname)
   nstructs = len(structs)
@@ -242,7 +291,8 @@ except:
   print "%d of %d structures already processed. Partitioning the remaining %d"%(nstructs-len(structs),nstructs,len(structs))
   # Verify that the list of structure tuples is fully paired
   if not structs:
-    raise Exception("Datasets included none of the same structures.")
+    sys.stderr.write("Datasets included none of the same (valid, unprocessed) structures.\n")
+    sys.exit()
   print "Proteins containing data from both datasets: %4d"%len(structs)
 
   # Shuffle, partition, and subset to assigned partition
@@ -292,7 +342,7 @@ for s in structs:
       sys.stderr.write("Skipped %s.%s: Dataset 1 contains fewer than three residues with valid attribute values.\n"%(sid,chain))
       continue
     elif NB < 3:
-      sys.stderr.write("Skipped %s.%s: Dataset 2 contains fewer than three residues with valid attribute values."%(sid,chain))
+      sys.stderr.write("Skipped %s.%s: Dataset 2 contains fewer than three residues with valid attribute values.\n"%(sid,chain))
       continue
     else:
       l = len(sid)+len(chain)+1
@@ -308,7 +358,7 @@ for s in structs:
     D[np.identity(D.shape[0],dtype=bool)] = np.nan  # Diagonal to NaN
     
     # Distance thresholds to test (min obs distance to 1/2 max obs distance)
-    minT = np.ceil(np.nanmin(D))
+    minT = np.ceil(np.nanmin(D[D>0]))
     maxT = np.ceil(np.nanmax(D))/2.
     if maxT <= minT:
       maxT = np.ceil(np.nanmax(D))
@@ -325,72 +375,47 @@ for s in structs:
     KA  = Kest(np.ma.array(D, mask=1-MA*MA.T),T)
     KB  = Kest(np.ma.array(D, mask=1-MB*MB.T),T)
     DAB = KA - KB
-    KAB = Kstar(np.ma.array(D,mask=1-MA*MB.T),T)
-    KBA = Kstar(np.ma.array(D,mask=1-MB*MA.T),T)
-
-    KAD = KA - KAB
-    KBD = KB - KAB
 
     # Random label shuffling permutation test
-    print "\nGenerating emprical null distribution from %d permutations..."%PERMUTATIONS
-    KAp,KBp,DABp,KABp,KADp,KBDp = [KA],[KB],[DAB],[KAB],[KAD],[KBD] # Initialize with observations
-    for i,MA in enumerate(permute(MA,PERMUTATIONS)):
-      # if not i % 1e2:
-        # print "\rPermutation %5d"%i,
-        # sys.stdout.flush()
+    print "\nGenerating emprical null distribution from %d permutations..."%args.permutations
+    KAp,KBp,DABp = [KA],[KB],[DAB] # Initialize with observations
+    for i,MA in enumerate(permute(MA,args.permutations)):
       MB = np.abs(1-MA)
       # Calculate each multivariate K statistic
       KA  = Kest(np.ma.array(D, mask=1-MA*MA.T),T)
       KB  = Kest(np.ma.array(D, mask=1-MB*MB.T),T)
       DAB = KA - KB
-      KAB = Kstar(np.ma.array(D,mask=1-MA*MB.T),T)
-      KAD = KA - KAB
-      KBD = KB - KAB
+
       # Append permutation iteration to list
       KAp.append(KA)
       KBp.append(KB)
       DABp.append(DAB)
-      KABp.append(KAB)
-      KADp.append(KAD)
-      KBDp.append(KBD)
+
     # Permutation matrices
     KAp  = np.array(KAp, dtype=np.float64)
     KBp  = np.array(KBp, dtype=np.float64)
     DABp = np.array(DABp,dtype=np.float64)
-    KABp = np.array(KABp,dtype=np.float64)
-    KADp = np.array(KADp,dtype=np.float64)
-    KBDp = np.array(KBDp,dtype=np.float64)
+
     # Recover the original observations
-    KA,KB,DAB,KAB,KAD,KBD = KAp[0],KBp[0],DABp[0],KABp[0],KADp[0],KBDp[0]
+    KA,KB,DAB = KAp[0],KBp[0],DABp[0]
 
     ## Distance-dependent p-values and z-scores
     DAB_p,DAB_z,DAB_zp,DAB_hce,DAB_lce = pstats(DABp)
-    KAB_p,KAB_z,KAB_zp,KAB_hce,KAB_lce = pstats(KABp)
-    KAD_p,KAD_z,KAD_zp,KAD_hce,KAD_lce = pstats(KADp)
-    KBD_p,KBD_z,KBD_zp,KBD_hce,KBD_lce = pstats(KBDp)
 
     # Determine the optimal T for each statistic
-    DAB_t  = T[np.nanargmax(np.abs(DAB_z),axis=0)]
-    KAB_t  = T[np.nanargmax(np.abs(KAB_z),axis=0)]
-    KAD_t  = T[np.nanargmax(np.abs(KAD_z),axis=0)]
-    KBD_t  = T[np.nanargmax(np.abs(KBD_z),axis=0)]
+    DAB_t = T[np.nanargmax(np.abs(DAB_z),axis=0)]
 
-    ## Protein summary statistics
-    DABs = np.nanmean(DAB / np.std(DABp,axis=0))
-    KABs = np.nanmean(KAB / np.std(KABp,axis=0))
-    KADs = np.nanmean(KAD / np.std(KADp,axis=0))
-    KBDs = np.nanmean(KBD / np.std(KBDp,axis=0))
-    # Calculate protein summary p-value and z-score
-    DABsp = np.nanmean(DABp / np.std(DABp,axis=0), axis=1)
-    KABsp = np.nanmean(KABp / np.std(KABp,axis=0), axis=1)
-    KADsp = np.nanmean(KADp / np.std(KADp,axis=0), axis=1)
-    KBDsp = np.nanmean(KBDp / np.std(KBDp,axis=0), axis=1)
-    DABs_p,DABs_z,DABs_zp = pstat(DABsp)
-    KABs_p,KABs_z,KABs_zp = pstat(KABsp)
-    KADs_p,KADs_z,KADs_zp = pstat(KADsp)
-    KBDs_p,KBDs_z,KBDs_zp = pstat(KBDsp)
+    # Determine the optimal K for each statistic
+    DAB_k = DAB[np.nanargmax(np.abs(DAB_z),axis=0)]
 
-    print "\nWriting results to file and creating plots..."
+    # Calculate the integral of the empirical medians
+    DABp_integral = simps(np.median(DABp,axis=0),x=T)
+
+    # Calculate the area between each permutation and the median
+    DABsp = np.apply_along_axis(simps,1,DABp,x=T) - DABp_integral
+    P,DABs_p,DABs_z,DABs_zp = pstat(DABsp)
+
+    print "\nWriting bivariate results to file and creating plots..."
 
     ## Plot D
     fig,ax = plt.subplots(1,1,figsize=(20,7))
@@ -403,61 +428,13 @@ for s in structs:
       plt.savefig("%s/%s-%s_%s_D_plot.png"%(args.outdir,sid,chain,args.label),dpi=300)
     plt.close(fig)
 
-    ## Plot K*
-    fig,ax = plt.subplots(1,1,figsize=(20,7))
-    ax = k_plot(T,KAB,KAB_z,KAB_lce,KAB_hce,ax) # K*
-    ax.scatter(T,KA,color='mediumblue',label="Ka")
-    ax.scatter(T,KB,color='forestgreen',label="Kb")
-    ax.set_title("Multivariate K*",fontsize=25)
-    ax.legend(loc="lower right",fontsize=18)
-    if args.pdf:
-      plt.savefig("%s/%s-%s_%s_Kstar_plot.pdf"%(args.outdir,sid,chain,args.label),dpi=300)
-    if args.png:
-      plt.savefig("%s/%s-%s_%s_Kstar_plot.png"%(args.outdir,sid,chain,args.label),dpi=300)
-    plt.close(fig)
-
-    ## Plot KA - K*
-    fig,ax = plt.subplots(1,1,figsize=(20,7))
-    k_plot(T,KAD,KAD_z,KAD_lce,KAD_hce,ax)
-    ax.set_title("Multivariate KA - K*",fontsize=25)
-    ax.legend(loc="lower right",fontsize=18)
-    if args.pdf:
-      plt.savefig("%s/%s-%s_%s_KAD_plot.pdf"%(args.outdir,sid,chain,args.label),dpi=300)
-    if args.png:
-      plt.savefig("%s/%s-%s_%s_KAD_plot.png"%(args.outdir,sid,chain,args.label),dpi=300)
-    plt.close(fig)
-
-    ## Plot KB - K*
-    fig,ax = plt.subplots(1,1,figsize=(20,7))
-    k_plot(T,KBD,KBD_z,KBD_lce,KBD_hce,ax)
-    ax.set_title("Multivariate KB - K*",fontsize=25)
-    ax.legend(loc="lower right",fontsize=18)
-    if args.pdf:
-      plt.savefig("%s/%s-%s_%s_KBD_plot.pdf"%(args.outdir,sid,chain,args.label),dpi=300)
-    if args.png:
-      plt.savefig("%s/%s-%s_%s_KBD_plot.png"%(args.outdir,sid,chain,args.label),dpi=300)
-    plt.close(fig)
-
-    ## Save the permutation matrices
-    if args.saveperm:
-      np.savetxt("%s/%s-%s_%s_D_perm.txt.gz"%(args.outdir,sid,chain,args.label),DABp,"%.4g",'\t')
-      np.savetxt("%s/%s-%s_%s_Kstar_perm.txt.gz"%(args.outdir,sid,chain,args.label),KABp,"%.4g",'\t')
-      np.savetxt("%s/%s-%s_%s_KAD_perm.txt.gz"%(args.outdir,sid,chain,args.label),KADp,"%.4g",'\t')
-      np.savetxt("%s/%s-%s_%s_KBD_perm.txt.gz"%(args.outdir,sid,chain,args.label),KBDp,"%.4g",'\t')
-
     ## Save the distance-dependent results
     res = np.array([DAB,DAB_p,DAB_z,DAB_zp])
     np.savetxt("%s/%s-%s_%s_D_complete.txt.gz"%(args.outdir,sid,chain,args.label),res,"%.4g",'\t')
-    res = np.array([KAB,KAB_p,KAB_z,KAB_zp])
-    np.savetxt("%s/%s-%s_%s_Kstar_complete.txt.gz"%(args.outdir,sid,chain,args.label),res,"%.4g",'\t')
-    res = np.array([KAD,KAD_p,KAD_z,KAD_zp])
-    np.savetxt("%s/%s-%s_%s_KAD_complete.txt.gz"%(args.outdir,sid,chain,args.label),res,"%.4g",'\t')
-    res = np.array([KBD,KBD_p,KBD_z,KBD_zp])
-    np.savetxt("%s/%s-%s_%s_KBD_complete.txt.gz"%(args.outdir,sid,chain,args.label),res,"%.4g",'\t')
 
     ## Save the protein-level summary statistics
     # Summary of Ka - Kb
-    res = [sid,chain,NA,NB,DABs,DABs_p,DABs_z,DABs_zp,DAB_t]
+    res = [sid,chain,NA,NB,DAB_k,DABs_p,DABs_z,DABs_zp,DAB_t]
     print "\nSummary of Ka - Kb:"
     header = ["sid","chain","Na","Nb","DAB","p","z","z_p","optT"]
     print '\t'.join(header)
@@ -466,44 +443,79 @@ for s in structs:
       if not os.stat("%s/%s_D_summary.txt"%(args.outdir,args.label)).st_size:
         fout.write("%s\n"%'\t'.join(header))
       csv.writer(fout,delimiter='\t').writerow(res)
-    # Summary of K*
-    res = [sid,chain,NA,NB,KABs,KABs_p,KABs_z,KABs_zp,KAB_t]
-    print "\nSummary of K*:"
-    header = ["sid","chain","Na","Nb","Kstar","p","z","z_p","optT"]
-    print '\t'.join(header)
-    print '\t'.join(["%.2g"%r if not isinstance(r,str) else "%s"%r for r in res])
-    with open("%s/%s_KAB_summary.txt"%(args.outdir,args.label),'ab') as fout:
-      if not os.stat("%s/%s_KAB_summary.txt"%(args.outdir,args.label)).st_size:
-        fout.write("%s\n"%'\t'.join(header))
-      csv.writer(fout,delimiter='\t').writerow(res)
-    # Summary of Ka - K*
-    res = [sid,chain,NA,NB,KADs,KADs_p,KADs_z,KADs_zp,KAD_t]
-    print "\nSummary of Ka - K*:"
-    header = ["sid","chain","Na","Nb","KAD","p","z","z_p","optT"]
-    print '\t'.join(header)
-    print '\t'.join(["%.2g"%r if not isinstance(r,str) else "%s"%r for r in res])
-    with open("%s/%s_KAD_summary.txt"%(args.outdir,args.label),'ab') as fout:
-      if not os.stat("%s/%s_KAD_summary.txt"%(args.outdir,args.label)).st_size:
-        fout.write("%s\n"%'\t'.join(header))
-      csv.writer(fout,delimiter='\t').writerow(res)
-    #Summary of Kb - K*      
-    res = [sid,chain,NA,NB,KBDs,KBDs_p,KBDs_z,KBDs_zp,KBD_t]
-    print "\nSummary of Kb - K*:"
-    header = ["sid","chain","Na","Nb","KBD","p","z","z_p","optT"]
-    print '\t'.join(header)
-    print '\t'.join(["%.2g"%r if not isinstance(r,str) else "%s"%r for r in res])
-    with open("%s/%s_KBD_summary.txt"%(args.outdir,args.label),'ab') as fout:
-      if not os.stat("%s/%s_KBD_summary.txt"%(args.outdir,args.label)).st_size:
-        fout.write("%s\n"%'\t'.join(header))
-      csv.writer(fout,delimiter='\t').writerow(res)
     print ""
 
+    # Measure predictive performance using D-parameterization of PathProx
+    print "\nMeasuring performance of D-parameterized Pathogenic Proximity score...\n"
+
+    try:
+      # Parameterize PathProx using the minimum observed distance
+      # and the estimated pathogenic domain size (diameter relative
+      # to neutral/benign variants)
+      ascores = pathprox(A,A,B,nwlb=DAB_t,nwub=DAB_t,cv="P")
+      bscores = pathprox(B,A,B,nwlb=DAB_t,nwub=DAB_t,cv="N")
+      fpr,tpr,roc_auc,prec,rec,pr_auc = calc_auc(ascores,bscores)
+      print "PathProx ROC AUC: %.2f"%roc_auc
+      print "PathProx PR  AUC: %.2f\n"%pr_auc
+      res = np.c_[fpr,tpr]
+      np.savetxt("%s/%s-%s_%s_pathprox_roc.txt.gz"%(args.outdir,sid,chain,args.label),res,"%.4g",'\t')
+      res = np.c_[prec,rec]
+      np.savetxt("%s/%s-%s_%s_pathprox_pr.txt.gz"%(args.outdir,sid,chain,args.label),res,"%.4g",'\t')
+    except Exception as e:
+      raise
+      print "\nError in %s -- PathProx"%sid
+
+    # Only compute ROC/PR with non-null Polyphen2 scores.
+    try:
+      ascores = A.ix[A['polyphen'].notnull(), 'polyphen'].values
+      bscores = B.ix[B['polyphen'].notnull(), 'polyphen'].values
+      fpr,tpr,roc_auc,prec,rec,pr_auc = calc_auc(ascores, bscores)
+      print "PolyPhen ROC AUC: %.2f"%roc_auc
+      print "PolyPhen PR  AUC: %.2f\n"%pr_auc
+      res = np.c_[fpr,tpr]
+      np.savetxt("%s/%s-%s_%s_polyphen_roc.txt.gz"%(args.outdir,sid,chain,args.label),res,"%.4g",'\t')
+      res = np.c_[prec,rec]
+      np.savetxt("%s/%s-%s_%s_polyphen_pr.txt.gz"%(args.outdir,sid,chain,args.label),res,"%.4g",'\t')
+    except Exception as e:
+      print "\nError in %s -- Polyphen"%sid
+
+    # Only compute ROC/PR with non-null SIFT scores. 
+    try: 
+      ascores = -A.ix[A['sift'].notnull(), 'sift'].values
+      bscores = -B.ix[B['sift'].notnull(), 'sift'].values
+      fpr,tpr,roc_auc,prec,rec,pr_auc = calc_auc(ascores, bscores)
+      print "SIFT ROC AUC: %.2f"%roc_auc
+      print "SIFT PR AUC: %.2f\n"%pr_auc
+      res = np.c_[fpr,tpr]
+      np.savetxt("%s/%s-%s_%s_sift_roc.txt.gz"%(args.outdir,sid,chain,args.label),res,"%.4g",'\t')
+      res = np.c_[prec,rec]
+      np.savetxt("%s/%s-%s_%s_sift_pr.txt.gz"%(args.outdir,sid,chain,args.label),res,"%.4g",'\t')
+    except Exception as e:
+      print "\nError in %s -- SIFT"%sid
+
+    # Only compute ROC/PR with non-null TonyCons scores.
+    try:
+      ascores = A.ix[A['score'].notnull(), 'score'].values
+      bscores = B.ix[B['score'].notnull(), 'score'].values
+      fpr,tpr,roc_auc,prec,rec,pr_auc = calc_auc(ascores, bscores)
+      print "Conservation ROC AUC: %.2f"%roc_auc
+      print "Conservation PR AUC: %.2f\n"%pr_auc
+      res = np.c_[fpr,tpr]
+      np.savetxt("%s/%s-%s_%s_cons_roc.txt.gz"%(args.outdir,sid,chain,args.label),res,"%.4g",'\t')
+      res = np.c_[prec,rec]
+      np.savetxt("%s/%s-%s_%s_cons_pr.txt.gz"%(args.outdir,sid,chain,args.label),res,"%.4g",'\t')
+    except Exception as e:
+      print "\nError in %s -- Conservation"%sid
+
   except Exception as e:
-    raise       # raise exception
-    print "Error in %s"%sid
-    print str(e)
+    print "\nError in %s.%s"%(sid,chain)
+    print "File A: %s"%structs1[s]
+    print "File B: %s"%structs2[s]
+    print "\nError:\n%s"%str(e)
     print e
-    continue   # continue to next structure
+    print "\n"
+    raise
+    # continue   # continue to next structure
   finally:
     A = np.array([])
     B = np.array([])
