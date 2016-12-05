@@ -302,7 +302,7 @@ def sequence_var_query():
     sys.stderr.write(msg)
   return s,w
 
-def query_1kg(io,sid,refid=None):
+def query_1kg(io,sid,refid=None,chains=None):
   """ Query natural variants (1000G) from PDBMap """
   if not refid:
     s,w = default_var_query()
@@ -314,9 +314,12 @@ def query_1kg(io,sid,refid=None):
     c   = ["pos","ref","alt"]
   q   = s+w
   res = [list(r) for r in io.secure_query(q,f,cursorclass="Cursor")]
+  # Add chains IDs if user-specified model
+  if refid:
+    res = [r+[c] for r in res for c in chains]
   return res
 
-def query_exac(io,sid,refid=None):
+def query_exac(io,sid,refid=None,chains=None):
   """ Query natural variants (ExAC) from PDBMap """
   if not refid:
     s,w = default_var_query()
@@ -328,9 +331,12 @@ def query_exac(io,sid,refid=None):
     c   = ["pos","ref","alt"]
   q   = s+w
   res = [list(r) for r in io.secure_query(q,f,cursorclass="Cursor")]
+  # Add chains IDs if user-specified model
+  if refid:
+    res = [r+[c] for r in res for c in chains]
   return res
 
-def query_benign(io,sid,refid=None):
+def query_benign(io,sid,refid=None,chains=None):
   """ Query benign variants (ClinVar) from PDBMap """
   if not refid:
     s,w = default_var_query()
@@ -345,9 +351,12 @@ def query_benign(io,sid,refid=None):
   b   = "AND d.clnsig in (2,3)"
   q   = s+w+b
   res = [list(r) for r in io.secure_query(q,f,cursorclass="Cursor")]
+  # Add chains IDs if user-specified model
+  if refid:
+    res = [r+[c] for r in res for c in chains]
   return res
 
-def query_pathogenic(io,sid,refid=None):
+def query_pathogenic(io,sid,refid=None,chains=None):
   """ Query pathogenic variants (ClinVar) from PDBMap """
   if not refid:
     s,w = default_var_query()
@@ -362,9 +371,12 @@ def query_pathogenic(io,sid,refid=None):
   p   = "AND d.clnsig in (4,5)"
   q   = s+w+p
   res = [list(r) for r in io.secure_query(q,f,cursorclass="Cursor")]
+  # Add chains IDs if user-specified model
+  if refid:
+    res = [r+[c] for r in res for c in chains]
   return res
 
-def query_drug(io,sid,refid=None):
+def query_drug(io,sid,refid=None,chains=None):
   """ Query drug response-affecting variants from PDBMap """
   if not refid:
     s,w = default_var_query()
@@ -379,9 +391,12 @@ def query_drug(io,sid,refid=None):
   d   = "AND d.clnsig=7"
   q   = s+w+d
   res = [list(r) for r in io.secure_query(q,f,cursorclass="Cursor")]
+  # Add chains IDs if user-specified model
+  if refid:
+    res = [r+[c] for r in res for c in chains]
   return res
 
-def query_somatic(io,sid,refid=None):
+def query_somatic(io,sid,refid=None,chains=None):
   """ Query somatic variants (Cosmic) from PDBMap """
   if not refid:
     s,w = default_var_query()
@@ -396,6 +411,9 @@ def query_somatic(io,sid,refid=None):
   m  += "AND d.cnt>1 "
   q   = s+m+w
   res = [list(r) for r in io.secure_query(q,f,cursorclass="Cursor")]
+  # Add chains IDs if user-specified model
+  if refid:
+    res = [r+[c] for r in res for c in chains]
   return res
 
 def get_coord_files(entity,io):
@@ -419,7 +437,7 @@ def get_coord_files(entity,io):
     else:
       None
 
-def read_coord_file(cf,sid,bio,fasta=None,residues=None):
+def read_coord_file(cf,sid,bio,chain,fasta=None,residues=None):
   """ Reads the coordinate file into a PDBMapStructure object """
   # If no fasta provided, query Uniprot AC and alignment
   if fasta:
@@ -430,6 +448,7 @@ def read_coord_file(cf,sid,bio,fasta=None,residues=None):
       msg = "FASTA files must be provided for user-defined protein models\n"
       sys.stderr.write(msg); return
     unp,aln = query_alignment(sid,bio)
+    refseq = refid = None
 
   print "\nReading coordinates from %s..."%cf
   with gzip.open(cf,'rb') if cf.split('.')[-1]=="gz" else open(cf,'rb') as fin:
@@ -454,12 +473,22 @@ def read_coord_file(cf,sid,bio,fasta=None,residues=None):
   # Dirty hack: Reset pdb2pose
   s._pdb2pose = dict((key,key) for key,val in s._pdb2pose.iteritems())
 
-  # Drop chains that do not match the reference sequence
-  for m in s:
-    for c in m:
-      if c.alignment.perc_identity<0.9:
-        print "Chain %s does not match reference sequence. Ignoring."%c.id
-        c.get_parent().detach_child(c.id)
+  # If user-provided structure, QA the chain alignment
+  if bio < 0:
+    # Drop chains that do not match the reference sequence
+    for m in s:
+      for c in m:
+        if c.alignment.perc_identity<0.9:
+          print "Chain %s does not match reference sequence. Ignoring."%c.id
+          c.get_parent().detach_child(c.id)
+  # Reduce to the specified chain if given
+  if chain:
+    # Drop chains that do not match the specified chain
+    for m in s:
+      for c in m:
+        if c.id != chain:
+          print "Ignoring chain %s (user-specified chain)."%c.id
+          c.get_parent().detach_child(c.id)
   # Reduce to specified residue range if given
   if residues:
     for c in s.get_chains():
@@ -467,7 +496,7 @@ def read_coord_file(cf,sid,bio,fasta=None,residues=None):
         if (args.use_residues[0] and r.id[1] < args.use_residues[0]) or \
             (args.use_residues[1] and r.id[1] > args.use_residues[1]):
           c.detach_child(r.id)
-  return s,refid
+  return s,refid,[c.id for c in s.get_chains()]
 
 def chain_match(io,unp,sid,bio):
   """ Identifies which chains are associated with a UniProt AC """
@@ -613,17 +642,17 @@ def load_io(args):
 
 def var2coord(s,p,n,c):
   # Construct a dataframe containing all variant sets
-  vdf = pd.DataFrame(columns=["pos","ref","alt","dcode"])
+  vdf = pd.DataFrame(columns=["pos","ref","alt","chain","dcode"])
   if p:
-    pdf = pd.DataFrame(p,columns=["pos","ref","alt"])
+    pdf = pd.DataFrame(p,columns=["pos","ref","alt","chain"])
     pdf["dcode"] = 1
     vdf = vdf.append(pdf)
   if n:
-    ndf = pd.DataFrame(n,columns=["pos","ref","alt"])
+    ndf = pd.DataFrame(n,columns=["pos","ref","alt","chain"])
     ndf["dcode"] = 0
     vdf = vdf.append(ndf)
   if c:
-    cdf = pd.DataFrame(c,columns=["pos","ref","alt"])
+    cdf = pd.DataFrame(c,columns=["pos","ref","alt","chain"])
     cdf["dcode"] = -1
     vdf = vdf.append(cdf)
   vdf = vdf.drop_duplicates().reset_index(drop=True)
@@ -631,7 +660,7 @@ def var2coord(s,p,n,c):
   # Defer to pathogenic annotation if conflicted. DO NOT OVERWRITE CANDIDATES!
   def pathdefer(g):
     return g if all(g["dcode"]==0) else g[(g["dcode"]==1) | (g["dcode"]<0)]
-  vdf = vdf.groupby(["pos","ref","alt"]).apply(pathdefer)
+  vdf = vdf.groupby(["pos","ref","alt","chain"]).apply(pathdefer)
   
   # Construct a dataframe from the coordinate file
   sdf = pd.DataFrame([[r.get_parent().id,r.id[1]] for r in s.get_residues()],columns=["chain","seqid"])
@@ -648,7 +677,7 @@ def var2coord(s,p,n,c):
   sdf = sdf.merge(coord_df,left_index=True,right_index=True)
 
   # Annotate all residues with variant labels
-  sdf = sdf.merge(vdf[["pos","ref","alt","dcode"]],how="left",on="pos")
+  sdf = sdf.merge(vdf[["pos","ref","alt","chain","dcode"]],how="left",on=["chain","pos"])
   # Ensure that no duplicate residues were introduced by the merge
   sdf.drop_duplicates(["chain","pos","ref","alt","dcode"]).reset_index(drop=True)
 
@@ -792,7 +821,7 @@ def saveKplot(T,K,Kz,lce,hce,label="",w=False):
   global sid
   fig,ax = plt.subplots(1,1,figsize=(20,7))
   k_plot(T,K,Kz,lce,hce,ax)
-  ax.set_title("Ripley's K-Function (Structure)",fontsize=25)
+  ax.set_title("Ripley's K-Function",fontsize=25)
   ax.legend(loc="lower right",fontsize=18)
   plt.savefig("%s_%s_K_plot.pdf"%(sid,label),dpi=300,bbox_inches='tight')
   plt.savefig("%s_%s_K_plot.png"%(sid,label),dpi=300,bbox_inches='tight')
@@ -802,7 +831,7 @@ def saveDplot(T,D,Dz,lce,hce,label="",w=False):
   global sid
   fig,ax = plt.subplots(1,1,figsize=(20,7))
   k_plot(T,D,Dz,lce,hce,ax)
-  ax.set_title("Ripley's D-Function (Structure)",fontsize=25)
+  ax.set_title("Ripley's D-Function",fontsize=25)
   ax.legend(loc="lower right",fontsize=18)
   plt.savefig("%s_%s_D_plot.pdf"%(sid,label),dpi=300,bbox_inches='tight')
   plt.savefig("%s_%s_D_plot.png"%(sid,label),dpi=300,bbox_inches='tight')
@@ -895,18 +924,18 @@ def ripley(sdf,permutations=9999):
   D,Dt,Dp    = biD(A,B,permutations,"pathogenic-neutral")
 
   print "\nUnivariate K:"
-  print "Pathogenic:"
+  print " Pathogenic K:"
   print "  Most significant distance: %2d"%pKt
   print "  K = %.2f"%pK
   print "  p = %g"%pKp
-  print "Neutral:"
+  print " Neutral K:"
   print "  Most significant distance: %2d"%nKt
   print "  K = %.2f"%nK
   print "  p = %g"%nKp
 
   print "\nBivariate D:"
   print "  Most significant distance: %2d"%Dt
-  print "  K = %.2f"%D
+  print "  D = %.2f"%D
   print "  p = %g"%Dp
   print ""
 
@@ -942,24 +971,27 @@ c = parse_variants(args.variants)
 
 # If requested, load database variant sets
 io = load_io(args) # Database IO object
+
+print "\nAttempting to identify entity: %s..."%args.entity
+
 for sid,bio,cf in get_coord_files(args.entity,io):
 
   # Read the coordinate file, align, etc
-  s,refid = read_coord_file(cf,sid,bio,fasta=args.fasta,residues=args.use_residues)
+  s,refid,chains = read_coord_file(cf,sid,bio,chain=args.chain,fasta=args.fasta,residues=args.use_residues)
 
   # Supplement with any requested variant datasets
   if args.add_1kg:
-    n.extend(query_1kg(io,sid,refid))
+    n.extend(query_1kg(io,sid,refid,chains))
   if args.add_exac:
-    n.extend(query_exac(io,sid,refid))
+    n.extend(query_exac(io,sid,refid,chains))
   if args.add_benign:
-    n.extend(query_benign(io,sid,refid))
+    n.extend(query_benign(io,sid,refid,chains))
   if args.add_pathogenic:
-    p.extend(query_pathogenic(io,sid,refid))
+    p.extend(query_pathogenic(io,sid,refid,chains))
   if args.add_drug:
-    p.extend(query_drug(io,sid,refid))
+    p.extend(query_drug(io,sid,refid,chains))
   if args.add_somatic:
-    p.extend(query_somatic(io,sid,refid))
+    p.extend(query_somatic(io,sid,refid,chains))
 
   # Annotate coordinate file with pathogenic, neutral, and candidate labels
   sdf = var2coord(s,p,n,c)
