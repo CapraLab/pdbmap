@@ -428,7 +428,7 @@ def get_coord_files(entity,io):
     if   etype == "structure":
       return structure_lookup(io,entity)
     elif etype == "model":
-      return model_lookup(entity)
+      return model_lookup(io,entity)
     elif etype == "unp":
       return uniprot_lookup(io,entity)
     elif etype: # HGNC returned a UniProt ID
@@ -460,7 +460,7 @@ def read_coord_file(cf,sid,bio,chain,fasta=None,residues=None):
   s = p.process_structure(s,force=True)
   # Preprocess structural properties
   for m in s:
-    for c in m:
+    for c in list(m.get_chains()):
       if c.id in ('',' '):
         del c.get_parent().child_dict[c.id]
         c.id = 'A'
@@ -477,7 +477,7 @@ def read_coord_file(cf,sid,bio,chain,fasta=None,residues=None):
   if bio < 0:
     # Drop chains that do not match the reference sequence
     for m in s:
-      for c in m:
+      for c in list(m.get_chains()):
         if c.alignment.perc_identity<0.9:
           print "Chain %s does not match reference sequence. Ignoring."%c.id
           c.get_parent().detach_child(c.id)
@@ -485,14 +485,14 @@ def read_coord_file(cf,sid,bio,chain,fasta=None,residues=None):
   if chain:
     # Drop chains that do not match the specified chain
     for m in s:
-      for c in m:
+      for c in list(m.get_chains()):
         if c.id != chain:
           print "Ignoring chain %s (user-specified chain)."%c.id
           c.get_parent().detach_child(c.id)
   # Reduce to specified residue range if given
   if residues:
-    for c in s.get_chains():
-      for r in c:
+    for c in list(s.get_chains()):
+      for r in list(c.get_residues()):
         if (args.use_residues[0] and r.id[1] < args.use_residues[0]) or \
             (args.use_residues[1] and r.id[1] > args.use_residues[1]):
           c.detach_child(r.id)
@@ -514,9 +514,14 @@ def parse_variants(varset):
     return []
   if os.path.isfile(varset):
     variants = [l.strip() for l in open(varset,'rb')]
+    chains   = [v.split('.')[-1] if len(v.split('.'))>1 else None for v in variants]
+    variants = [v.split('.')[ 0] for v in variants]
     variants   = [[int(v[1:-1]),v[0],v[-1]] for v in variants]
   else:
-    variants = [[int(v[1:-1]),v[0],v[-1]] for v in varset.split(',')]
+    chains   = [v.split('.')[-1] if len(v.split('.'))>1 else None for v in varset.split(',')]
+    variants = [v.split('.')[ 0] for v in varset.split(',')]
+    variants = [[int(v[1:-1]),v[0],v[-1]] for v in variants]
+  variants = [v+[chains[i]] if chains[i] else v for i,v in enumerate(variants)]
   return variants
 
 def resicom(resi):
@@ -681,6 +686,16 @@ def var2coord(s,p,n,c):
   # Ensure that no duplicate residues were introduced by the merge
   sdf.drop_duplicates(["chain","pos","ref","alt","dcode"]).reset_index(drop=True)
 
+  # Check that both variant categories are populated
+  if (sdf["dcode"]==0).sum() < 1:
+    msg = "\nStructure contains no neutral variants. Skipping...\n"
+    sys.stderr.write(msg)
+    return None
+  if (sdf["dcode"]==1).sum() < 1:
+    msg = "\nStructure contains no pathogenic variants. Skipping...\n"
+    sys.stderr.write(msg)
+    return None
+
   # Conversion from short-code to explicit description
   code2class = {-1 : "Candidate",
                  0 : "Neutral",
@@ -742,6 +757,7 @@ def Kest(D,y,T=[],P=9999):
     K  =  np.array([np.ma.masked_where(dt,Y).sum() for dt in Kest.DT])
   else:
     K = np.array([(Do<=t).sum() for t in T],dtype=np.float64) / (N*(N-1))
+
   if P:
     if weighted:
       # If weighted, shuffle values for observed points
@@ -843,6 +859,8 @@ def uniK(D,y,P=9999,label=""):
 
   # Univariate K analyses
   K,Kp,Kz,Kzp,hce,lce,_ = Kest(D,y,T,P=P)
+
+  # Save the multi-distance K plot  
   saveKplot(T,K,Kz,lce,hce,label)
 
   # Determine the optimal K/T/p
@@ -911,6 +929,7 @@ def ripley(sdf,permutations=9999):
       labels and the inter-residue distance matrix """
   # Distance matrix for all residues
   D = squareform(pdist(sdf[['x','y','z']]))
+  D[np.identity(D.shape[0],dtype=bool)] = np.nan
   # Label vectors for pathogenic and neutral variants
   p = (sdf["dcode"]==1).astype(int)
   n = (sdf["dcode"]==0).astype(int)
@@ -924,14 +943,14 @@ def ripley(sdf,permutations=9999):
   D,Dt,Dp    = biD(A,B,permutations,"pathogenic-neutral")
 
   print "\nUnivariate K:"
-  print " Pathogenic K:"
-  print "  Most significant distance: %2d"%pKt
-  print "  K = %.2f"%pK
-  print "  p = %g"%pKp
   print " Neutral K:"
   print "  Most significant distance: %2d"%nKt
   print "  K = %.2f"%nK
   print "  p = %g"%nKp
+  print " Pathogenic K:"
+  print "  Most significant distance: %2d"%pKt
+  print "  K = %.2f"%pK
+  print "  p = %g"%pKp
 
   print "\nBivariate D:"
   print "  Most significant distance: %2d"%Dt
@@ -979,6 +998,12 @@ for sid,bio,cf in get_coord_files(args.entity,io):
   # Read the coordinate file, align, etc
   s,refid,chains = read_coord_file(cf,sid,bio,chain=args.chain,fasta=args.fasta,residues=args.use_residues)
 
+  # If user-supplied variants did not include chain specifiers, add the
+  # user-specified or inferred chain IDs to each variant as necessary.
+  p = [v if len(v)==5 else v+[ch] for v in p for ch in chains]
+  n = [v if len(v)==5 else v+[ch] for v in n for ch in chains]
+  c = [v if len(v)==5 else v+[ch] for v in c for ch in chains]
+
   # Supplement with any requested variant datasets
   if args.add_1kg:
     n.extend(query_1kg(io,sid,refid,chains))
@@ -995,6 +1020,8 @@ for sid,bio,cf in get_coord_files(args.entity,io):
 
   # Annotate coordinate file with pathogenic, neutral, and candidate labels
   sdf = var2coord(s,p,n,c)
+  if sdf is None:
+    continue
 
   # Create (and move to) output directory
   prep_outdir(args.outdir)
