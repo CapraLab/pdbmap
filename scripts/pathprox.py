@@ -1000,9 +1000,9 @@ for sid,bio,cf in get_coord_files(args.entity,io):
 
   # If user-supplied variants did not include chain specifiers, add the
   # user-specified or inferred chain IDs to each variant as necessary.
-  p = [v if len(v)==5 else v+[ch] for v in p for ch in chains]
-  n = [v if len(v)==5 else v+[ch] for v in n for ch in chains]
-  c = [v if len(v)==5 else v+[ch] for v in c for ch in chains]
+  p = [v if len(v)==4 else v+[ch] for v in p for ch in chains]
+  n = [v if len(v)==4 else v+[ch] for v in n for ch in chains]
+  c = [v if len(v)==4 else v+[ch] for v in c for ch in chains]
 
   # Supplement with any requested variant datasets
   if args.add_1kg:
