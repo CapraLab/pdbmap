@@ -148,7 +148,9 @@ parser.add_argument("--verbose",action="store_true",default=False,
 args = parser.parse_args()
 if not args.label:
   # Generate label from input parameters
-  args.label = args.entity.split('.')[0] # strip extensions from filenames
+  # Strip file extensions
+  idx = -2 if args.entity[-2:]=='gz' else -1
+  args.label = '_'.join(args.entity.split('.')[:idx])
   # Add the radius type and bounds if NeighborWeight
   if args.radius == "NW":
     args.label += "_NW%.1f-%.1f"%(args.nwlb,args.nwub)
@@ -1062,11 +1064,14 @@ for sid,bio,cf in get_coord_files(args.entity,io):
 
   # Write pathogenic, neutral, and candidate Chimera attribute file
   v = sdf[sdf["dcode"].notnull()].sort_values(by=["chain","pos"])
+  # Label as 0.5 if both neutral and pathogenic variants mapped to this residue
+  vt          = v.drop_duplicates(["chain","pos"])
+  vt["dcode"] = v.groupby(["chain","pos"]).apply(lambda x: np.mean(x["dcode"])).values
   with open("%s_variants.attr"%args.label,'wb') as fout:
-    fout.write("attribute: dcode\n")
+    fout.write("attribute: pathogenic\n")
     fout.write("match mode: 1-to-1\n")
     fout.write("recipient: residues\n")
-    for i,r in v.iterrows():
+    for i,r in vt.iterrows():
       fout.write("\t:%d.%s\t%.3f\n"%(r["pos"],r["chain"],r["dcode"]))
 
   # If requested, run the univariate K and bivariate D analyses
