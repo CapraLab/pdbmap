@@ -91,7 +91,7 @@ parser.set_defaults(**defaults)
 parser.add_argument("entity",type=str,
                     help="Gene ID, UniProt AC, PDB ID, or PDB filename")
 parser.add_argument("--fasta",type=str,
-                    help="Fasta file for the reference sequence")
+                    help="UniProt fasta file for the reference sequence")
 parser.add_argument("variants",type=str,nargs='?',
                     help="Comma-separated list of protein HGVS or \
                           a filename containing one identifier per line")
@@ -202,7 +202,14 @@ if args.fasta and not args.isoform:
 def get_refseq(fasta):
   """ Aligns the observed sequence with a user-provided reference """
   with open(fasta,'rb') as fin:
-    unp,refid = fin.readline().split('|')[1:3]
+    try:
+      unp,refid = fin.readline().split('|')[1:3]
+    except:
+      msg = "\nERROR: Malformed fasta header. Please provide unaltered UniProt fasta files.\n"
+      sys.stderr.write(msg); sys.exit(1)
+    if len(unp)!=6 or not unp[0].isalpha() or not unp[1:].isdigit():
+      msg = "\nERROR: Malformed fasta header. Please provide unaltered UniProt fasta files.\n"
+      sys.stderr.write(msg); sys.exit(1)
     refid     = refid.split()[0]
     return unp,refid,''.join([l.strip() for l in fin.readlines() if l[0]!=">"])
 
@@ -424,6 +431,7 @@ def get_coord_files(entity,io):
     sid  = '.'.join(os.path.basename(entity).split('.')[:-exts]) 
     return [(sid,-1,entity)]
   else:
+    print "\nAttempting to identify entity: %s..."%entity
     etype = io.detect_entity_type(entity)
     if   etype == "structure":
       return structure_lookup(io,entity)
@@ -662,6 +670,14 @@ def var2coord(s,p,n,c):
     vdf = vdf.append(cdf)
   vdf = vdf.drop_duplicates().reset_index(drop=True)
 
+  msg = None
+  if vdf.empty and not (args.add_exac or args.add_1kg or args.add_pathogenic or args.add_somatic):
+    msg = "\nERROR: Must provide variants or request preloaded set with --add_<dataset>.\n"
+  elif vdf.empty:
+    msg = "\nERROR: No variants identified. Please manually provide pathogenic and neutral variant sets.\n"
+  if msg:
+    sys.stderr.write(msg); sys.exit(1)
+
   # Defer to pathogenic annotation if conflicted. DO NOT OVERWRITE CANDIDATES!
   def pathdefer(g):
     return g if all(g["dcode"]==0) else g[(g["dcode"]==1) | (g["dcode"]<0)]
@@ -682,19 +698,37 @@ def var2coord(s,p,n,c):
   sdf = sdf.merge(coord_df,left_index=True,right_index=True)
 
   # Annotate all residues with variant labels
-  sdf = sdf.merge(vdf[["pos","ref","alt","chain","dcode"]],how="left",on=["chain","pos"])
-  # Ensure that no duplicate residues were introduced by the merge
-  sdf.drop_duplicates(["chain","pos","ref","alt","dcode"]).reset_index(drop=True)
+  if not vdf.empty: # skip to error-handling if no variants specified
+    sdf = sdf.merge(vdf[["pos","ref","alt","chain","dcode"]],how="left",on=["chain","pos"])
+    # Ensure that no duplicate residues were introduced by the merge
+    sdf.drop_duplicates(["chain","pos","ref","alt","dcode"]).reset_index(drop=True)
 
   # Check that both variant categories are populated
+  msg = None
   if (sdf["dcode"]==0).sum() < 1:
-    msg = "\nStructure contains no neutral variants. Skipping...\n"
-    sys.stderr.write(msg)
-    return None
+    msg = "\nERROR: Structure contains no neutral variants.\n"
+    if not args.add_exac and not args.add_1kg:
+      msg += "Consider using --add_exac or --add_1kg.\n"
+    elif not args.add_exac:
+      msg += "Consider using --add_1kg for 1000 Genomes missense variants.\n"
+    elif not args.add_1kg:
+      msg += "Consider using --add_exac for ExAC missense variants.\n"
+    else:
+      msg += "Please manually specify neutral variants.\n"
+  if msg:
+    sys.stderr.write(msg); sys.exit(1)
   if (sdf["dcode"]==1).sum() < 1:
-    msg = "\nStructure contains no pathogenic variants. Skipping...\n"
-    sys.stderr.write(msg)
-    return None
+    msg = "\nERROR: Structure contains no pathogenic variants.\n"
+    if not args.add_pathogenic and not args.add_somatic:
+      msg += "Consider using --add_pathogenic or --add_somatic.\n"
+    elif not args.add_pathogenic:
+      msg += "Consider using --add_somatic for COSMIC recurrent missense variants.\n"
+    elif not args.add_somatic:
+      msg += "Consider using --add_pathogenic for ClinVar pathogenic missense variants.\n"
+    else:
+      msg += "Please manually specify pathogenic variants.\n"
+    if msg:
+      sys.stderr.write(msg); sys.exit(1)
 
   # Conversion from short-code to explicit description
   code2class = {-1 : "Candidate",
@@ -991,8 +1025,6 @@ c = parse_variants(args.variants)
 # If requested, load database variant sets
 io = load_io(args) # Database IO object
 
-print "\nAttempting to identify entity: %s..."%args.entity
-
 for sid,bio,cf in get_coord_files(args.entity,io):
 
   # Read the coordinate file, align, etc
@@ -1020,8 +1052,6 @@ for sid,bio,cf in get_coord_files(args.entity,io):
 
   # Annotate coordinate file with pathogenic, neutral, and candidate labels
   sdf = var2coord(s,p,n,c)
-  if sdf is None:
-    continue
 
   # Create (and move to) output directory
   prep_outdir(args.outdir)
