@@ -14,7 +14,7 @@
 #=============================================================================#
 ## Package Dependenecies ##
 # Standard
-import os,shutil,sys,gzip,csv,argparse,ConfigParser
+import os,shutil,sys,gzip,csv,argparse,ConfigParser,platform
 import subprocess as sp
 from time import strftime
 from itertools import combinations
@@ -149,17 +149,33 @@ args = parser.parse_args()
 if not args.label:
   # Generate label from input parameters
   # Strip file extensions
-  idx = -2 if args.entity[-2:]=='gz' else -1
-  args.label = '_'.join(args.entity.split('.')[:idx])
-  # Add the radius type and bounds if NeighborWeight
-  if args.radius == "NW":
-    args.label += "_NW%.1f-%.1f"%(args.nwlb,args.nwub)
-  elif args.radius == "K":
-    args.label += "_K"
-  elif args.radius == "D":
-    args.label += "_D"
+  if os.path.exists(args.entity):
+    idx = -2 if args.entity[-2:]=='gz' else -1
+    args.label = '_'.join(args.entity.split('.')[:idx])
   else:
-    args.label += "_%.1fA"%args.radius
+    args.label = args.entity
+# Append relevant information to the label
+if args.chain:
+  args.label += "_%s"%args.chain
+if args.add_pathogenic:
+  args.label += "_clinvar"
+if args.add_somatic:
+  args.label += "_cosmic"
+if args.add_exac:
+  args.label += "_exac"
+if args.add_1kg:
+  args.label += "_1kg"
+# Add the radius type and bounds if NeighborWeight
+if args.radius == "NW":
+  args.label += "_NW-%.0f-%.0f"%(args.nwlb,args.nwub)
+elif args.radius == "K":
+  args.label += "_K"
+elif args.radius == "D":
+  args.label += "_D"
+else:
+  args.label += "_%.1f"%args.radius
+
+print "\nUsing analysis label: %s"%args.label
 
 if args.use_residues:
   # Limit analysis to user-selected protein residues
@@ -209,7 +225,7 @@ def get_refseq(fasta):
     except:
       msg = "\nERROR: Malformed fasta header. Please provide unaltered UniProt fasta files.\n"
       sys.stderr.write(msg); sys.exit(1)
-    if len(unp)!=6 or not unp[0].isalpha() or not unp[1:].isdigit():
+    if len(unp)!=6 or not unp[0].isalpha():
       msg = "\nERROR: Malformed fasta header. Please provide unaltered UniProt fasta files.\n"
       sys.stderr.write(msg); sys.exit(1)
     refid     = refid.split()[0]
@@ -231,13 +247,14 @@ def query_alignment(sid,bio):
               (r["trans_seqid"],r["rescode"])) for r in res)
   return unp,aln
 
-def structure_lookup(io,sid):
+def structure_lookup(io,sid,bio=True):
   """ Returns coordinate files for a PDB ID """
   q    = "SELECT DISTINCT biounit FROM Chain "
   q   += "WHERE label=%s AND structid=%s AND biounit>0"
-  res  = [r[0] for r in io.secure_query(q,(io.slabel,sid,),
+  res  = [r[0] for r in io.secure_query(q,(io.slabel,sid.upper(),),
                                           cursorclass='Cursor')]
-  if res: # Biological assemblies were found
+  if bio and res: # Biological assemblies were found
+    print "\nUsing the first biological assembly for %s"%sid
     flist = []
     loc   = "%s/biounit/coordinates/all/%s.pdb%d.gz"
     for b in res:
@@ -249,6 +266,8 @@ def structure_lookup(io,sid):
       flist.append((sid,b,f))
     return flist
   else:   # No biological assemblies were found; Using asymmetric unit
+    if bio:
+      print "\nNo biological assembly found. Using the asymmetric unit for %s"%sid
     loc = "%s/structures/all/pdb/pdb%s.ent.gz"
     f   = loc%(args.pdb_dir,sid.lower())
     if not os.path.exists(f):
@@ -357,7 +376,7 @@ def query_benign(io,sid,refid=None,chains=None):
     c   = ["pos","ref","alt"]
   s  += "INNER JOIN pdbmap_supp.clinvar d "
   s  += "ON c.chr=d.chr and c.start=d.start "
-  b   = "AND d.clnsig in (2,3)"
+  b   = "AND pathogenic=0"
   q   = s+w+b
   res = [list(r) for r in io.secure_query(q,f,cursorclass="Cursor")]
   # Add chains IDs if user-specified model
@@ -377,7 +396,7 @@ def query_pathogenic(io,sid,refid=None,chains=None):
     c   = ["pos","ref","alt"]
   s  += "INNER JOIN pdbmap_supp.clinvar d "
   s  += "ON c.chr=d.chr and c.start=d.start "
-  p   = "AND d.clnsig in (4,5)"
+  p   = "AND pathogenic=1"
   q   = s+w+p
   res = [list(r) for r in io.secure_query(q,f,cursorclass="Cursor")]
   # Add chains IDs if user-specified model
@@ -397,7 +416,7 @@ def query_drug(io,sid,refid=None,chains=None):
     c   = ["pos","ref","alt"]
   s  += "INNER JOIN pdbmap_supp.clinvar d "
   s  += "ON c.chr=d.chr and c.start=d.start "
-  d   = "AND d.clnsig=7"
+  d   = "AND d.clnsig like '%7%'"
   q   = s+w+d
   res = [list(r) for r in io.secure_query(q,f,cursorclass="Cursor")]
   # Add chains IDs if user-specified model
@@ -436,7 +455,7 @@ def get_coord_files(entity,io):
     print "\nAttempting to identify entity: %s..."%entity
     etype = io.detect_entity_type(entity)
     if   etype == "structure":
-      return structure_lookup(io,entity)
+      return structure_lookup(io,entity,args.chain is None)
     elif etype == "model":
       return model_lookup(io,entity)
     elif etype == "unp":
@@ -445,7 +464,8 @@ def get_coord_files(entity,io):
       print "HGNC: %s => UniProt: %s..."%(entity,etype)
       return uniprot_lookup(io,etype)
     else:
-      None
+      msg = "\nERROR: Could not identify %s.\n"%entity
+      sys.stderr.write("%s\n"%msg);sys.exit(1)
 
 def read_coord_file(cf,sid,bio,chain,fasta=None,residues=None):
   """ Reads the coordinate file into a PDBMapStructure object """
@@ -548,6 +568,13 @@ def nw(d,lb=8.,ub=24):
     return 0.
   else:
     return 0.5*(np.cos(np.pi*(d-lb)/(ub-lb))+1)
+
+def uniprox(cands,v,nwlb=8.,nwub=24.):
+  """ Predicts a univariate constraint score from weight vector 'v' """
+  NWv = nw(cdist(cands,v),lb=nwlb,ub=nwub)
+  np.fill_diagonal(NWv,0.) # NeighborWeight of self = 0.0. Inplace.
+  cscores = np.sum(NWv,axis=1)/v.size
+  return list(cscores)
 
 def pathprox(cands,path,neut,nwlb=8.,nwub=24.,cv=None):
   """ Predicts pathogenicity of a mutation vector given observed neutral/pathogenic """
@@ -707,8 +734,8 @@ def var2coord(s,p,n,c):
 
   # Check that both variant categories are populated
   msg = None
-  if (sdf["dcode"]==0).sum() < 1:
-    msg = "\nERROR: Structure contains no neutral variants.\n"
+  if (sdf["dcode"]==0).sum() < 3:
+    msg = "\nERROR: Structure contains %d neutral variants (PathProx minimum 3).\n"%(sdf["dcode"]==0).sum()
     if not args.add_exac and not args.add_1kg:
       msg += "Consider using --add_exac or --add_1kg.\n"
     elif not args.add_exac:
@@ -718,9 +745,9 @@ def var2coord(s,p,n,c):
     else:
       msg += "Please manually specify neutral variants.\n"
   if msg:
-    sys.stderr.write(msg); sys.exit(1)
-  if (sdf["dcode"]==1).sum() < 1:
-    msg = "\nERROR: Structure contains no pathogenic variants.\n"
+    sys.stderr.write("%s\n"%msg)
+  if (sdf["dcode"]==1).sum() < 3:
+    msg = "\nERROR: Structure contains %d pathogenic variants (PathProx minimum 3).\n"%(sdf["dcode"]==1).sum()
     if not args.add_pathogenic and not args.add_somatic:
       msg += "Consider using --add_pathogenic or --add_somatic.\n"
     elif not args.add_pathogenic:
@@ -730,7 +757,7 @@ def var2coord(s,p,n,c):
     else:
       msg += "Please manually specify pathogenic variants.\n"
     if msg:
-      sys.stderr.write(msg); sys.exit(1)
+      sys.stderr.write("%s\n"%msg)
 
   # Conversion from short-code to explicit description
   code2class = {-1 : "Candidate",
@@ -848,12 +875,11 @@ def pstats(Pmat):
 def k_plot(T,K,Kz,lce,hce,ax=None,w=False):
   if not ax:
     fig,ax = plt.subplots(1,1,figsize=(20,7))
-  c = "darkred" if w else "mediumblue"
   # 95% Confidence
   ax.fill_between(T,lce,hce,alpha=0.2,
-                      edgecolor=c,facecolor=c,
+                      edgecolor='k',facecolor='k',
                       interpolate=True,antialiased=True)
-  ax.scatter(T,K,s=50,color=c,edgecolor='white',lw=1,label=["Un-Weighted K","Weighted K"][w])
+  ax.scatter(T,K,s=50,color='darkred',edgecolor='white',lw=1,label=["Un-Weighted K","Weighted K"][w])
   ax.set_xlabel("Distance Threshold (t)",fontsize=25)
   ax.set_ylabel("K (Simulation 95% CI)",fontsize=25)
   ax.set_xlim([min(T),max(T)])
@@ -865,8 +891,8 @@ def k_plot(T,K,Kz,lce,hce,ax=None,w=False):
   dK = np.nanmax(np.abs(Kz),axis=0)    # maximum Kz
   t  = np.nanargmax(np.abs(Kz),axis=0) # t where Kz is maximized
   T,K = T[t],K[t]
-  ax.axhline(0,color='k',lw=1,ls="dashed")
-  ax.axvline(T,color=c,lw=2,ls="dashed",label="Optimal T=%.0f"%T)
+  # ax.axhline(0,color='k',lw=1,ls="-")
+  ax.axvline(T,color='k',lw=2,ls="dashed",label="Most Significant K at T=%.0f"%T)
   return ax
 
 def saveKplot(T,K,Kz,lce,hce,label="",w=False):
@@ -1032,6 +1058,11 @@ for sid,bio,cf in get_coord_files(args.entity,io):
   # Read the coordinate file, align, etc
   s,refid,chains = read_coord_file(cf,sid,bio,chain=args.chain,fasta=args.fasta,residues=args.use_residues)
 
+  if args.chain and args.chain not in chains:
+    msg = "\nERROR: Biological assembly %s does not contain chain %s.\n"%(bio,args.chain)
+    sys.stderr.write("%s\n"%msg); continue
+
+
   # If user-supplied variants did not include chain specifiers, add the
   # user-specified or inferred chain IDs to each variant as necessary.
   p = [v if len(v)==4 else v+[ch] for v in p for ch in chains]
@@ -1052,30 +1083,49 @@ for sid,bio,cf in get_coord_files(args.entity,io):
   if args.add_somatic:
     p.extend(query_somatic(io,sid,refid,chains))
 
-  # Annotate coordinate file with pathogenic, neutral, and candidate labels
-  sdf = var2coord(s,p,n,c)
-
   # Create (and move to) output directory
   prep_outdir(args.outdir)
+
+  # Annotate coordinate file with pathogenic, neutral, and candidate labels
+  sdf = var2coord(s,p,n,c)
+  nflag = (sdf["dcode"]==0).sum() > 2
+  pflag = (sdf["dcode"]==1).sum() > 2
 
   # Write the current structure to the output directory
   io.set_structure(s)
   io.save("%s_%s_%s.pdb"%(args.label,sid,bio))
 
-  # Write pathogenic, neutral, and candidate Chimera attribute file
+  ## Write pathogenic, neutral, and candidate Chimera attribute files
   v = sdf[sdf["dcode"].notnull()].sort_values(by=["chain","pos"])
-  # Label as 0.5 if both neutral and pathogenic variants mapped to this residue
+  # Write attribute file with neutral variants
+  with open("%s_neutral.attr"%args.label,'wb') as fout:
+    fout.write("attribute: neutral\n")
+    fout.write("match mode: 1-to-1\n")
+    fout.write("recipient: residues\n")
+    for i,r in v.ix[v["dcode"]==0].iterrows():
+      fout.write("\t:%d.%s\t%.3f\n"%(r["pos"],r["chain"],1.0))
+  # Write attribute file with pathogenic variants
+  with open("%s_pathogenic.attr"%args.label,'wb') as fout:
+    fout.write("attribute: pathogenic\n")
+    fout.write("match mode: 1-to-1\n")
+    fout.write("recipient: residues\n")
+    for i,r in v.ix[v["dcode"]==1].iterrows():
+      fout.write("\t:%d.%s\t%.3f\n"%(r["pos"],r["chain"],1.0))
+  # Label as 0.5 if both neutral and pathogenic variants are mapped to a residue
+  filterwarnings('ignore')
   vt          = v.drop_duplicates(["chain","pos"])
   vt["dcode"] = v.groupby(["chain","pos"]).apply(lambda x: np.mean(x["dcode"])).values
+  resetwarnings()
+  # Write attribute file with all variants
   with open("%s_variants.attr"%args.label,'wb') as fout:
-    fout.write("attribute: pathogenic\n")
+    fout.write("attribute: pathogenicity\n")
     fout.write("match mode: 1-to-1\n")
     fout.write("recipient: residues\n")
     for i,r in vt.iterrows():
       fout.write("\t:%d.%s\t%.3f\n"%(r["pos"],r["chain"],r["dcode"]))
 
   # If requested, run the univariate K and bivariate D analyses
-  if args.ripley:
+  if nflag and pflag and args.ripley:
     print "\nCalculating Ripley's univariate K and bivariate D..."
     pK,pKt,nK,nKt,D,Dt = ripley(sdf,args.permutations)
 
@@ -1088,51 +1138,134 @@ for sid,bio,cf in get_coord_files(args.entity,io):
     nwlb,nwub = args.nwlb,args.nwub
   elif args.radius == "K":
     nwlb = nwub = pKt
-    # Append the K-derived radius
-    args.label += "%.1f"%pKt
   elif args.radius == "D":
     nwlb = nwub = Dt
-    # Append the D-derived radius
-    args.label += "%.1f"%pKt
   else:
     nwlb = nwub = args.radius
 
   # Measure the predictive performance of PathProx
-  print "\nMeasuring PathProx cross-validation performance..."
-  ascores = pathprox(A,A,B,nwlb=nwlb,nwub=nwub,cv="P")
-  bscores = pathprox(B,A,B,nwlb=nwlb,nwub=nwub,cv="N")
-  fpr,tpr,roc_auc,prec,rec,pr_auc = calc_auc(ascores,bscores)
-  print "PathProx ROC AUC: %.2f"%roc_auc
-  print "PathProx PR  AUC: %.2f\n"%pr_auc
-  # Plot the ROC and PR curves
-  plot_roc(fpr,tpr)
-  plot_pr(rec,prec,pr_auc=pr_auc)
-  res = np.c_[fpr,tpr]
-  np.savetxt("%s_%s_pathprox_roc.txt.gz"%(sid,args.label),res,"%.4g",'\t')
-  res = np.c_[prec,rec]
-  np.savetxt("%s_%s_pathprox_pr.txt.gz"%(sid,args.label),res,"%.4g",'\t')
+  if nflag and pflag:
+    print "\nMeasuring PathProx cross-validation performance..."
+    ascores = pathprox(A,A,B,nwlb=nwlb,nwub=nwub,cv="P")
+    bscores = pathprox(B,A,B,nwlb=nwlb,nwub=nwub,cv="N")
+    fpr,tpr,roc_auc,prec,rec,pr_auc = calc_auc(ascores,bscores)
+    print "PathProx ROC AUC: %.2f"%roc_auc
+    print "PathProx PR  AUC: %.2f\n"%pr_auc
+    # Plot the ROC and PR curves
+    plot_roc(fpr,tpr)
+    plot_pr(rec,prec,pr_auc=pr_auc)
+    res = np.c_[fpr,tpr]
+    np.savetxt("%s_%s_pathprox_roc.txt.gz"%(sid,args.label),res,"%.4g",'\t')
+    res = np.c_[prec,rec]
+    np.savetxt("%s_%s_pathprox_pr.txt.gz"%(sid,args.label),res,"%.4g",'\t')
 
   # Calculate PathProx scores for all residues
-  sdf["pathprox"] = pathprox(sdf[['x','y','z']],A,B,nwlb=nwlb,nwub=nwub)
+  if nflag and pflag:
+    print "\nCalculating PathProx scores (and z-scores)..."
+    sdf["pathprox"] = pathprox(sdf[['x','y','z']],A,B,nwlb=nwlb,nwub=nwub)
+  # Calculate neutral constraint scores for all residues
+  if nflag:
+    print "\nCalculating neutral constraint scores (and z-scores)..."
+    if args.radius in ("K","D"):
+      nwlb,nwub = nKt,nKt
+    sdf["neutcon"] = uniprox(sdf[['x','y','z']],B,nwlb=nwlb,nwub=nwub)
+    nneut = (sdf["dcode"]==0).sum()
+    pneutcon = [uniprox(sdf[['x','y','z']],
+                        sdf.ix[np.random.choice(sdf.index,nneut),['x','y','z']],
+                        nwlb=nwlb,nwub=nwub) for i in range(999)] # reduced permutations
+    pneutcon = np.concatenate(([sdf['neutcon']],pneutcon))
+    sdf["neutcon_z"] = zscore(pneutcon)[0]
+  # Calculate pathogenic constraint scores for all residues
+  if pflag:
+    print "\nCalculating pathogenic constraint scores (and z-scores)..."
+    if args.radius in ("K","D"):
+      nwlb,nwub = pKt,pKt
+    sdf["pathcon"] = uniprox(sdf[['x','y','z']],A,nwlb=nwlb,nwub=nwub)
+    npath = (sdf["dcode"]==1).sum()
+    ppathcon = [uniprox(sdf[['x','y','z']],
+                        sdf.ix[np.random.choice(sdf.index,npath),['x','y','z']],
+                        nwlb=nwlb,nwub=nwub) for i in range(999)] # reduced permutations
+    ppathcon = np.concatenate(([sdf['pathcon']],ppathcon))
+    sdf["pathcon_z"] = zscore(ppathcon)[0]
 
   # Write scores to tab-delimited file
-  c = sdf.sort_values(by="pathprox").drop_duplicates(["chain","pos"])
-  c = sdf.sort_values(by=["chain","pos"])
-  c.to_csv("%s_pathprox.txt"%args.label,sep='\t',header=True,index=False)
+  # Neutral constraint
+  if nflag:
+    c = sdf.sort_values(by="neutcon").drop_duplicates(["chain","pos"])
+    c = sdf.sort_values(by=["chain","pos"])
+    c.to_csv("%s_neutcon.txt"%args.label,sep='\t',header=True,index=False)
+  # Pathogenic constraint
+  if pflag:
+    c = sdf.sort_values(by="pathcon").drop_duplicates(["chain","pos"])
+    c = sdf.sort_values(by=["chain","pos"])
+    c.to_csv("%s_pathcon.txt"%args.label,sep='\t',header=True,index=False)
+  # PathProx
+  if nflag and pflag:
+    c = sdf.sort_values(by="pathprox").drop_duplicates(["chain","pos"])
+    c = sdf.sort_values(by=["chain","pos"])
+    c.to_csv("%s_pathprox.txt"%args.label,sep='\t',header=True,index=False)
 
   # Write scores to Chimera attribute file
-  with open("%s_pathprox.attr"%args.label,'wb') as fout:
-    fout.write("attribute: pathprox\n")
-    fout.write("match mode: 1-to-1\n")
-    fout.write("recipient: residues\n")
-    for i,r in c.iterrows():
-      fout.write("\t:%d.%s\t%.3f\n"%(r["pos"],r["chain"],r["pathprox"]))
+  # Neutral constraint
+  if nflag:
+    with open("%s_neutcon.attr"%args.label,'wb') as fout:
+      fout.write("attribute: neutcon\n")
+      fout.write("match mode: 1-to-1\n")
+      fout.write("recipient: residues\n")
+      for i,r in c.iterrows():
+        fout.write("\t:%d.%s\t%.3f\n"%(r["pos"],r["chain"],r["neutcon_z"]))
+  # Pathogenic constraint
+  if pflag:
+    with open("%s_pathcon.attr"%args.label,'wb') as fout:
+      fout.write("attribute: pathcon\n")
+      fout.write("match mode: 1-to-1\n")
+      fout.write("recipient: residues\n")
+      for i,r in c.iterrows():
+        fout.write("\t:%d.%s\t%.3f\n"%(r["pos"],r["chain"],r["pathcon_z"]))
+  # PathProx
+  if nflag and pflag:
+    with open("%s_pathprox.attr"%args.label,'wb') as fout:
+      fout.write("attribute: pathprox\n")
+      fout.write("match mode: 1-to-1\n")
+      fout.write("recipient: residues\n")
+      for i,r in c.iterrows():
+        fout.write("\t:%d.%s\t%.3f\n"%(r["pos"],r["chain"],r["pathprox"]))
 
-  # Report PathProx scores for candidate variants
+  # Report scores for candidate variants
   if args.variants:
-    print "PathProx Scores for Candidate Missense Variants:"
+    print "\nNeutral constraint scores for candidate missense variants:"
+    print sdf.ix[sdf["dcode"]<0,["pos","ref","alt","neutcon"]].sort_values( \
+          by=["neutcon","pos"],ascending=[False,True]).drop_duplicates(["pos"]).to_string(index=False)
+    print "\nPathogenic constraint scores for candidate missense variants:"
+    print sdf.ix[sdf["dcode"]<0,["pos","ref","alt","pathcon"]].sort_values( \
+          by=["pathcon","pos"],ascending=[False,True]).drop_duplicates(["pos"]).to_string(index=False)
+    print "\nPathProx scores for candidate missense variants:"
     print sdf.ix[sdf["dcode"]<0,["pos","ref","alt","pathprox"]].sort_values( \
           by=["pathprox","pos"],ascending=[False,True]).drop_duplicates(["pos"]).to_string(index=False)
+
+  # Generating structural images
+  print "\nVisualizing with Chimera (this may take a while)..."
+  pdbf   = "%s_%s_%s.pdb"%(args.label,sid,bio)
+  nvattrf = "%s_neutral.attr"%args.label    # neutral variants
+  pvattrf = "%s_pathogenic.attr"%args.label # pathogenic variants
+  avattrf = "%s_variants.attr"%args.label   # all variants
+  ncattrf = "%s_neutcon.attr"%args.label    # neutral constraint
+  pcattrf = "%s_pathcon.attr"%args.label    # pathogenic constraint
+  ppattrf = "%s_pathprox.attr"%args.label   # path prox
+  out    = args.label
+  params = [pdbf,nvattrf,pvattrf,avattrf,ncattrf,pcattrf,ppattrf,out]
+  # Run the Chimera visualization script
+  script = '"../../scripts/pathvis.py %s"'%' '.join(params)
+  cmd    = "TEMP=$PYTHONPATH; unset PYTHONPATH; chimera --nogui --silent --script %s; export PYTHONPATH=$TEMP"%script
+  # Allow Mac OSX to use the GUI window
+  if platform.system() == 'Darwin':
+    cmd  = "TEMP=$PYTHONPATH; unset PYTHONPATH; chimera --silent --script %s; export PYTHONPATH=$TEMP"%script
+  try:
+    status = os.system(cmd)
+    if status:
+      raise Exception("Chimera process returned non-zero exit status.")
+  except Exception as e:
+    raise
 
   print "\nAnalysis complete."
 
