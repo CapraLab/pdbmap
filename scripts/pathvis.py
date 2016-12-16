@@ -20,18 +20,19 @@ if __name__ == '__main__':
   rc("setattr m autochain 0")
   rc("setattr m ballScale .7")
   rc("color grey,r")
-  rc("transparency 70,r")
-  # Emphasize pathogenic if available, else neutral variants
-  if os.path.exists(params['pathogenic']):
-    rc("defattr %(pathogenic)s raiseTool false"%params)
-    rc("define plane name p1 :/pathogenic")
-  else:
+  # Align to neutral variants so that ClinVar and COSMIC match
+  # If neutral variants unavailable, use the default orientation
+  if os.path.exists(params['neutral']):
     rc("defattr %(neutral)s raiseTool false"%params)
     rc("define plane name p1 :/neutral")
   rc("align p1")
   rc("~define")
   rc("center")
-  # rc("scale 1.2")
+  # rc("window")
+  # Display structure only
+  rc("copy file %(out)s_structure.png width 3 height 3 units inches dpi 300"%params)
+  # Reduce ribbon transparency for variant plots
+  rc("transparency 70,r")
   # Display neutral only
   if os.path.exists(params['neutral']):
     rc("defattr %(neutral)s raiseTool false"%params)
@@ -57,7 +58,7 @@ if __name__ == '__main__':
   # Display neutral constraint
   if os.path.exists(params['neutcon']):
     rc("defattr %(neutcon)s raiseTool false"%params)
-    rc("rangecolor neutcon,r max blue min white")
+    rc("rangecolor neutcon,r min red max white")
     rc("copy file %(out)s_neutcon.png width 3 height 3 units inches dpi 300"%params)
   # Display pathogenic constraint
   if os.path.exists(params['pathcon']):

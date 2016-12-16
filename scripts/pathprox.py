@@ -38,6 +38,8 @@ from scipy.stats.mstats import zscore
 import matplotlib as mpl
 mpl.use('Agg')
 import matplotlib.pyplot as plt
+import seaborn as sns
+sns.set_style("white")
 
 # Machine Learning
 filterwarnings('ignore',category=RuntimeWarning)
@@ -308,7 +310,7 @@ def uniprot_lookup(io,ac):
 
 def default_var_query():
   """ Default string for variant queries """
-  s  = "SELECT distinct protein_pos,ref_amino_acid,alt_amino_acid,chain FROM GenomicConsequence a "
+  s  = "SELECT distinct seqid as pos,ref_amino_acid,alt_amino_acid,chain FROM GenomicConsequence a "
   s += "INNER JOIN GenomicIntersection b ON a.gc_id=b.gc_id "
   s += "INNER JOIN GenomicData c ON a.gd_id=c.gd_id "
   w  = "WHERE b.slabel=%s and a.label=%s AND consequence LIKE '%%missense_variant%%' "
@@ -623,6 +625,7 @@ def plot_roc(fpr,tpr,fig=None,save=True):
     plt.ylabel("True Positive Rate",fontsize=15)
   l = "PathProx AUC: %5.2f"%roc_auc
   plt.plot(fpr,tpr,color='k',label=l,linewidth=4)
+  sns.despine()
   if save:
     plt.legend(loc="lower right",fontsize=12)
     plt.savefig("%s_PathProx_roc.pdf"%(args.label),dpi=300)
@@ -641,6 +644,7 @@ def plot_pr(rec,prec,pr_auc,fig=None,save=True):
     plt.ylabel("Precision",fontsize=15)
   l = "PathProx AUC: %5.2f"%pr_auc
   plt.plot(rec,prec,color='k',label=l,linewidth=4)
+  sns.despine()
   if save:
     plt.legend(loc="lower left",fontsize=12)
     plt.savefig("%s_PathProx_pr.pdf"%(args.label),dpi=300)
@@ -881,7 +885,7 @@ def k_plot(T,K,Kz,lce,hce,ax=None,w=False):
                       interpolate=True,antialiased=True)
   ax.scatter(T,K,s=50,color='darkred',edgecolor='white',lw=1,label=["Un-Weighted K","Weighted K"][w])
   ax.set_xlabel("Distance Threshold (t)",fontsize=25)
-  ax.set_ylabel("K (Simulation 95% CI)",fontsize=25)
+  ax.set_ylabel("K",fontsize=25,rotation=90)
   ax.set_xlim([min(T),max(T)])
   if any(K<0) or any(lce<0) or any(hce<0):
     ax.set_ylim([-1.05,1.05])
@@ -892,24 +896,49 @@ def k_plot(T,K,Kz,lce,hce,ax=None,w=False):
   t  = np.nanargmax(np.abs(Kz),axis=0) # t where Kz is maximized
   T,K = T[t],K[t]
   # ax.axhline(0,color='k',lw=1,ls="-")
-  ax.axvline(T,color='k',lw=2,ls="dashed",label="Most Significant K at T=%.0f"%T)
+  ax.axvline(T,color='k',lw=2,ls="dashed",label="Most Significant K")
   return ax
 
 def saveKplot(T,K,Kz,lce,hce,label="",w=False):
   global sid
   fig,ax = plt.subplots(1,1,figsize=(20,7))
   k_plot(T,K,Kz,lce,hce,ax)
-  ax.set_title("Ripley's K-Function",fontsize=25)
+  sns.despine()
+  ax.set_title("Ripley's K",fontsize=25)
   ax.legend(loc="lower right",fontsize=18)
   plt.savefig("%s_%s_K_plot.pdf"%(sid,label),dpi=300,bbox_inches='tight')
   plt.savefig("%s_%s_K_plot.png"%(sid,label),dpi=300,bbox_inches='tight')
   plt.close(fig)
 
+def d_plot(T,D,Dz,lce,hce,ax=None,w=False):
+  if not ax:
+    fig,ax = plt.subplots(1,1,figsize=(20,7))
+  # 95% Confidence
+  ax.fill_between(T,lce,hce,alpha=0.2,
+                      edgecolor='k',facecolor='k',
+                      interpolate=True,antialiased=True)
+  ax.scatter(T,D,s=50,color='darkred',edgecolor='white',lw=1,label=["Un-Weighted D","Weighted D"][w])
+  ax.set_xlabel("Distance Threshold (t)",fontsize=25)
+  ax.set_ylabel("D",fontsize=25,rotation=90)
+  ax.set_xlim([min(T),max(T)])
+  if any(D<0) or any(lce<0) or any(hce<0):
+    ax.set_ylim([-1.05,1.05])
+  else:
+    ax.set_ylim([-0.05,1.05])
+  # Add a vertical line a the most extreme threshold
+  dD = np.nanmax(np.abs(Dz),axis=0)    # maximum Kz
+  t  = np.nanargmax(np.abs(Dz),axis=0) # t where Kz is maximized
+  T,D = T[t],D[t]
+  # ax.axhline(0,color='k',lw=1,ls="-")
+  ax.axvline(T,color='k',lw=2,ls="dashed",label="Most Significant D")
+  return ax
+
 def saveDplot(T,D,Dz,lce,hce,label="",w=False):
   global sid
   fig,ax = plt.subplots(1,1,figsize=(20,7))
-  k_plot(T,D,Dz,lce,hce,ax)
-  ax.set_title("Ripley's D-Function",fontsize=25)
+  d_plot(T,D,Dz,lce,hce,ax)
+  sns.despine()
+  ax.set_title("Ripley's D",fontsize=25)
   ax.legend(loc="lower right",fontsize=18)
   plt.savefig("%s_%s_D_plot.pdf"%(sid,label),dpi=300,bbox_inches='tight')
   plt.savefig("%s_%s_D_plot.png"%(sid,label),dpi=300,bbox_inches='tight')
@@ -1098,19 +1127,21 @@ for sid,bio,cf in get_coord_files(args.entity,io):
   ## Write pathogenic, neutral, and candidate Chimera attribute files
   v = sdf[sdf["dcode"].notnull()].sort_values(by=["chain","pos"])
   # Write attribute file with neutral variants
-  with open("%s_neutral.attr"%args.label,'wb') as fout:
-    fout.write("attribute: neutral\n")
-    fout.write("match mode: 1-to-1\n")
-    fout.write("recipient: residues\n")
-    for i,r in v.ix[v["dcode"]==0].iterrows():
-      fout.write("\t:%d.%s\t%.3f\n"%(r["pos"],r["chain"],1.0))
+  if nflag:
+    with open("%s_neutral.attr"%args.label,'wb') as fout:
+      fout.write("attribute: neutral\n")
+      fout.write("match mode: 1-to-1\n")
+      fout.write("recipient: residues\n")
+      for i,r in v.ix[v["dcode"]==0].iterrows():
+        fout.write("\t:%d.%s\t%.3f\n"%(r["pos"],r["chain"],1.0))
   # Write attribute file with pathogenic variants
-  with open("%s_pathogenic.attr"%args.label,'wb') as fout:
-    fout.write("attribute: pathogenic\n")
-    fout.write("match mode: 1-to-1\n")
-    fout.write("recipient: residues\n")
-    for i,r in v.ix[v["dcode"]==1].iterrows():
-      fout.write("\t:%d.%s\t%.3f\n"%(r["pos"],r["chain"],1.0))
+  if pflag:
+    with open("%s_pathogenic.attr"%args.label,'wb') as fout:
+      fout.write("attribute: pathogenic\n")
+      fout.write("match mode: 1-to-1\n")
+      fout.write("recipient: residues\n")
+      for i,r in v.ix[v["dcode"]==1].iterrows():
+        fout.write("\t:%d.%s\t%.3f\n"%(r["pos"],r["chain"],1.0))
   # Label as 0.5 if both neutral and pathogenic variants are mapped to a residue
   filterwarnings('ignore')
   vt          = v.drop_duplicates(["chain","pos"])
@@ -1128,6 +1159,10 @@ for sid,bio,cf in get_coord_files(args.entity,io):
   if nflag and pflag and args.ripley:
     print "\nCalculating Ripley's univariate K and bivariate D..."
     pK,pKt,nK,nKt,D,Dt = ripley(sdf,args.permutations)
+  elif args.ripley:
+    print "\nInsufficient variant counts to perform Ripley's K analysis."
+    print "Using default neighbor-weight parameters for PathProx."
+    args.radius = "NW"
 
   # Run the PathProx cross-validation and report performance
   A = sdf.ix[sdf["dcode"]==1,['x','y','z']] # Pathogenic
@@ -1268,8 +1303,3 @@ for sid,bio,cf in get_coord_files(args.entity,io):
     raise
 
   print "\nAnalysis complete."
-
-
-
-
-
