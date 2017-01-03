@@ -15,7 +15,7 @@
 #=============================================================================#
 
 # See main check for cmd line parsing
-import sys,csv
+import sys,csv,gzip
 
 class PDBMapProtein():
 
@@ -84,67 +84,117 @@ class PDBMapProtein():
 
   @classmethod
   def load_idmapping(cls,idmapping_fname):
-    # Load UniProt crossreferences, keyed on UniProt
-    with open(idmapping_fname) as fin:
-      reader = csv.reader(fin,delimiter='\t')
       
+    #TEMPORARY FIX ONLY
+    if "HUMAN_9606_idmapping.dat.gz" in idmapping_fname:  
+      # Load UniProt crossreferences, keyed on UniProt
+      with gzip.open(idmapping_fname) as fin:
+        reader = csv.reader(fin,delimiter='\t')
       # Parse the comprehensive UniProt ID mapping resource
       # and extract all necessary information
-      for unp,db,dbid in reader:
-        # Extract the UniProt isoform identifier, if present
-        if '-' in unp:
-          unp,iso = unp.split('-')
-        else:
-          # Proteins with a single (thus canonical) isoform have no identifier
-          unp,iso = unp,"1"
-        # Only record EnsEMBL transcripts/proteins matching the UniProt canonical isoform
-        if iso != "1":
-          continue
-        if db=="Gene_Name":
-          hgnc = dbid # for clarity
-          PDBMapProtein._unp2hgnc[unp]  = hgnc
-          PDBMapProtein._hgnc2unp[hgnc] = unp
-        elif db == "Ensembl_TRS":
-          enst = dbid # for clarity
+        for unp,db,dbid in reader:
+          # Extract the UniProt isoform identifier, if present
+          if '-' in unp:
+            unp,iso = unp.split('-')
+          else:
+            # Proteins with a single (thus canonical) isoform have no identifier
+            unp,iso = unp,"1"
+          # Only record EnsEMBL transcripts/proteins matching the UniProt canonical isoform
+          if iso != "1":
+            continue
+          if db=="Gene_Name":
+            hgnc = dbid # for clarity
+            PDBMapProtein._unp2hgnc[unp]  = hgnc
+            PDBMapProtein._hgnc2unp[hgnc] = unp
+          elif db == "Ensembl_TRS":
+            enst = dbid # for clarity
+            if unp in PDBMapProtein._unp2enst:
+              PDBMapProtein._unp2enst[unp].append(enst)
+              PDBMapProtein._enst2unp[enst].append(unp)
+            else:
+              PDBMapProtein._unp2enst[unp] = [enst]
+              PDBMapProtein._enst2unp[enst] = [unp]
+            # This entry is immediately followed by its corresponding ENSP
+          elif db == "Ensembl_PRO":
+            ensp = dbid # for clarity
+            if unp in PDBMapProtein._unp2ensp:
+              PDBMapProtein._unp2ensp[unp].append(ensp)
+              PDBMapProtein._ensp2unp[ensp].append(unp)
+            else:
+              PDBMapProtein._unp2ensp[unp] = [ensp]
+              PDBMapProtein._ensp2unp[ensp] = [unp]
+            # This entry was immediately preceded by its corresponding ENST
+            PDBMapProtein.ensp2enst[ensp] = enst
+            PDBMapProtein.enst2ensp[enst] = ensp
+          elif db == "PDB":
+            pdb = dbid # for clarity
+            if unp in PDBMapProtein._unp2ensp:
+              PDBMapProtein._unp2pdb[unp].append(pdb)
+              PDBMapProtein._pdb2unp[pdb].append(unp)
+            else:
+              PDBMapProtein._unp2pdb[unp] = [pdb]
+              PDBMapProtein._pdb2unp[pdb] = [unp]
+
+    #TEMPORARY FIX ONLY
+    elif "HUMAN_9606_idmapping_UNP-RefSeq-PDB-Ensembl.tab" in idmapping_fname:
+      # Load UniProt crossreferences, keyed on UniProt
+      with open(idmapping_fname) as fin:
+        reader = csv.reader(fin,delimiter='\t')
+        for (unp,hgnc,refseqlist,pdblist,translist,protlist) in reader:
+          hgnc       = hgnc.split("_")[0]
+          pdblist    = [] if not pdblist else pdblist.strip().split('; ')
+          protlist   = [] if not protlist else protlist.strip().split('; ')
+          translist  = [] if not translist else translist.strip().split('; ')
+          refseqlist = [] if not refseqlist else refseqlist.strip().split('; ')
+          ## Map UniProt IDs to Ensembl Transcript IDs
+          if not translist:
+            continue # Don't consider UniProt IDs without transcript-mapping
+
+          for i,enst in enumerate(translist):
+            PDBMapProtein._enst2ensp[enst] = protlist[i]
           if unp in PDBMapProtein._unp2enst:
-            PDBMapProtein._unp2enst[unp].append(enst)
-            PDBMapProtein._enst2unp[enst].append(unp)
+            PDBMapProtein._unp2enst[unp].extend(translist)
           else:
-            PDBMapProtein._unp2enst[unp] = [enst]
-            PDBMapProtein._enst2unp[enst] = [unp]
-          # This entry is immediately followed by its corresponding ENSP
-        elif db == "Ensembl_PRO":
-          ensp = dbid # for clarity
+            PDBMapProtein._unp2enst[unp] = translist
+          ## Map UniProt IDs to HGNC gene names
+          PDBMapProtein._unp2hgnc[unp]  = hgnc
+          ## Map HGNC gene names to UniProt IDs
+          PDBMapProtein._hgnc2unp[hgnc] = unp
+          ## Map UniProt IDs to Ensembl Protein IDs
           if unp in PDBMapProtein._unp2ensp:
-            PDBMapProtein._unp2ensp[unp].append(ensp)
-            PDBMapProtein._ensp2unp[ensp].append(unp)
+            PDBMapProtein._unp2ensp[unp].extend(protlist)
           else:
-            PDBMapProtein._unp2ensp[unp] = [ensp]
-            PDBMapProtein._ensp2unp[ensp] = [unp]
-          # This entry was immediately preceded by its corresponding ENST
-          PDBMapProtein.ensp2enst[ensp] = enst
-          PDBMapProtein.enst2ensp[enst] = ensp
-        elif db == "PDB":
-          pdb = dbid # for clarity
-          if unp in PDBMapProtein._unp2ensp:
-            PDBMapProtein._unp2pdb[unp].append(pdb)
-            PDBMapProtein._pdb2unp[pdb].append(unp)
+            PDBMapProtein._unp2ensp[unp] = protlist
+          ## Map UniProt IDs to Protein Data Bank IDs
+          if unp in PDBMapProtein._unp2pdb:
+            PDBMapProtein._unp2pdb[unp].extend([pdb_chain.split(':')[0] for pdb_chain in pdblist])
           else:
-            PDBMapProtein._unp2pdb[unp] = [pdb]
-            PDBMapProtein._pdb2unp[pdb] = [unp]
+            PDBMapProtein._unp2pdb[unp] = [pdb_chain.split(':')[0] for pdb_chain in pdblist]
+          ## Map Ensembl Protein IDs to UniProt IDs
+          for ensp in protlist:
+            if ensp in PDBMapProtein._ensp2unp:
+              PDBMapProtein._ensp2unp[ensp].append(unp)
+            else:
+              PDBMapProtein._ensp2unp[ensp] = [unp]
+          ## Map RefSeq IDs to UniProt IDs (Reverse lookup)
+          for refseq in refseqlist:
+            if refseq in PDBMapProtein._refseq2unp:
+              PDBMapProtein._refseq2unp[refseq].append(unp)
+            else:
+              PDBMapProtein._refseq2unp[refseq] = [unp] 
 
   @classmethod
   def load_sec2prim(cls,sec2prim_fname):
     # Method to load the UniProt secondary -> primary AC mapping
     # load_idmapping MUST be called before calling this function
-    if not PDBMapProtein._unp2ensembltrans:
+    if not PDBMapProtein._unp2enst:
       raise Exception("ERROR (PDBMapProtein) load_sec2prim cannot be called before load_idmapping")
     with open(sec2prim_fname) as fin:
       reader = csv.reader(fin,delimiter='\t')
       sec2prim = {}
       for (sec,prim) in reader:
         # Ensure that this primary AC is human and mappable
-        if prim in PDBMapProtein._unp2ensembltrans:
+        if prim in PDBMapProtein._unp2enst:
           sec2prim[sec] = prim
     PDBMapProtein.sec2prim = sec2prim
 
@@ -174,7 +224,7 @@ class PDBMapProtein():
     # Checks if external database ID mapping has been loaded
     if not PDBMapProtein._refseq2unp or \
        not PDBMapProtein._unp2pdb or \
-       not PDBMapProtein._unp2ensembltrans or \
+       not PDBMapProtein._unp2enst or \
        not PDBMapProtein._unp2ensp:
       msg = "ERROR (UniProt) ID Mapping must be loaded before use."
       raise Exception(msg)
