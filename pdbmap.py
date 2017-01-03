@@ -124,16 +124,20 @@ class PDBMap():
                             args.dbpass,args.dbname,slabel=label)
 
     # Check if model is already in the database
-    modelid = model_summary[1] # extract ModBase model ID
+    modelid = model_summary[3] # extract ModBase model ID
     if io.model_in_db(modelid,label):
       msg = "VALID (PDBMap) %s (%s) already in database.\n"%(modelid,label)
       print msg
       return 0
 
+    # Query UniProt ID if not provided
+    if not unp:
+      unp = PDBMapProtein.ensp2unp(modelid.split('.')[0])
+
     # Load the ModBase model
     if not model_fname:
       modbase_dir = PDBMapModel.PDBMapModel.modbase_dir
-      model_fname = "%s/models/model/%s.pdb"%(modbase_dir,modelid)
+      model_fname = "%s/Homo_sapiens_2016/model/%s.pdb"%(modbase_dir,modelid)
       print "  # Fetching %s"%modelid
       if not os.path.exists(model_fname):
         model_fname += '.gz' # check for compressed copy
@@ -145,8 +149,6 @@ class PDBMap():
       p = PDBMapIO.PDBMapParser()
       print "Loading %s (%s) from %s..."%(modelid,unp,model_fname)
       m = p.get_model(model_summary,model_fname,unp=unp)
-      print "Successful! Model:"
-      print m
       io.set_structure(m)
       io.upload_model()
     except Exception as e:
@@ -1049,25 +1051,33 @@ __  __  __
   args.cores = int(args.cores)
 
   if args.create_new_db and not args.force:
-    print "You have opted to create a new database."
-    if raw_input("Are you sure you want to do this? (y/n):") == 'n':
+    print "You have opted to create a new database: %s."%args.dbname
+    if raw_input("Are you sure you want to do this? (y/n):") != 'y':
       print "Aborting..."
     else:
       print "Creating database tables..."
       io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,
                             args.dbpass,args.dbname,createdb=True)
       # print "Refreshing remote data cache and populating tables..."
-      # PDBMap().refresh_cache(args,io)
-      print "Database created. Please set create_new_db to False."
-      print "It is strongly recommended that you now refresh the local resource cache."
-    sys.exit(0)
+      print "\nDatabase created. Please set create_new_db to False."
+      print "\nIt is strongly recommended that you now refresh the local resource cache."
+      if raw_input("Would you like to refresh the cache now? (y/n):") == 'y':
+        print "Refreshing local cache..."
+        args.cmd = "refresh" # continue on to cache refresh
+      else:
+        sys.exit(0)
+
   # Initialize PDBMap, refresh mirrored data if specified
   if args.cmd=="refresh":
     io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,
                             args.dbpass,args.dbname)
-    PDBMap().refresh_cache(args,io)
-    print "Refresh complete."
-    sys.exit(1)
+    try:
+      PDBMap().refresh_cache(args,io)
+      print "\nRefresh complete. Exiting..."
+      sys.exit(0)
+    except:
+      print "\nAn unknown error occurred. Terminating..."
+      sys.exit(1)
 
   ## load_pdb ##
   elif args.cmd == "load_pdb":
@@ -1191,9 +1201,9 @@ __  __  __
       msg = "ERROR (PDBMap): Must include model summary file with load_model"
       raise Exception(msg)
     model_summary = args.args[0]
-    if args.args[1] in ['all','*']:
+    if args.args[1] in ['all','*','.']:
       model_summary = args.modbase_summary
-      models = glob.glob("%s/*"%args.modbase_dir)
+      models = glob.glob("%s/Homo_sapiens_2016/model/*.pdb.gz"%args.modbase_dir)
     elif "*" in args.args[1]:
       models = glob.glob(args.args[1])
     else:
@@ -1203,7 +1213,12 @@ __  __  __
       reader = csv.reader(fin,delimiter='\t')
       n = len(models)
       for i,row in enumerate(reader):
-        print "## Processing (%s) %s (%d/%d) ##"%(args.slabel,row[1],i,n)
+        if not row[3].startswith("ENSP"):
+          i -= 1 # Not Ensembl. Decrement.
+          continue
+        # Extract the Ensembl protein ID from the ModBase summary
+        print "## Processing (%s) %s (%d/%d) ##"%(args.slabel,row[3],i,n)
+        # Extract the ModBase 
         pdbmap.load_model(row,model_fname=models[i],label=row[0],io=None,unp=args.unp)
 
   ## load_data ##

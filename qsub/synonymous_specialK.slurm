@@ -15,4 +15,4 @@ if [ -z "$2" ]; then
 else
   SUBMITDATE="$2";
 fi
-python2.7 specialK.py ../data/specialK/synonymous_specialK.structfile --outdir ../results/specialK_analysis_$SUBMITDATE/synonymous/ --aname=daf --acol=13 --ppart $1 --ppidx ${SLURM_ARRAY_TASK_ID}
+python2.7 specialK.py ../data/specialK/synonymous_specialK.structfile --outdir ../results/specialK_analysis_$SUBMITDATE/exac_synonymous/ --png --aname=daf --acol=13 --ppart $1 --ppidx ${SLURM_ARRAY_TASK_ID}

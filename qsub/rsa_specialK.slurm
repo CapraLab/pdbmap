@@ -15,4 +15,4 @@ if [ -z "$2" ]; then
 else
   SUBMITDATE="$2";
 fi
-python2.7 specialK.py ../data/specialK/rsa.structfile --outdir ../results/specialK_analysis_$SUBMITDATE/rsa/ --aname=rsa --acol=9 --ppart $1 --ppidx ${SLURM_ARRAY_TASK_ID} 
+python2.7 specialK.py ../data/specialK/rsa.structfile --outdir ../results/specialK_analysis_$SUBMITDATE/rsa/ --png --aname=rsa --acol=9 --ppart $1 --ppidx ${SLURM_ARRAY_TASK_ID} 

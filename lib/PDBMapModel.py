@@ -49,9 +49,9 @@ class PDBMapModel(Structure):
     oid = chain.id
     chain.id = 'A'
     chain.species = "HUMAN"
-    chain.pdbstart = self._sint(model_summary[2])
-    chain.pdbend   = self._sint(model_summary[3])
-    chain.unp      = model_summary[17]
+    chain.pdbstart = self._sint(model_summary[4])
+    chain.pdbend   = self._sint(model_summary[5])
+    chain.unp      = model_summary[19]
     chain.offset   = 0 # Assumed. Corrected by alignment.
     chain.hybrid   = 0
     s[0].child_dict['A'] = chain
@@ -63,21 +63,21 @@ class PDBMapModel(Structure):
     self.transcripts = []
 
     # Store the model summary information
-    self.id      = model_summary[1]
-    self.tvsmod_method = model_summary[14]
+    self.id      = model_summary[3]
+    self.tvsmod_method = model_summary[16]
     if self.tvsmod_method != 'NA':
-      self.tvsmod_no35   = self._sfloat(model_summary[15])
-      self.tvsmod_rmsd   = self._sfloat(model_summary[16])
+      self.tvsmod_no35   = self._sfloat(model_summary[17])
+      self.tvsmod_rmsd   = self._sfloat(model_summary[18])
     else:
       self.tvsmod_no35 = 'NULL'
       self.tvsmod_rmsd = 'NULL'
-    self.identity = self._sfloat(model_summary[4])
-    self.evalue   = self._sfloat(model_summary[5])
-    self.ga341    = self._sfloat(model_summary[6])
-    self.mpqs     = self._sfloat(model_summary[7])
-    self.zdope    = self._sfloat(model_summary[8])
-    self.pdbid    = model_summary[9]
-    self.chain    = model_summary[10]
+    self.identity = self._sfloat(model_summary[6])
+    self.evalue   = self._sfloat(model_summary[7])
+    self.ga341    = self._sfloat(model_summary[8])
+    self.mpqs     = self._sfloat(model_summary[9])
+    self.zdope    = self._sfloat(model_summary[10])
+    self.pdbid    = model_summary[11]
+    self.chain    = model_summary[12]
     self.unp      = model_summary[17]
     
   def __getattr__(self,attr):
@@ -104,26 +104,22 @@ class PDBMapModel(Structure):
     for chain in self.structure[0]:
       # Query all transcripts associated with the chain's UNP ID
       candidate_transcripts = PDBMapTranscript.query_from_unp(self.unp)
-      # But limit to those relevant to this model's template ENSP, if specified
-      if "ENSP" in self.id:
+      # But only keep the one matching this model's reference ENSP, if specified
+      if self.id.startswith("ENSP"):
         candidate_transcripts = [ct for ct in candidate_transcripts if
-                               PDBMapProtein.enst2ensp(ct.transcript)==self.id.split('_')[0]]
+                               PDBMapProtein.enst2ensp(ct.transcript)==self.id.split('.')[0]]
       if len(candidate_transcripts) < 1:
         return []
-      if len(candidate_transcripts) > 1 and "ENSP" in self.id:
+      if len(candidate_transcripts) > 1 and self.id.startswith("ENSP"):
         msg = "WARNING (PDBMapModel) Too many transcripts for %s. Truncating.\n"%self.id
         sys.stderr.write(msg)
         candidate_transcripts = [candidate_transcripts[0]]
-      #UPDATE: Keep all transcript matches
       # Align chain to first candidate transcript
       alignments = [PDBMapAlignment(chain,candidate_transcripts[0])]
       # Repeat for remaining chains, select highest scoring alignment
       for trans in candidate_transcripts[1:]:
         new_alignment = PDBMapAlignment(chain,trans)
         alignments.append(new_alignment)
-        # Determine best alignment
-        # if new_alignment.score > alignment.score:
-          # alignment = new_alignment
       # Store best transcript alignment as element of chain
       chain.alignments  = alignments
       chain.transcripts = [a.transcript for a in alignments]

@@ -25,8 +25,12 @@ class PDBMapAlignment():
     self.chain      = chain
     self.transcript = transcript
     try:
-        self.pdb2seq,self.seq2pdb,self.aln_string,self.score,self.perc_aligned,self.perc_identity \
-                    = self.align(chain,transcript,io=io)
+        self.pdb2seq,      \
+        self.seq2pdb,      \
+        self.aln_string,   \
+        self.score,        \
+        self.perc_aligned, \
+        self.perc_identity = self.align(chain,transcript,io=io)
     except Exception as e:
         msg = "ERROR (PDBMapAlignment) Error aligning %s to %s: %s\n"%(
                 chain.id,transcript.transcript,str(e))
@@ -42,8 +46,9 @@ class PDBMapAlignment():
     for r in chain.get_residues():
         c_seq[r.seqid] = r.rescode
     # Generate transcript/protein sequence
-    t_seq = ''.join([r[0] for r in transcript.sequence.itervalues()])
-    t_seq = '-%s'%t_seq # match 1-indexing with c_seq
+    t_seq = ['-']*(1+max(transcript.sequence.keys()))
+    for i,r in transcript.sequence.iteritems():
+        t_seq[i] = r[0]
 
     # If an io object was provided, first check for SIFTS alignment
     if io:
@@ -75,11 +80,10 @@ class PDBMapAlignment():
                 msg += "Manually re-aligning sequences.\n"
                 sys.stderr.write(msg)
 
-
     # Determine start indices
     c_start = min([r.seqid for r in chain.get_residues()])
-    t_start = min(transcript.sequence.keys())
     c_end   = max([r.seqid for r in chain.get_residues()])
+    t_start = min(transcript.sequence.keys())
     t_end   = max(transcript.sequence.keys())
 
     # Generate chain sequence (may contain gaps)
@@ -87,12 +91,16 @@ class PDBMapAlignment():
     for r in chain.get_residues():
         c_seq[r.seqid] = r.rescode
     c_seq = c_seq[c_start:] # Remove leading gaps for alignment
+    t_seq = t_seq[t_start:] # Remove leading gaps for alignment
     # Record the gaps
-    gaps = [i+c_start for i,r in enumerate(c_seq) if r == '-']
+    c_gap = [i+c_start for i,r in enumerate(c_seq) if r == '-']
     c_seq = ''.join(c_seq) # Convert to string
     c_seq = c_seq.replace('-','G') # Dummy code sequence gaps to GLY
-    # Generate transcript/protein sequence
-    t_seq = ''.join([r[0] for r in transcript.sequence.itervalues()])
+    t_gap = [i+t_start for i,r in enumerate(t_seq) if r == '-']
+    t_seq = ''.join(t_seq) # Convert to string
+    t_seq = t_seq.replace('-','G') # Dummy code sequence gaps to GLY
+    # # Generate transcript/protein sequence
+    # t_seq = ''.join([r[0] for r in transcript.sequence.itervalues()])
     # Define alignment parameters
     matrix     = matlist.blosum62
     gap_open   = -10
@@ -103,8 +111,10 @@ class PDBMapAlignment():
     alignment  = alignments[0] # best alignment
     aln_chain, aln_trans, score, begin, end = alignment
     # Create an alignment map from chain to transcript
-    c_ind = [x for x in self._gap_shift(aln_chain,c_start,gaps)]
-    t_ind = [x for x in self._gap_shift(aln_trans,t_start)]
+    c_ind     = [x for x in self._gap_shift(aln_chain,c_start,c_gap)]
+    aln_chain = ''.join(['-' if i+c_start in c_gap else s for i,s in enumerate(aln_chain)])
+    t_ind     = [x for x in self._gap_shift(aln_trans,t_start,t_gap)]
+    aln_trans = ''.join(['-' if i+t_start in t_gap else s for i,s in enumerate(aln_trans)])
 
     # Verify alignment - Don't uncomment except for debug
     # or if method of systematic replacement of chain sequence

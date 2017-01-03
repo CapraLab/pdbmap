@@ -51,12 +51,16 @@ from sklearn.metrics import average_precision_score
 resetwarnings()
 
 # PDBMap
+filterwarnings('ignore',category=ImportWarning)
 from Bio.PDB.PDBParser import PDBParser
+resetwarnings()
 from Bio.PDB.PDBExceptions import PDBConstructionWarning
 sys.path.append("..")
 from lib.PDBMapIO import PDBMapIO,PDBMapParser
 from lib.PDBMapStructure import PDBMapStructure
 from lib.PDBMapProtein import PDBMapProtein
+from lib.PDBMapTranscript import PDBMapTranscript
+from lib.PDBMapAlignment import PDBMapAlignment
 import lib.amino_acids as amino_acids
 
 #=============================================================================#
@@ -145,6 +149,8 @@ parser.add_argument("--no-timestamp","-nt",action="store_true",default=False,
                     help="Disables output directory timestamping")
 parser.add_argument("--verbose",action="store_true",default=False,
                     help="Verbose output flag")
+parser.add_argument("--overwrite",action="store_true",default=False,
+                    help="Overwrite previous results. Otherwise, exit with error")
 
 ## Parameter validity checks
 args = parser.parse_args()
@@ -199,13 +205,14 @@ elif args.radius in ("K","D"):
   # Ripley's K/D analyses required for parameterization
   args.ripley = True
 
-print "\nActive options:"
-for arg in vars(args):
-  try:
-    print "  %15s:  %s"%(arg,getattr(args,arg).name)
-  except:
-    print "  %15s:  %s"%(arg,getattr(args,arg))
-print ""
+if args.verbose:
+  print "\nActive options:"
+  for arg in vars(args):
+    try:
+      print "  %15s:  %s"%(arg,getattr(args,arg).name)
+    except:
+      print "  %15s:  %s"%(arg,getattr(args,arg))
+  print ""
 
 # Warn user to include specific EnsEMBL transcripts
 if args.fasta and not args.isoform:
@@ -235,18 +242,22 @@ def get_refseq(fasta):
 
 def query_alignment(sid,bio):
   """ Query the reference->observed alignment from PDBMap """
-  s   = "SELECT unp,trans_seqid,b.chain,chain_seqid,b.rescode from Alignment a "
+  s   = "SELECT unp,trans_seqid,b.chain,chain_seqid,b.rescode as pdb_res,d.rescode as trans_res from Alignment a "
   s  += "INNER JOIN Residue b ON a.label=b.label AND a.structid=b.structid "
   s  += "AND a.chain=b.chain AND a.chain_seqid=b.seqid "
   s  += "INNER JOIN Chain c ON b.label=c.label AND b.structid=c.structid "
-  s  += "AND b.chain=c.chain "
-  w   = "WHERE a.label=%s AND b.structid=%s AND b.biounit=%s "
+  s  += "AND b.label=c.label AND b.biounit=c.biounit "
+  s  += "AND b.model=c.model AND b.chain=c.chain "
+  s  += "INNER JOIN Transcript d ON a.label=d.label AND a.transcript=d.transcript "
+  s  += "AND a.trans_seqid=d.seqid "
+  w   = "WHERE a.label=%s AND b.structid=%s AND b.biounit=%s AND b.model=0"
   q   = s+w
   res = list(io.secure_query(q,(args.slabel,sid,bio)))
   unp = res[0]["unp"]
   # chain,chain_seqid -> ref_seqid,rescode
+  chains = set([r["chain"] for r in res])
   aln = dict(((r["chain"],r["chain_seqid"]),
-              (r["trans_seqid"],r["rescode"])) for r in res)
+              (r["trans_seqid"],r["pdb_res"])) for r in res)
   return unp,aln
 
 def structure_lookup(io,sid,bio=True):
@@ -310,7 +321,7 @@ def uniprot_lookup(io,ac):
 
 def default_var_query():
   """ Default string for variant queries """
-  s  = "SELECT distinct seqid as pos,ref_amino_acid,alt_amino_acid,chain FROM GenomicConsequence a "
+  s  = "SELECT distinct protein_pos,ref_amino_acid,alt_amino_acid,chain FROM GenomicConsequence a "
   s += "INNER JOIN GenomicIntersection b ON a.gc_id=b.gc_id "
   s += "INNER JOIN GenomicData c ON a.gd_id=c.gd_id "
   w  = "WHERE b.slabel=%s and a.label=%s AND consequence LIKE '%%missense_variant%%' "
@@ -337,16 +348,19 @@ def query_1kg(io,sid,refid=None,chains=None):
   if not refid:
     s,w = default_var_query()
     f   = (args.slabel,"1kg3",sid)
-    c   = ["pos","ref","alt","chain"]
+    c   = ["unp_pos","ref","alt","chain"]
   else:
     s,w = sequence_var_query()
     f   = ("1kg3",refid)
-    c   = ["pos","ref","alt"]
+    c   = ["unp_pos","ref","alt"]
   q   = s+w
   res = [list(r) for r in io.secure_query(q,f,cursorclass="Cursor")]
-  # Add chains IDs if user-specified model
+  # If user-specified model...
   if refid:
+    # Add chains IDs
     res = [r+[c] for r in res for c in chains]
+    # Add null pdb_pos (not yet aligned)
+    res = [[None]+r for r in res]
   return res
 
 def query_exac(io,sid,refid=None,chains=None):
@@ -354,16 +368,19 @@ def query_exac(io,sid,refid=None,chains=None):
   if not refid:
     s,w = default_var_query()
     f   = (args.slabel,"exac",sid)
-    c   = ["pos","ref","alt","chain"]
+    c   = ["unp_pos","ref","alt","chain"]
   else:
     s,w = sequence_var_query()
     f   = ("exac",refid)
-    c   = ["pos","ref","alt"]
+    c   = ["unp_pos","ref","alt"]
   q   = s+w
   res = [list(r) for r in io.secure_query(q,f,cursorclass="Cursor")]
-  # Add chains IDs if user-specified model
+  # If user-specified model...
   if refid:
+    # Add chains IDs
     res = [r+[c] for r in res for c in chains]
+    # Add null pdb_pos (not yet aligned)
+    res = [[None]+r for r in res]
   return res
 
 def query_benign(io,sid,refid=None,chains=None):
@@ -371,19 +388,22 @@ def query_benign(io,sid,refid=None,chains=None):
   if not refid:
     s,w = default_var_query()
     f   = (args.slabel,"clinvar",sid)
-    c   = ["pos","ref","alt","chain"]
+    c   = ["unp_pos","ref","alt","chain"]
   else:
     s,w = sequence_var_query()
     f   = ("clinvar",refid)
-    c   = ["pos","ref","alt"]
+    c   = ["unp_pos","ref","alt"]
   s  += "INNER JOIN pdbmap_supp.clinvar d "
   s  += "ON c.chr=d.chr and c.start=d.start "
   b   = "AND pathogenic=0"
   q   = s+w+b
   res = [list(r) for r in io.secure_query(q,f,cursorclass="Cursor")]
-  # Add chains IDs if user-specified model
+  # If user-specified model...
   if refid:
+    # Add chains IDs
     res = [r+[c] for r in res for c in chains]
+    # Add null pdb_pos (not yet aligned)
+    res = [[None]+r for r in res]
   return res
 
 def query_pathogenic(io,sid,refid=None,chains=None):
@@ -391,19 +411,22 @@ def query_pathogenic(io,sid,refid=None,chains=None):
   if not refid:
     s,w = default_var_query()
     f   = (args.slabel,"clinvar",sid)
-    c   = ["pos","ref","alt","chain"]
+    c   = ["unp_pos","ref","alt","chain"]
   else:
     s,w = sequence_var_query()
     f   = ("clinvar",refid)
-    c   = ["pos","ref","alt"]
+    c   = ["unp_pos","ref","alt"]
   s  += "INNER JOIN pdbmap_supp.clinvar d "
   s  += "ON c.chr=d.chr and c.start=d.start "
   p   = "AND pathogenic=1"
   q   = s+w+p
   res = [list(r) for r in io.secure_query(q,f,cursorclass="Cursor")]
-  # Add chains IDs if user-specified model
+  # If user-specified model...
   if refid:
+    # Add chains IDs
     res = [r+[c] for r in res for c in chains]
+    # Add null pdb_pos (not yet aligned)
+    res = [[None]+r for r in res]
   return res
 
 def query_drug(io,sid,refid=None,chains=None):
@@ -411,19 +434,22 @@ def query_drug(io,sid,refid=None,chains=None):
   if not refid:
     s,w = default_var_query()
     f   = (args.slabel,"clinvar",sid)
-    c   = ["pos","ref","alt","chain"]
+    c   = ["unp_pos","ref","alt","chain"]
   else:
     s,w = sequence_var_query()
     f   = ("clinvar",refid)
-    c   = ["pos","ref","alt"]
+    c   = ["unp_pos","ref","alt"]
   s  += "INNER JOIN pdbmap_supp.clinvar d "
   s  += "ON c.chr=d.chr and c.start=d.start "
   d   = "AND d.clnsig like '%7%'"
   q   = s+w+d
   res = [list(r) for r in io.secure_query(q,f,cursorclass="Cursor")]
-  # Add chains IDs if user-specified model
+  # If user-specified model...
   if refid:
+    # Add chains IDs
     res = [r+[c] for r in res for c in chains]
+    # Add null pdb_pos (not yet aligned)
+    res = [[None]+r for r in res]
   return res
 
 def query_somatic(io,sid,refid=None,chains=None):
@@ -431,19 +457,22 @@ def query_somatic(io,sid,refid=None,chains=None):
   if not refid:
     s,w = default_var_query()
     f   = (args.slabel,"cosmic",sid)
-    c   = ["pos","ref","alt","chain"]
+    c   = ["unp_pos","ref","alt","chain"]
   else:
     s,w = sequence_var_query()
     f   = ("cosmic",refid)
-    c   = ["pos","ref","alt"]
+    c   = ["unp_pos","ref","alt"]
   m   = "INNER JOIN pdbmap_supp.cosmic d "
   m  += "ON c.chr=d.chr and c.start=d.start "
   m  += "AND d.cnt>1 "
   q   = s+m+w
   res = [list(r) for r in io.secure_query(q,f,cursorclass="Cursor")]
-  # Add chains IDs if user-specified model
+  # If user-specified model...
   if refid:
+    # Add chains IDs
     res = [r+[c] for r in res for c in chains]
+    # Add null pdb_pos (not yet aligned)
+    res = [[None]+r for r in res]
   return res
 
 def get_coord_files(entity,io):
@@ -469,7 +498,7 @@ def get_coord_files(entity,io):
       msg = "\nERROR: Could not identify %s.\n"%entity
       sys.stderr.write("%s\n"%msg);sys.exit(1)
 
-def read_coord_file(cf,sid,bio,chain,fasta=None,residues=None):
+def read_coord_file(cf,sid,bio,chain,fasta=None,residues=None,renumber=False):
   """ Reads the coordinate file into a PDBMapStructure object """
   # If no fasta provided, query Uniprot AC and alignment
   if fasta:
@@ -478,9 +507,9 @@ def read_coord_file(cf,sid,bio,chain,fasta=None,residues=None):
   else:
     if bio < 0:
       msg = "FASTA files must be provided for user-defined protein models\n"
-      sys.stderr.write(msg); return
+      sys.stderr.write(msg); sys.exit(1)
     unp,aln = query_alignment(sid,bio)
-    refseq = refid = None
+    refid = refseq = None
 
   print "\nReading coordinates from %s..."%cf
   with gzip.open(cf,'rb') if cf.split('.')[-1]=="gz" else open(cf,'rb') as fin:
@@ -497,13 +526,43 @@ def read_coord_file(cf,sid,bio,chain,fasta=None,residues=None):
         del c.get_parent().child_dict[c.id]
         c.id = 'A'
         c.get_parent().child_dict['A'] = c
-      # Align residue numbers to the reference sequence
-      if c in aln:
-        for r in c:
-          r.id = (' ',aln[(c.id,r.id[1])][0],' ')
+
+  # Reduce to the specified chain if given
+  if chain:
+    # Drop chains that do not match the specified chain
+    for m in s:
+      for c in list(m.get_chains()):
+        if c.id != chain:
+          print "Ignoring chain %s (user specified %s)."%(c.id,chain)
+          c.get_parent().detach_child(c.id)
+
   s = PDBMapStructure(s,refseq=refseq,pdb2pose={})
   # Dirty hack: Reset pdb2pose
   s._pdb2pose = dict((key,key) for key,val in s._pdb2pose.iteritems())
+
+  if not refseq:
+    # Manually create a PDBMapAlignment from the queried alignment
+    for c in s.get_chains():
+      print "\nAligning chain %s"%c.id
+      refdict = dict((val[0],(val[1],"NA",0,0,0)) for key,val in aln.iteritems() if key[0]==c.id)
+      c.transcript = PDBMapTranscript("ref","ref","ref",refdict)
+      c.alignment  = PDBMapAlignment(c,c.transcript)
+      s.transcripts.append(c.transcript)
+      s.alignments.append(c.alignment)
+    # Remove any residues that do not map to any reference residues
+    for m in s:
+      for c in m:
+        for r in list(c.get_residues()):
+          if r.id[1] not in c.alignment.pdb2seq:
+            c.detach_child(r.id)
+
+  if renumber:
+    # Update all residue numbers to match the reference sequence
+    for m in s:
+      for c in list(m.get_chains()):
+        # Align pdb residue numbers to the reference sequence
+        for r in list(c.get_residues()):
+          r.id = (' ',c.alignment.pdb2seq[r.id[1]],' ')
 
   # If user-provided structure, QA the chain alignment
   if bio < 0:
@@ -513,14 +572,7 @@ def read_coord_file(cf,sid,bio,chain,fasta=None,residues=None):
         if c.alignment.perc_identity<0.9:
           print "Chain %s does not match reference sequence. Ignoring."%c.id
           c.get_parent().detach_child(c.id)
-  # Reduce to the specified chain if given
-  if chain:
-    # Drop chains that do not match the specified chain
-    for m in s:
-      for c in list(m.get_chains()):
-        if c.id != chain:
-          print "Ignoring chain %s (user-specified chain)."%c.id
-          c.get_parent().detach_child(c.id)
+
   # Reduce to specified residue range if given
   if residues:
     for c in list(s.get_chains()):
@@ -553,7 +605,8 @@ def parse_variants(varset):
     chains   = [v.split('.')[-1] if len(v.split('.'))>1 else None for v in varset.split(',')]
     variants = [v.split('.')[ 0] for v in varset.split(',')]
     variants = [[int(v[1:-1]),v[0],v[-1]] for v in variants]
-  variants = [v+[chains[i]] if chains[i] else v for i,v in enumerate(variants)]
+  # pdb_pos, unp_pos, ref, alt, chain
+  variants = [[None]+v+[chains[i]] if chains[i] else v for i,v in enumerate(variants)]
   return variants
 
 def resicom(resi):
@@ -688,17 +741,17 @@ def load_io(args):
 
 def var2coord(s,p,n,c):
   # Construct a dataframe containing all variant sets
-  vdf = pd.DataFrame(columns=["pos","ref","alt","chain","dcode"])
+  vdf = pd.DataFrame(columns=["unp_pos","ref","alt","chain","dcode"])
   if p:
-    pdf = pd.DataFrame(p,columns=["pos","ref","alt","chain"])
+    pdf = pd.DataFrame(p,columns=["unp_pos","ref","alt","chain"])
     pdf["dcode"] = 1
     vdf = vdf.append(pdf)
   if n:
-    ndf = pd.DataFrame(n,columns=["pos","ref","alt","chain"])
+    ndf = pd.DataFrame(n,columns=["unp_pos","ref","alt","chain"])
     ndf["dcode"] = 0
     vdf = vdf.append(ndf)
   if c:
-    cdf = pd.DataFrame(c,columns=["pos","ref","alt","chain"])
+    cdf = pd.DataFrame(c,columns=["unp_pos","ref","alt","chain"])
     cdf["dcode"] = -1
     vdf = vdf.append(cdf)
   vdf = vdf.drop_duplicates().reset_index(drop=True)
@@ -714,27 +767,31 @@ def var2coord(s,p,n,c):
   # Defer to pathogenic annotation if conflicted. DO NOT OVERWRITE CANDIDATES!
   def pathdefer(g):
     return g if all(g["dcode"]==0) else g[(g["dcode"]==1) | (g["dcode"]<0)]
-  vdf = vdf.groupby(["pos","ref","alt","chain"]).apply(pathdefer)
+  vdf = vdf.groupby(["unp_pos","ref","alt","chain"]).apply(pathdefer)
   
   # Construct a dataframe from the coordinate file
-  sdf = pd.DataFrame([[r.get_parent().id,r.id[1]] for r in s.get_residues()],columns=["chain","seqid"])
-  if args.fasta:
-    # FASTA input calculates the alignment, but does not change residue number
-    sdf["pos"] = [s[r.get_parent().get_parent().id][r.get_parent().id].alignment.pdb2seq[r.id[1]] for r in s.get_residues()]
-  else:
-    # database alignment updates the residue numbers automatically
-    sdf["pos"] = sdf["seqid"]
+  sdf = pd.DataFrame([[r.get_parent().id,r.id[1]] for r in s.get_residues()],columns=["chain","pdb_pos"])
+  # if args.fasta:
+  # FASTA input calculates the alignment, but does not change residue number
+  # ALIGNMENT IS NOW AVAILABLE FOR BOTH USER-PROVIDED AND DATABASE-QUERIED STRUCTURES
+  sdf["unp_pos"] = [r.get_parent().alignment.pdb2seq[r.id[1]] for r in s.get_residues()]
+  # else:
+  #   # Database alignment updates the residue numbers automatically
+  #   sdf["unp_pos"] = sdf["pdb_pos"]
 
-  # Calculate the center-of-mass for all residues
+  # Calculate the coordinate center-of-mass for all residues
   coords   = [resicom(r) for r in s.get_residues()]
   coord_df = pd.DataFrame(coords,index=sdf.index,columns=["x","y","z"])
   sdf = sdf.merge(coord_df,left_index=True,right_index=True)
 
   # Annotate all residues with variant labels
   if not vdf.empty: # skip to error-handling if no variants specified
-    sdf = sdf.merge(vdf[["pos","ref","alt","chain","dcode"]],how="left",on=["chain","pos"])
+    # pdb_pos has served its purpose in the variant DataFrame
+    # unp_pos will be used for the structure-variant merge
+    # Now allow the structure DataFrame to repopulate the pdb_pos column
+    sdf = sdf.merge(vdf[["unp_pos","ref","alt","chain","dcode"]],how="left",on=["chain","unp_pos"])
     # Ensure that no duplicate residues were introduced by the merge
-    sdf.drop_duplicates(["chain","pos","ref","alt","dcode"]).reset_index(drop=True)
+    sdf.drop_duplicates(["unp_pos","pdb_pos","chain","ref","alt","dcode"]).reset_index(drop=True)
 
   # Check that both variant categories are populated
   msg = None
@@ -771,7 +828,7 @@ def var2coord(s,p,n,c):
   print "Unique Variant Counts:"
   with open("%s_variant_counts.txt"%args.label,'wb') as fout:
     writer = csv.writer(fout,delimiter='\t')
-    cnts   = sdf.drop_duplicates(["pos","ref","alt","dcode"]).groupby("dcode").apply(lambda x: (x["dcode"].values[0],len(x)))
+    cnts   = sdf.drop_duplicates(["unp_pos","ref","alt","dcode"]).groupby("dcode").apply(lambda x: (x["dcode"].values[0],len(x)))
     for dcode,cnt in cnts[::-1]:
       writer.writerow([code2class[dcode],cnt])
       print "%20s:  %d"%(code2class[dcode],cnt)
@@ -906,8 +963,8 @@ def saveKplot(T,K,Kz,lce,hce,label="",w=False):
   sns.despine()
   ax.set_title("Ripley's K",fontsize=25)
   ax.legend(loc="lower right",fontsize=18)
-  plt.savefig("%s_%s_K_plot.pdf"%(sid,label),dpi=300,bbox_inches='tight')
-  plt.savefig("%s_%s_K_plot.png"%(sid,label),dpi=300,bbox_inches='tight')
+  plt.savefig("%s_K_plot.pdf"%args.label,dpi=300,bbox_inches='tight')
+  plt.savefig("%s_K_plot.png"%args.label,dpi=300,bbox_inches='tight')
   plt.close(fig)
 
 def d_plot(T,D,Dz,lce,hce,ax=None,w=False):
@@ -940,8 +997,8 @@ def saveDplot(T,D,Dz,lce,hce,label="",w=False):
   sns.despine()
   ax.set_title("Ripley's D",fontsize=25)
   ax.legend(loc="lower right",fontsize=18)
-  plt.savefig("%s_%s_D_plot.pdf"%(sid,label),dpi=300,bbox_inches='tight')
-  plt.savefig("%s_%s_D_plot.png"%(sid,label),dpi=300,bbox_inches='tight')
+  plt.savefig("%s_D_plot.pdf"%args.label,dpi=300,bbox_inches='tight')
+  plt.savefig("%s_D_plot.png"%args.label,dpi=300,bbox_inches='tight')
   plt.close(fig)
 
 def uniK(D,y,P=9999,label=""):
@@ -1075,6 +1132,10 @@ def prep_outdir(outdir):
 ## Begin Analysis ##
 
 # Load any user-provided variant sets
+if (args.pathogenic or args.neutral or args.variants) and \
+    not args.fasta:
+    msg = "FASTA files must be provided when analyzing user-specified variants.\n"
+    sys.stderr.write(msg); sys.exit(1)
 p = parse_variants(args.pathogenic)
 n = parse_variants(args.neutral)
 c = parse_variants(args.variants)
@@ -1084,8 +1145,20 @@ io = load_io(args) # Database IO object
 
 for sid,bio,cf in get_coord_files(args.entity,io):
 
-  # Read the coordinate file, align, etc
-  s,refid,chains = read_coord_file(cf,sid,bio,chain=args.chain,fasta=args.fasta,residues=args.use_residues)
+  # Check for existing results
+  if os.path.exists("%s/%s_variants.attr"%(args.outdir,args.label)):
+    # Do not overwrite unless specified by the user
+    if not args.overwrite:
+      msg = "\nStructure %s[%s] has been processed. Use --overwrite to overwrite.\n"%(sid,bio)
+      sys.stderr.write(msg); continue
+
+  # Read and renumber the coordinate file:
+  s_renum,_,_    = read_coord_file(cf,sid,bio,chain=args.chain,
+                                  fasta=args.fasta,residues=args.use_residues,
+                                  renumber=True)
+  # Read the coordinate file, align, etc. Do not renumber
+  s,refid,chains = read_coord_file(cf,sid,bio,chain=args.chain,
+                                  fasta=args.fasta,residues=args.use_residues)
 
   if args.chain and args.chain not in chains:
     msg = "\nERROR: Biological assembly %s does not contain chain %s.\n"%(bio,args.chain)
@@ -1120,40 +1193,69 @@ for sid,bio,cf in get_coord_files(args.entity,io):
   nflag = (sdf["dcode"]==0).sum() > 2
   pflag = (sdf["dcode"]==1).sum() > 2
 
-  # Write the current structure to the output directory
+  # Write the renumbered structure to the output directory
+  print "\nWriting renumbered PDB to file..."
+  io.set_structure(s_renum)
+  io.save("%s_%s_%s_renum.pdb"%(args.label,sid,bio))
+  # Write the original structure to the output directory
+  print "\nWriting original PDB to file..."
   io.set_structure(s)
   io.save("%s_%s_%s.pdb"%(args.label,sid,bio))
 
   ## Write pathogenic, neutral, and candidate Chimera attribute files
-  v = sdf[sdf["dcode"].notnull()].sort_values(by=["chain","pos"])
+  v = sdf[sdf["dcode"].notnull()].sort_values(by=["chain","unp_pos"])
   # Write attribute file with neutral variants
   if nflag:
+    # Original PDB numbering
     with open("%s_neutral.attr"%args.label,'wb') as fout:
       fout.write("attribute: neutral\n")
       fout.write("match mode: 1-to-1\n")
       fout.write("recipient: residues\n")
       for i,r in v.ix[v["dcode"]==0].iterrows():
-        fout.write("\t:%d.%s\t%.3f\n"%(r["pos"],r["chain"],1.0))
+        fout.write("\t:%d.%s\t%.3f\n"%(r["pdb_pos"],r["chain"],1.0))
+    # Renumbered PDB
+    with open("%s_renum_neutral.attr"%args.label,'wb') as fout:
+      fout.write("attribute: neutral\n")
+      fout.write("match mode: 1-to-1\n")
+      fout.write("recipient: residues\n")
+      for i,r in v.ix[v["dcode"]==0].iterrows():
+        fout.write("\t:%d.%s\t%.3f\n"%(r["unp_pos"],r["chain"],1.0))
   # Write attribute file with pathogenic variants
   if pflag:
+    # Original PDB numbering
     with open("%s_pathogenic.attr"%args.label,'wb') as fout:
       fout.write("attribute: pathogenic\n")
       fout.write("match mode: 1-to-1\n")
       fout.write("recipient: residues\n")
       for i,r in v.ix[v["dcode"]==1].iterrows():
-        fout.write("\t:%d.%s\t%.3f\n"%(r["pos"],r["chain"],1.0))
+        fout.write("\t:%d.%s\t%.3f\n"%(r["pdb_pos"],r["chain"],1.0))
+    # Renumbered PDB
+    with open("%s_renum_pathogenic.attr"%args.label,'wb') as fout:
+      fout.write("attribute: pathogenic\n")
+      fout.write("match mode: 1-to-1\n")
+      fout.write("recipient: residues\n")
+      for i,r in v.ix[v["dcode"]==1].iterrows():
+        fout.write("\t:%d.%s\t%.3f\n"%(r["unp_pos"],r["chain"],1.0))
   # Label as 0.5 if both neutral and pathogenic variants are mapped to a residue
   filterwarnings('ignore')
-  vt          = v.drop_duplicates(["chain","pos"])
-  vt["dcode"] = v.groupby(["chain","pos"]).apply(lambda x: np.mean(x["dcode"])).values
+  vt          = v.drop_duplicates(["chain","pdb_pos"])
+  vt["dcode"] = v.groupby(["chain","pdb_pos"]).apply(lambda x: np.mean(x["dcode"])).values
   resetwarnings()
   # Write attribute file with all variants
+  # Original PDB numbering
   with open("%s_variants.attr"%args.label,'wb') as fout:
     fout.write("attribute: pathogenicity\n")
     fout.write("match mode: 1-to-1\n")
     fout.write("recipient: residues\n")
     for i,r in vt.iterrows():
-      fout.write("\t:%d.%s\t%.3f\n"%(r["pos"],r["chain"],r["dcode"]))
+      fout.write("\t:%d.%s\t%.3f\n"%(r["pdb_pos"],r["chain"],r["dcode"]))
+  # Renumbered PDB
+  with open("%s_renum_variants.attr"%args.label,'wb') as fout:
+    fout.write("attribute: pathogenicity\n")
+    fout.write("match mode: 1-to-1\n")
+    fout.write("recipient: residues\n")
+    for i,r in vt.iterrows():
+      fout.write("\t:%d.%s\t%.3f\n"%(r["unp_pos"],r["chain"],r["dcode"]))
 
   # If requested, run the univariate K and bivariate D analyses
   if nflag and pflag and args.ripley:
@@ -1190,9 +1292,9 @@ for sid,bio,cf in get_coord_files(args.entity,io):
     plot_roc(fpr,tpr)
     plot_pr(rec,prec,pr_auc=pr_auc)
     res = np.c_[fpr,tpr]
-    np.savetxt("%s_%s_pathprox_roc.txt.gz"%(sid,args.label),res,"%.4g",'\t')
+    np.savetxt("%s_pathprox_roc.txt.gz"%args.label,res,"%.4g",'\t')
     res = np.c_[prec,rec]
-    np.savetxt("%s_%s_pathprox_pr.txt.gz"%(sid,args.label),res,"%.4g",'\t')
+    np.savetxt("%s_pathprox_pr.txt.gz"%args.label,res,"%.4g",'\t')
 
   # Calculate PathProx scores for all residues
   if nflag and pflag:
@@ -1226,69 +1328,94 @@ for sid,bio,cf in get_coord_files(args.entity,io):
   # Write scores to tab-delimited file
   # Neutral constraint
   if nflag:
-    c = sdf.sort_values(by="neutcon").drop_duplicates(["chain","pos"])
-    c = sdf.sort_values(by=["chain","pos"])
+    c = sdf.sort_values(by="neutcon").drop_duplicates(["chain","pdb_pos"])
+    c = sdf.sort_values(by=["chain","pdb_pos"])
     c.to_csv("%s_neutcon.txt"%args.label,sep='\t',header=True,index=False)
   # Pathogenic constraint
   if pflag:
-    c = sdf.sort_values(by="pathcon").drop_duplicates(["chain","pos"])
-    c = sdf.sort_values(by=["chain","pos"])
+    c = sdf.sort_values(by="pathcon").drop_duplicates(["chain","pdb_pos"])
+    c = sdf.sort_values(by=["chain","pdb_pos"])
     c.to_csv("%s_pathcon.txt"%args.label,sep='\t',header=True,index=False)
   # PathProx
   if nflag and pflag:
-    c = sdf.sort_values(by="pathprox").drop_duplicates(["chain","pos"])
-    c = sdf.sort_values(by=["chain","pos"])
+    c = sdf.sort_values(by="pathprox").drop_duplicates(["chain","pdb_pos"])
+    c = sdf.sort_values(by=["chain","pdb_pos"])
     c.to_csv("%s_pathprox.txt"%args.label,sep='\t',header=True,index=False)
 
   # Write scores to Chimera attribute file
   # Neutral constraint
   if nflag:
+    # Original PDB numbering
     with open("%s_neutcon.attr"%args.label,'wb') as fout:
       fout.write("attribute: neutcon\n")
       fout.write("match mode: 1-to-1\n")
       fout.write("recipient: residues\n")
       for i,r in c.iterrows():
-        fout.write("\t:%d.%s\t%.3f\n"%(r["pos"],r["chain"],r["neutcon_z"]))
+        fout.write("\t:%d.%s\t%.3f\n"%(r["pdb_pos"],r["chain"],r["neutcon_z"]))
+    # Renumbered PDB
+    with open("%s_renum_neutcon.attr"%args.label,'wb') as fout:
+      fout.write("attribute: neutcon\n")
+      fout.write("match mode: 1-to-1\n")
+      fout.write("recipient: residues\n")
+      for i,r in c.iterrows():
+        fout.write("\t:%d.%s\t%.3f\n"%(r["unp_pos"],r["chain"],r["neutcon_z"]))
   # Pathogenic constraint
   if pflag:
+    # Original PDB numbering
     with open("%s_pathcon.attr"%args.label,'wb') as fout:
       fout.write("attribute: pathcon\n")
       fout.write("match mode: 1-to-1\n")
       fout.write("recipient: residues\n")
       for i,r in c.iterrows():
-        fout.write("\t:%d.%s\t%.3f\n"%(r["pos"],r["chain"],r["pathcon_z"]))
+        fout.write("\t:%d.%s\t%.3f\n"%(r["pdb_pos"],r["chain"],r["pathcon_z"]))
+    # Renumbered PDB
+    with open("%s_renum_pathcon.attr"%args.label,'wb') as fout:
+      fout.write("attribute: pathcon\n")
+      fout.write("match mode: 1-to-1\n")
+      fout.write("recipient: residues\n")
+      for i,r in c.iterrows():
+        fout.write("\t:%d.%s\t%.3f\n"%(r["unp_pos"],r["chain"],r["pathcon_z"]))
   # PathProx
   if nflag and pflag:
+    # Original PDB numbering
     with open("%s_pathprox.attr"%args.label,'wb') as fout:
       fout.write("attribute: pathprox\n")
       fout.write("match mode: 1-to-1\n")
       fout.write("recipient: residues\n")
       for i,r in c.iterrows():
-        fout.write("\t:%d.%s\t%.3f\n"%(r["pos"],r["chain"],r["pathprox"]))
+        fout.write("\t:%d.%s\t%.3f\n"%(r["pdb_pos"],r["chain"],r["pathprox"]))
+    # Renumbered PDB
+    with open("%s_renum_pathprox.attr"%args.label,'wb') as fout:
+      fout.write("attribute: pathprox\n")
+      fout.write("match mode: 1-to-1\n")
+      fout.write("recipient: residues\n")
+      for i,r in c.iterrows():
+        fout.write("\t:%d.%s\t%.3f\n"%(r["unp_pos"],r["chain"],r["pathprox"]))
 
   # Report scores for candidate variants
   if args.variants:
     print "\nNeutral constraint scores for candidate missense variants:"
-    print sdf.ix[sdf["dcode"]<0,["pos","ref","alt","neutcon"]].sort_values( \
-          by=["neutcon","pos"],ascending=[False,True]).drop_duplicates(["pos"]).to_string(index=False)
+    print sdf.ix[sdf["dcode"]<0,["unp_pos","ref","alt","neutcon"]].sort_values( \
+          by=["neutcon","unp_pos"],ascending=[False,True]).groupby(["unp_pos"]).apply(np.mean).to_string(index=False)
     print "\nPathogenic constraint scores for candidate missense variants:"
-    print sdf.ix[sdf["dcode"]<0,["pos","ref","alt","pathcon"]].sort_values( \
-          by=["pathcon","pos"],ascending=[False,True]).drop_duplicates(["pos"]).to_string(index=False)
+    print sdf.ix[sdf["dcode"]<0,["unp_pos","ref","alt","pathcon"]].sort_values( \
+          by=["pathcon","unp_pos"],ascending=[False,True]).groupby(["unp_pos"]).apply(np.mean).to_string(index=False)
     print "\nPathProx scores for candidate missense variants:"
-    print sdf.ix[sdf["dcode"]<0,["pos","ref","alt","pathprox"]].sort_values( \
-          by=["pathprox","pos"],ascending=[False,True]).drop_duplicates(["pos"]).to_string(index=False)
+    print sdf.ix[sdf["dcode"]<0,["unp_pos","ref","alt","pathprox"]].sort_values( \
+          by=["pathprox","unp_pos"],ascending=[False,True]).groupby(["unp_pos"]).apply(np.mean).to_string(index=False)
 
   # Generating structural images
   print "\nVisualizing with Chimera (this may take a while)..."
-  pdbf   = "%s_%s_%s.pdb"%(args.label,sid,bio)
-  nvattrf = "%s_neutral.attr"%args.label    # neutral variants
-  pvattrf = "%s_pathogenic.attr"%args.label # pathogenic variants
-  avattrf = "%s_variants.attr"%args.label   # all variants
-  ncattrf = "%s_neutcon.attr"%args.label    # neutral constraint
-  pcattrf = "%s_pathcon.attr"%args.label    # pathogenic constraint
-  ppattrf = "%s_pathprox.attr"%args.label   # path prox
-  out    = args.label
-  params = [pdbf,nvattrf,pvattrf,avattrf,ncattrf,pcattrf,ppattrf,out]
+  # pdbf   = "%s_%s_%s.pdb"%(args.label,sid,bio)
+  # nvattrf = "%s_neutral.attr"%args.label    # neutral variants
+  # pvattrf = "%s_pathogenic.attr"%args.label # pathogenic variants
+  # avattrf = "%s_variants.attr"%args.label   # all variants
+  # ncattrf = "%s_neutcon.attr"%args.label    # neutral constraint
+  # pcattrf = "%s_pathcon.attr"%args.label    # pathogenic constraint
+  # ppattrf = "%s_pathprox.attr"%args.label   # path prox
+  # out    = args.label
+  # params = [pdbf,nvattrf,pvattrf,avattrf,ncattrf,pcattrf,ppattrf,out]
+  params = [args.label,sid,str(bio)]
   # Run the Chimera visualization script
   script = '"../../scripts/pathvis.py %s"'%' '.join(params)
   cmd    = "TEMP=$PYTHONPATH; unset PYTHONPATH; chimera --nogui --silent --script %s; export PYTHONPATH=$TEMP"%script
@@ -1296,6 +1423,8 @@ for sid,bio,cf in get_coord_files(args.entity,io):
   if platform.system() == 'Darwin':
     cmd  = "TEMP=$PYTHONPATH; unset PYTHONPATH; chimera --silent --script %s; export PYTHONPATH=$TEMP"%script
   try:
+    print "\nRunning Chimera script:"
+    print "\n%s\n"%cmd
     status = os.system(cmd)
     if status:
       raise Exception("Chimera process returned non-zero exit status.")

@@ -1,6 +1,9 @@
 #!/bin/sh
 
-# Pull the UniProt primary AC -> dbref idmapping
+# Pull the complete UniProt ID Mapping
+wget -N --tries=100 --timeout=100000 ftp://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/idmapping/by_organism/HUMAN_9606_idmapping.dat.gz
+
+# Pull the limited UniProt primary AC -> dbref idmapping
 wget -N --tries=100 --timeout=100000 ftp://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/idmapping/by_organism/HUMAN_9606_idmapping_selected.tab.gz
 # Decompress the idmapping
 gunzip -f HUMAN_9606_idmapping_selected.tab.gz

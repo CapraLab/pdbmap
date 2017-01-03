@@ -14,4 +14,4 @@ if [ -z "$2" ]; then
 else
   SUBMITDATE="$2";
 fi
-python2.7 multiK.py -a ../data/multiK/clinvar.structfile -b ../data/multiK/exac.structfile --outdir ../results/multiK_analysis_$SUBMITDATE/clinvar-exac/ --label=clinvar-exac --ppart $1 --ppidx ${SLURM_ARRAY_TASK_ID}
+python2.7 multiK.py -a ../data/multiK/clinvar.structfile -b ../data/multiK/exac_missense.structfile --outdir ../results/multiK_analysis_$SUBMITDATE/clinvar-exac/ --png --label=clinvar-exac --ppart $1 --ppidx ${SLURM_ARRAY_TASK_ID}

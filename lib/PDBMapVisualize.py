@@ -544,10 +544,10 @@ if __name__ == '__main__':
   # Export the scene
   rc("save %(res_dir)s/%(structid)s_biounit%(biounit)d_%(anno)s_%(vtype)s.py"%params)
   # Export the image
-  rc("copy file %(res_dir)s/%(structid)s_biounit%(biounit)d_struct_%(anno)s_%(vtype)s.png width 1600 height 1600 units points dpi 72"%params)
+  rc("copy file %(res_dir)s/%(structid)s_biounit%(biounit)d_struct_%(anno)s_%(vtype)s.png width 1600 height 1600 units points dpi 300"%params)
   # remove the structure, leaving only the variants
   rc("bonddisplay off")
-  rc("copy file %(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(anno)s_%(vtype)s.png width 1600 height 1600 units points dpi 72"%params)
+  rc("copy file %(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(anno)s_%(vtype)s.png width 1600 height 1600 units points dpi 300"%params)
   rc("close all")
   rc("stop now")
   # Export the movie 

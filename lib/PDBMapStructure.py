@@ -153,8 +153,15 @@ class PDBMapStructure(Structure):
         return None
 
   def align2refseq(self,sid,refseq):
+    if not isinstance(refseq,dict):
+      # Assume sequence applies to all chains
+      refseq = dict((c.id,refseq) for c in self.get_chains())
     for c in self.get_chains():
-      refdict = dict((i+1,(r,"NA",0,0,0)) for i,r in enumerate(refseq))
+      if c.id not in refseq:
+        msg = "\nWARNING: No reference sequence provided for chain %s alignment.\n"%c.id
+        sys.stderr.write(msg)
+        continue
+      refdict = dict((i+1,(r,"NA",0,0,0)) for i,r in enumerate(refseq[c.id]))
       c.transcript = PDBMapTranscript("ref","ref","ref",refdict)
       c.alignment  = PDBMapAlignment(c,c.transcript)
       self.transcripts.append(c.transcript)

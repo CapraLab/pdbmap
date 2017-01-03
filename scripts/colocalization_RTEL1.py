@@ -46,6 +46,8 @@ from sklearn.metrics import average_precision_score
 resetwarnings()
 
 # Plotting
+import matplotlib as mpl
+mpl.use('Agg') 
 import matplotlib.pyplot as plt
 # from cycler import cycler
 ccycle = ["darkred","darkblue","orange","forestgreen","orchid","steelblue"]
@@ -616,8 +618,9 @@ def plot_hist(nscores,pscores,cscores,title,label):
   for i,s in enumerate(cscores):
     plt.axvline(s,label=label[i],linewidth=4,color=ccycle[i%len(ccycle)])
   plt.legend(loc="upper right")
-  plt.savefig("%s_%s_hist.pdf"%(args.label,title.replace(' ','_')),dpi=300)
-  plt.savefig("%s_%s_hist.png"%(args.label,title.replace(' ','_')),dpi=300)
+  plt.savefig("%s_%s_hist.pdf"%(args.label,title.replace(' ','_')),bbox_inches='tight',dpi=300)
+  plt.savefig("%s_%s_hist.svg"%(args.label,title.replace(' ','_')),bbox_inches='tight',dpi=300)
+  plt.savefig("%s_%s_hist.png"%(args.label,title.replace(' ','_')),bbox_inches='tight',dpi=300)
   plt.close(fig)
 
 def plot_roc(fpr,tpr,color='k',label='',fig=None,save=True):
@@ -627,19 +630,20 @@ def plot_roc(fpr,tpr,color='k',label='',fig=None,save=True):
     if not fig:
       fig = plt.figure(figsize=(7,7))
       # plt.title("%s ROC"%label)
-      plt.plot([0,1],[0,1],'k--')
-      plt.xlim([0.,1.])
-      plt.ylim([0.,1.])
-      plt.xlabel("False Positive Rate")
-      plt.ylabel("True Positive Rate")
+      plt.plot([0,1],[0,1],color='grey',linestyle='-')
+      plt.xlim([0.,1.05])
+      plt.ylim([0.,1.05])
+      plt.xlabel("False Positive Rate",fontsize=16)
+      plt.ylabel("True Positive Rate",fontsize=16)
     l  = "%s (AUC: %5.2f)"%(label,roc_auc)
     ls = '-' if label=="PathProx" else '--'
     plt.plot(fpr,tpr,label=l,ls=ls,linewidth=3,c=color)
     sns.despine()
     if save:
       plt.legend(loc="lower right",fontsize=14)
-      plt.savefig("%s_%s_roc.pdf"%(args.label,label),dpi=300)
-      plt.savefig("%s_%s_roc.png"%(args.label,label),dpi=300)
+      plt.savefig("%s_%s_roc.pdf"%(args.label,label),bbox_inches='tight',dpi=300)
+      plt.savefig("%s_%s_roc.svg"%(args.label,label),bbox_inches='tight',dpi=300)
+      plt.savefig("%s_%s_roc.png"%(args.label,label),bbox_inches='tight',dpi=300)
       plt.close(fig)
   return fig
 
@@ -650,18 +654,19 @@ def plot_pr(rec,prec,color='k',pr_auc=None,label='',fig=None,save=True):
     if not fig:
       fig = plt.figure(figsize=(7,7))
       # plt.title("%s PR"%label)
-      plt.xlim([0.,1.])
-      plt.ylim([0.,1.])
-      plt.xlabel("Recall")
-      plt.ylabel("Precision")
+      plt.xlim([0.,1.05])
+      plt.ylim([0.,1.05])
+      plt.xlabel("Recall",fontsize=16)
+      plt.ylabel("Precision",fontsize=16)
     l = "%s (AUC: %5.2f)"%(label,pr_auc)
     ls = '-' if label=="PathProx" else '--'
     plt.plot(rec,prec,label=l,ls=ls,linewidth=3,c=color)
     sns.despine()
     if save:
       plt.legend(loc="lower left",fontsize=14)
-      plt.savefig("%s_%s_pr.pdf"%(args.label,label),dpi=300)
-      plt.savefig("%s_%s_pr.png"%(args.label,label),dpi=300)
+      plt.savefig("%s_%s_pr.pdf"%(args.label,label),bbox_inches='tight',dpi=300)
+      plt.savefig("%s_%s_pr.svg"%(args.label,label),bbox_inches='tight',dpi=300)
+      plt.savefig("%s_%s_pr.png"%(args.label,label),bbox_inches='tight',dpi=300)
       plt.close(fig)
   return fig
 
@@ -1007,6 +1012,9 @@ for sid,bio,cf in flist:
   print "Beginning analyses...\n"
 
   pal = list(sns.color_palette("Set1",n_colors=7,desat=.5))[::-1]
+  # Replace yellow/gold with darkred and darkred with black
+  pal[1] = pal[6]
+  pal[6] = 'k'
   # pal = ["darkred","darkblue","orange","forestgreen","orchid","steelblue"][::-1]
 
   ## BLOSUM62 Prediction
@@ -1232,8 +1240,9 @@ for sid,bio,cf in flist:
     t.set_ha("right")
     t.set_position((650,0))
   # plt.title("Comparison of Pathogenicity Prediction Methods (ROC)")
-  plt.savefig("%s_PathProx_Comparison_roc.pdf"%args.label,dpi=300)
-  plt.savefig("%s_PathProx_Comparison_roc.png"%args.label,dpi=300)
+  plt.savefig("%s_PathProx_Comparison_roc.pdf"%args.label,bbox_inches='tight',dpi=300)
+  plt.savefig("%s_PathProx_Comparison_roc.svg"%args.label,bbox_inches='tight',dpi=300)
+  plt.savefig("%s_PathProx_Comparison_roc.png"%args.label,bbox_inches='tight',dpi=300)
   plt.close(fig)
 
   ## Plot a comparison PR curves for all predictors
@@ -1252,8 +1261,9 @@ for sid,bio,cf in flist:
     t.set_ha("right")
     t.set_position((650,0))
   # plt.title("Comparison of Pathogenicity Prediction Methods (PR)")
-  plt.savefig("%s_PathProx_Comparison_pr.pdf"%args.label,dpi=300)
-  plt.savefig("%s_PathProx_Comparison_pr.png"%args.label,dpi=300)
+  plt.savefig("%s_PathProx_Comparison_pr.pdf"%args.label,bbox_inches='tight',dpi=300)
+  plt.savefig("%s_PathProx_Comparison_pr.svg"%args.label,bbox_inches='tight',dpi=300)
+  plt.savefig("%s_PathProx_Comparison_pr.png"%args.label,bbox_inches='tight',dpi=300)
   plt.close(fig)
 
   ## Output the fully annotated data to file

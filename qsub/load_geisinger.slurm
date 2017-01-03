@@ -23,7 +23,7 @@
 #=============================================================================#
 
 cd ~/pdbmap # move into pdbmap main directory
-fbase="data/geisinger/chr"
+fbase="data/geisinger/40kqd5/chr"
 ftail="_40kqd5VariantsTable.aligned.vcf"
 
 # Syntax for autosomal chromosomes

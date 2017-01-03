@@ -306,8 +306,8 @@ class PDBMapParser(PDBParser):
     return s
 
   def get_model(self,model_summary,fname,unp=None):
-    unp = unp if unp else model_summary[17]
-    modelid  = model_summary[1]   # Extract the ModBase model ID
+    unp = unp if unp else model_summary[19]
+    modelid  = model_summary[3] # Extract the ModBase model ID
     try:
       ext = os.path.basename(fname).split('.')[-1]
       if ext == 'gz':

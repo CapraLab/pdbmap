@@ -345,13 +345,13 @@ class PDBMapData():
                   for i in range(len(header))]
     # Include as many non-TEXT columns in primary key as allowed (16)
     # Additional INFO (like END) may justify duplicates within the standard VCF fields
-    query = "CREATE TABLE IF NOT EXISTS pdbmap_supp.%s (%s, PRIMARY KEY(%s))"
+    query = "CREATE TABLE IF NOT EXISTS %s (%s, PRIMARY KEY(%s))"
     pk = ','.join([h for i,h in enumerate(header) if types[i]!="TEXT"][:16])
     query = query%(self.dname,', '.join(table_def),pk)
     # Create the table
     io.secure_command(query)
     # Populate the table with contents of VCF file
-    query_head  = "INSERT IGNORE INTO pdbmap_supp.%s "%self.dname
+    query_head  = "INSERT IGNORE INTO %s "%self.dname
     query_head += "(%s) VALUES "%','.join(['`%s`'%h for h in header])
     query = query_head
     def record2row(record,infos):#,csq_header=None):
@@ -433,13 +433,13 @@ class PDBMapData():
           else:
             types.insert(i,"VARCHAR(250)") # reasonably large varchar
     table_def = ["%s %s"%(header[i],types[i]) for i in range(len(header))]
-    query = "DROP TABLE IF EXISTS pdbmap_supp.%s"
+    query = "DROP TABLE IF EXISTS %s"
     query = query%self.dname
     io.secure_command(query)
-    query = "CREATE TABLE IF NOT EXISTS pdbmap_supp.%s (%s, PRIMARY KEY(chr,start,end,name))"
+    query = "CREATE TABLE IF NOT EXISTS %s (%s, PRIMARY KEY(chr,start,end,name))"
     query = query%(self.dname,','.join(table_def))
     io.secure_command(query)
-    query  = "LOAD DATA LOCAL INFILE '%s' INTO TABLE pdbmap_supp.%s "%(fname,self.dname)
+    query  = "LOAD DATA LOCAL INFILE '%s' INTO TABLE %s "%(fname,self.dname)
     if delim != '\t':
       query += r"FIELDS TERMINATED BY '%s'"%delim
     else:
@@ -448,10 +448,10 @@ class PDBMapData():
     io.secure_command(query)
     # Make any necessary indexing conversions
     if indexing == 'ucsc':
-      query = "UPDATE IGNORE pdbmap_supp.%s SET start=start+1, end=end+1 ORDER BY start,end DESC"%self.dname
+      query = "UPDATE IGNORE %s SET start=start+1, end=end+1 ORDER BY start,end DESC"%self.dname
       io.secure_command(query)
     elif indexing == 'ensembl':
-      query = "UPDATE IGNORE pdbmap_supp.%s SET end=end+1 ORDER BY start,end DESC"%self.dname
+      query = "UPDATE IGNORE %s SET end=end+1 ORDER BY start,end DESC"%self.dname
       io.secure_command(query)
     if vepprep:
     # Retain only rsID if not VEP-default format

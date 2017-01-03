@@ -214,30 +214,35 @@ def pstat(Pvec):
 
 def k_plot(T,K,Kz,lce,hce,ax=None,w=False):
   if not ax:
-    fig,ax = plt.subplots(1,1,figsize=(20,7),dpi=300)
+    fig,ax = plt.subplots(1,1,figsize=(15,3),dpi=300)
   # 95% Confidence interval for permutation K values
-  ax.fill_between(T,lce[0],hce[0],alpha=0.2,
-                      edgecolor="grey",facecolor="grey",
-                      interpolate=True,antialiased=True)
+  ax.fill_between(T,lce[0],hce[0],alpha=.3,
+                      edgecolor="k",facecolor="k",
+                      interpolate=True,antialiased=True,zorder=1)
   # Plot the integrated region between observed and permuted K values
   med = (hce[0]+lce[0])/2.
-  ax.scatter(T,med,s=50,color="k",edgecolor='white',lw=1,label="Median Permutation K")
+  ax.scatter(T,med,s=50,color="k",edgecolor='white',lw=1,label="Median Permutation K",zorder=3)
   ax.fill_between(T,K,med,alpha=0.2,
                       edgecolor="red",facecolor="red",
-                      interpolate=True,antialiased=True)
+                      interpolate=True,antialiased=True,zorder=2)
   # Plot the observed K values
-  ax.scatter(T,K,s=50,color="red",edgecolor='white',lw=1,label="Observed K")
-  ax.set_xlabel("Distance Threshold",fontsize=16)
-  ax.set_ylabel("K",fontsize=16,rotation='horizontal')
+  ax.scatter(T,K,s=50,color="red",edgecolor='white',lw=1,label="Observed K",zorder=4)
+  ax.set_xlabel("Distance Threshold (t)",fontsize=16,color="black")
+  ax.set_ylabel("K",fontsize=16,rotation='horizontal',color="black",labelpad=15)
   ax.set_xlim([min(T),max(T)])
   ax.set_ylim([-0.05,1.05])
+  # ax.set_xticks(range(10,60,10))
+  ax.set_xticks([])
+  ax.set_yticks(np.arange(0,1.2,0.2))
+  # ax.set_xticklabels(range(10,60,10),fontsize=14,color="black")
+  ax.set_yticklabels(np.arange(0,1.2,0.2),fontsize=14,color="black")
   # Add a vertical line a the most extreme threshold
   dK = np.nanmax(np.abs(Kz),axis=0) # studentized maximum K
   t  = np.nanargmax(np.abs(Kz),axis=0) # t where studentized K is maximized
   # dK = np.nanmax([K-hce,lce-K],axis=0) # directional K-95%
   # t  = np.nanargmax(dK) # t where K is most outside the 95% interval
   T,K = T[t],K[t]
-  ax.axvline(T,color='k',lw=2,ls="dashed",label="Most Significant K: t=%.0f"%T)
+  # ax.axvline(T,color='k',lw=2,ls="dashed",label="Most Significant K: t=%.0f"%T)
   sns.despine()
   return ax
 
@@ -294,11 +299,10 @@ def sequenceK(sid,chain,df):
     print "\nWeighted computation time: %.2fs\n"%(time.time()-t0)
 
   ## Save the multi-distance plots
-  fig,ax = plt.subplots(1,1,figsize=(20,7),dpi=300)
+  fig,ax = plt.subplots(1,1,figsize=(15,3),dpi=300)
   k_plot(T,K,Kz,lce,hce,ax,w=False)
   if W:
     k_plot(T,wK,wKz,wlce,whce,ax,w=True)
-  # ax.set_title("Ripley's K-Function (Sequence)",fontsize=25)
   ax.legend(loc="lower right",fontsize=14)
   if args.pdf:
     plt.savefig("%s/%s-%s_%s_sequence_K_plot.svg"%(args.outdir,sid,chain,args.aname),dpi=300,bbox_inches='tight')
@@ -427,14 +431,14 @@ def structureK(sid,chain,df):
     print "\nWeighted computation time: %.2fs\n"%(time.time()-t0)
 
   ## Save the multi-distance plots
-  fig,ax = plt.subplots(1,1,figsize=(15,5),dpi=300)
+  fig,ax = plt.subplots(1,1,figsize=(15,3),dpi=300)
   k_plot(T,K,Kz,lce,hce,ax,w=False)
   if W:
     k_plot(T,wK,wKz,wlce,whce,ax,w=True)
-  # ax.set_title("Ripley's K-Function",fontsize=25)
   ax.legend(loc="lower right",fontsize=16)
   if args.pdf:
     plt.savefig("%s/%s-%s_%s_K_plot.pdf"%(args.outdir,sid,chain,args.aname),dpi=300,bbox_inches='tight')
+    plt.savefig("%s/%s-%s_%s_K_plot.svg"%(args.outdir,sid,chain,args.aname),dpi=300,bbox_inches='tight')
   if args.png:
     plt.savefig("%s/%s-%s_%s_K_plot.png"%(args.outdir,sid,chain,args.aname),dpi=300,bbox_inches='tight')
   plt.close(fig)

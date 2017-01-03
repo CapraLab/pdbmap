@@ -46,7 +46,7 @@ c = con.cursor()
 c.execute("SET GLOBAL max_allowed_packet=512000000")
 c.close()
 
-# Parse the XML files
+# Parse the split XML files
 for xmlfile in glob.glob("%s/*.xml.gz"%args.xmldir.rstrip('/')):
   print "Parsing %s..."%xmlfile,
   parser = etree.XMLParser(remove_blank_text=True)
