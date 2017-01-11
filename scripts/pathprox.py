@@ -240,7 +240,7 @@ def get_refseq(fasta):
     refid     = refid.split()[0]
     return unp,refid,''.join([l.strip() for l in fin.readlines() if l[0]!=">"])
 
-def query_alignment(sid,bio):
+def query_alignment(sid):
   """ Query the reference->observed alignment from PDBMap """
   s   = "SELECT unp,trans_seqid,b.chain,chain_seqid,b.rescode as pdb_res,d.rescode as trans_res from Alignment a "
   s  += "INNER JOIN Residue b ON a.label=b.label AND a.structid=b.structid "
@@ -250,9 +250,9 @@ def query_alignment(sid,bio):
   s  += "AND b.model=c.model AND b.chain=c.chain "
   s  += "INNER JOIN Transcript d ON a.label=d.label AND a.transcript=d.transcript "
   s  += "AND a.trans_seqid=d.seqid "
-  w   = "WHERE a.label=%s AND b.structid=%s AND b.biounit=%s AND b.model=0"
+  w   = "WHERE a.label=%s AND b.structid=%s AND b.biounit=0 AND b.model=0"
   q   = s+w
-  res = list(io.secure_query(q,(args.slabel,sid,bio)))
+  res = list(io.secure_query(q,(args.slabel,sid)))
   unp = res[0]["unp"]
   # chain,chain_seqid -> ref_seqid,rescode
   chains = set([r["chain"] for r in res])
@@ -260,14 +260,19 @@ def query_alignment(sid,bio):
               (r["trans_seqid"],r["pdb_res"])) for r in res)
   return unp,aln
 
-def structure_lookup(io,sid,bio=True):
+def structure_lookup(io,sid,bio=True,chain=None):
   """ Returns coordinate files for a PDB ID """
   q    = "SELECT DISTINCT biounit FROM Chain "
-  q   += "WHERE label=%s AND structid=%s AND biounit>0"
-  res  = [r[0] for r in io.secure_query(q,(io.slabel,sid.upper(),),
+  q   += "WHERE label=%s AND structid=%s AND biounit>0 "
+  if chain:
+    q += "AND chain=%s"
+    res  = [r[0] for r in io.secure_query(q,(io.slabel,sid.upper(),chain),
                                           cursorclass='Cursor')]
-  if bio and res: # Biological assemblies were found
-    print "\nUsing the first biological assembly for %s"%sid
+  else:
+    res  = [r[0] for r in io.secure_query(q,(io.slabel,sid.upper()),
+                                          cursorclass='Cursor')]
+  if bio and res: # Biological assemblies were requested and found
+    print "Using the first biological assembly for %s."%sid
     flist = []
     loc   = "%s/biounit/coordinates/all/%s.pdb%d.gz"
     for b in res:
@@ -280,7 +285,7 @@ def structure_lookup(io,sid,bio=True):
     return flist
   else:   # No biological assemblies were found; Using asymmetric unit
     if bio:
-      print "\nNo biological assembly found. Using the asymmetric unit for %s"%sid
+      print "Using the asymmetric unit for %s."%sid
     loc = "%s/structures/all/pdb/pdb%s.ent.gz"
     f   = loc%(args.pdb_dir,sid.lower())
     if not os.path.exists(f):
@@ -347,6 +352,8 @@ def query_1kg(io,sid,refid=None,chains=None):
   """ Query natural variants (1000G) from PDBMap """
   if not refid:
     s,w = default_var_query()
+    if chains:
+      w += "AND chain in (%s) "%','.join(["'%s'"%c for c in chains])
     f   = (args.slabel,"1kg3",sid)
     c   = ["unp_pos","ref","alt","chain"]
   else:
@@ -367,6 +374,8 @@ def query_exac(io,sid,refid=None,chains=None):
   """ Query natural variants (ExAC) from PDBMap """
   if not refid:
     s,w = default_var_query()
+    if chains:
+      w += "AND chain in (%s) "%','.join(["'%s'"%c for c in chains])
     f   = (args.slabel,"exac",sid)
     c   = ["unp_pos","ref","alt","chain"]
   else:
@@ -387,6 +396,8 @@ def query_benign(io,sid,refid=None,chains=None):
   """ Query benign variants (ClinVar) from PDBMap """
   if not refid:
     s,w = default_var_query()
+    if chains:
+      w += "AND chain in (%s) "%','.join(["'%s'"%c for c in chains])
     f   = (args.slabel,"clinvar",sid)
     c   = ["unp_pos","ref","alt","chain"]
   else:
@@ -410,6 +421,8 @@ def query_pathogenic(io,sid,refid=None,chains=None):
   """ Query pathogenic variants (ClinVar) from PDBMap """
   if not refid:
     s,w = default_var_query()
+    if chains:
+      w += "AND chain in (%s) "%','.join(["'%s'"%c for c in chains])
     f   = (args.slabel,"clinvar",sid)
     c   = ["unp_pos","ref","alt","chain"]
   else:
@@ -433,6 +446,8 @@ def query_drug(io,sid,refid=None,chains=None):
   """ Query drug response-affecting variants from PDBMap """
   if not refid:
     s,w = default_var_query()
+    if chains:
+      w += "AND chain in (%s) "%','.join(["'%s'"%c for c in chains])
     f   = (args.slabel,"clinvar",sid)
     c   = ["unp_pos","ref","alt","chain"]
   else:
@@ -456,6 +471,8 @@ def query_somatic(io,sid,refid=None,chains=None):
   """ Query somatic variants (Cosmic) from PDBMap """
   if not refid:
     s,w = default_var_query()
+    if chains:
+      w += "AND chain in (%s) "%','.join(["'%s'"%c for c in chains])
     f   = (args.slabel,"cosmic",sid)
     c   = ["unp_pos","ref","alt","chain"]
   else:
@@ -478,6 +495,7 @@ def query_somatic(io,sid,refid=None,chains=None):
 def get_coord_files(entity,io):
   """ Returns the relevant coordinate file or None if no file found """
   # Check if the entity is a filename. If so, assume PDB/ENT format
+  global unp_flag
   if os.path.isfile(entity):
     exts = 1 + int(os.path.basename(entity).split('.')[-1]=='gz')
     sid  = '.'.join(os.path.basename(entity).split('.')[:-exts]) 
@@ -490,8 +508,10 @@ def get_coord_files(entity,io):
     elif etype == "model":
       return model_lookup(io,entity)
     elif etype == "unp":
+      unp_flag = True
       return uniprot_lookup(io,entity)
     elif etype: # HGNC returned a UniProt ID
+      unp_flag = True
       print "HGNC: %s => UniProt: %s..."%(entity,etype)
       return uniprot_lookup(io,etype)
     else:
@@ -508,7 +528,7 @@ def read_coord_file(cf,sid,bio,chain,fasta=None,residues=None,renumber=False):
     if bio < 0:
       msg = "FASTA files must be provided for user-defined protein models\n"
       sys.stderr.write(msg); sys.exit(1)
-    unp,aln = query_alignment(sid,bio)
+    unp,aln = query_alignment(sid)
     refid = refseq = None
 
   print "\nReading coordinates from %s..."%cf
@@ -543,7 +563,7 @@ def read_coord_file(cf,sid,bio,chain,fasta=None,residues=None,renumber=False):
   if not refseq:
     # Manually create a PDBMapAlignment from the queried alignment
     for c in s.get_chains():
-      print "\nAligning chain %s"%c.id
+      print "Aligning chain %s"%c.id
       refdict = dict((val[0],(val[1],"NA",0,0,0)) for key,val in aln.iteritems() if key[0]==c.id)
       c.transcript = PDBMapTranscript("ref","ref","ref",refdict)
       c.alignment  = PDBMapAlignment(c,c.transcript)
@@ -681,8 +701,8 @@ def plot_roc(fpr,tpr,fig=None,save=True):
   sns.despine()
   if save:
     plt.legend(loc="lower right",fontsize=12)
-    plt.savefig("%s_PathProx_roc.pdf"%(args.label),dpi=300)
-    plt.savefig("%s_PathProx_roc.png"%(args.label),dpi=300)
+    plt.savefig("%s_pathprox_roc.pdf"%(args.label),dpi=300)
+    plt.savefig("%s_pathprox_roc.png"%(args.label),dpi=300)
     plt.close(fig)
   return fig
 
@@ -700,8 +720,8 @@ def plot_pr(rec,prec,pr_auc,fig=None,save=True):
   sns.despine()
   if save:
     plt.legend(loc="lower left",fontsize=12)
-    plt.savefig("%s_PathProx_pr.pdf"%(args.label),dpi=300)
-    plt.savefig("%s_PathProx_pr.png"%(args.label),dpi=300)
+    plt.savefig("%s_pathprox_pr.pdf"%(args.label),dpi=300)
+    plt.savefig("%s_pathprox_pr.png"%(args.label),dpi=300)
     plt.close(fig)
   return fig
 
@@ -792,6 +812,12 @@ def var2coord(s,p,n,c):
     sdf = sdf.merge(vdf[["unp_pos","ref","alt","chain","dcode"]],how="left",on=["chain","unp_pos"])
     # Ensure that no duplicate residues were introduced by the merge
     sdf.drop_duplicates(["unp_pos","pdb_pos","chain","ref","alt","dcode"]).reset_index(drop=True)
+
+  msg = None
+  if vdf.empty:
+    msg = "\nERROR: None of the provided variants mapped to residues covered by this structure.\n"
+  if msg:
+    sys.stderr.write(msg); sys.exit(1)
 
   # Check that both variant categories are populated
   msg = None
@@ -963,8 +989,8 @@ def saveKplot(T,K,Kz,lce,hce,label="",w=False):
   sns.despine()
   ax.set_title("Ripley's K",fontsize=25)
   ax.legend(loc="lower right",fontsize=18)
-  plt.savefig("%s_K_plot.pdf"%args.label,dpi=300,bbox_inches='tight')
-  plt.savefig("%s_K_plot.png"%args.label,dpi=300,bbox_inches='tight')
+  plt.savefig("%s_%s_K_plot.pdf"%(args.label,label),dpi=300,bbox_inches='tight')
+  plt.savefig("%s_%s_K_plot.png"%(args.label,label),dpi=300,bbox_inches='tight')
   plt.close(fig)
 
 def d_plot(T,D,Dz,lce,hce,ax=None,w=False):
@@ -1136,14 +1162,28 @@ if (args.pathogenic or args.neutral or args.variants) and \
     not args.fasta:
     msg = "FASTA files must be provided when analyzing user-specified variants.\n"
     sys.stderr.write(msg); sys.exit(1)
-p = parse_variants(args.pathogenic)
-n = parse_variants(args.neutral)
-c = parse_variants(args.variants)
 
 # If requested, load database variant sets
 io = load_io(args) # Database IO object
 
+unp_flag,olabel = False,args.label
+curdir = os.getcwd() # Note the current directory
 for sid,bio,cf in get_coord_files(args.entity,io):
+
+  # Begin each analysis in the original directory
+  if os.getcwd() != curdir:
+    os.chdir(curdir)
+
+  # Reinitialize variant sets for each structure
+  p = parse_variants(args.pathogenic)
+  n = parse_variants(args.neutral)
+  c = parse_variants(args.variants)
+
+  if unp_flag:
+    tlabel = olabel.split('_')
+    tlabel.insert(1,sid)
+    args.label = '_'.join(tlabel)
+    print "\nSub-analysis label set to %s"%args.label
 
   # Check for existing results
   if os.path.exists("%s/%s_variants.attr"%(args.outdir,args.label)):
@@ -1160,10 +1200,13 @@ for sid,bio,cf in get_coord_files(args.entity,io):
   s,refid,chains = read_coord_file(cf,sid,bio,chain=args.chain,
                                   fasta=args.fasta,residues=args.use_residues)
 
+  # Check that any user-specified chain is present in the structure
   if args.chain and args.chain not in chains:
     msg = "\nERROR: Biological assembly %s does not contain chain %s.\n"%(bio,args.chain)
     sys.stderr.write("%s\n"%msg); continue
 
+  # Reduce the considered chains to the user-specified chain if present
+  chains = chains if not args.chain else [args.chain]
 
   # If user-supplied variants did not include chain specifiers, add the
   # user-specified or inferred chain IDs to each variant as necessary.
@@ -1261,6 +1304,11 @@ for sid,bio,cf in get_coord_files(args.entity,io):
   if nflag and pflag and args.ripley:
     print "\nCalculating Ripley's univariate K and bivariate D..."
     pK,pKt,nK,nKt,D,Dt = ripley(sdf,args.permutations)
+    # Write Ripley's K/D results to file
+    with open("%s_ripley.txt"%args.label,'wb') as fout:
+      writer = csv.writer(fout,delimiter='\t')
+      writer.writerow(["K_path","Kt_path","K_neut","Kt_neut","D","Dt"])
+      writer.writerow([pK,pKt,nK,nKt,D,Dt])
   elif args.ripley:
     print "\nInsufficient variant counts to perform Ripley's K analysis."
     print "Using default neighbor-weight parameters for PathProx."
@@ -1406,15 +1454,6 @@ for sid,bio,cf in get_coord_files(args.entity,io):
 
   # Generating structural images
   print "\nVisualizing with Chimera (this may take a while)..."
-  # pdbf   = "%s_%s_%s.pdb"%(args.label,sid,bio)
-  # nvattrf = "%s_neutral.attr"%args.label    # neutral variants
-  # pvattrf = "%s_pathogenic.attr"%args.label # pathogenic variants
-  # avattrf = "%s_variants.attr"%args.label   # all variants
-  # ncattrf = "%s_neutcon.attr"%args.label    # neutral constraint
-  # pcattrf = "%s_pathcon.attr"%args.label    # pathogenic constraint
-  # ppattrf = "%s_pathprox.attr"%args.label   # path prox
-  # out    = args.label
-  # params = [pdbf,nvattrf,pvattrf,avattrf,ncattrf,pcattrf,ppattrf,out]
   params = [args.label,sid,str(bio)]
   # Run the Chimera visualization script
   script = '"../../scripts/pathvis.py %s"'%' '.join(params)

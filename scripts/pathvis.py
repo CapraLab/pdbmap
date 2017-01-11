@@ -25,7 +25,7 @@ if __name__ == '__main__':
   out      = "%s"%label                          # output label
   outr     = "%s_renum"%label                    # output label (renumbered)
 
-  def visualize(pdbf,nvattrf,pvattrf,avattrf,ncattrf,pcattrf,ppattrf,out):
+  def visualize(pdbf,nvattrf,pvattrf,avattrf,ncattrf,pcattrf,ppattrf,out,png=True):
     # Visualize with Chimera
     # Assign the annotation to relevant residues
     rc("open %s"%pdbf)
@@ -48,25 +48,26 @@ if __name__ == '__main__':
     rc("center")
     # rc("window")
     # Display structure only
-    rc("copy file %s_structure.png width 3 height 3 units inches dpi 300"%out)
+    if png:
+      rc("copy file %s_structure.png width 3 height 3 units inches dpi 300"%out)
     # Reduce ribbon transparency for variant plots
     rc("transparency 70,r")
     # Display neutral only
-    if os.path.exists(nvattrf):
+    if os.path.exists(nvattrf) and png:
       rc("defattr %s raiseTool false"%nvattrf)
       rc("disp :/neutral & @ca")
       rc("color blue,a")
       rc("copy file %s_neutral.png width 3 height 3 units inches dpi 300"%out)
       rc("~disp")
     # Display pathogenic only
-    if os.path.exists(pvattrf):
+    if os.path.exists(pvattrf) and png:
       rc("defattr %s raiseTool false"%pvattrf)
       rc("disp :/pathogenic & @ca")
       rc("color red,a")
       rc("copy file %s_pathogenic.png width 3 height 3 units inches dpi 300"%out)
       rc("~disp")
     # Display both pathogenic and neutral
-    if os.path.exists(avattrf):
+    if os.path.exists(avattrf) and png:
       rc("defattr %s raiseTool false"%avattrf)
       rc("disp :/pathogenicity>-9 & @ca")
       rc("rangecolor pathogenicity,a 1 red 0 blue")
@@ -74,17 +75,17 @@ if __name__ == '__main__':
       rc("~disp")
     rc("transparency 0,r") # confirm opacity
     # Display neutral constraint
-    if os.path.exists(ncattrf):
+    if os.path.exists(ncattrf) and png:
       rc("defattr %s raiseTool false"%ncattrf)
       rc("rangecolor neutcon,r min red max white")
       rc("copy file %s_neutcon.png width 3 height 3 units inches dpi 300"%out)
     # Display pathogenic constraint
-    if os.path.exists(pcattrf):
+    if os.path.exists(pcattrf) and png:
       rc("defattr %s raiseTool false"%pcattrf)
       rc("rangecolor pathcon,r max red min white")
       rc("copy file %s_pathcon.png width 3 height 3 units inches dpi 300"%out)
     # Display PathProx
-    if os.path.exists(ppattrf):
+    if os.path.exists(ppattrf) and png:
       rc("defattr %s raiseTool false"%ppattrf)
       rc("rangecolor pathprox,r max red min blue 0 white")
       rc("copy file %s_pathprox.png width 3 height 3 units inches dpi 300"%out)
@@ -92,6 +93,7 @@ if __name__ == '__main__':
     rc("disp :/pathogenicity>-9 & @ca")
     rc("rangecolor pathogenicity,a 1 red 0 blue")
     rc("save ./%s.py"%out)
+    os.chmod("./%s.py"%out,774)
     rc("close all")
 
   # Visualize with original PDB numbering
@@ -100,6 +102,6 @@ if __name__ == '__main__':
 
   # Visualize with renumbered PDB
   print "\nChimera visualization using renumbered PDB..."
-  visualize(pdbrf,nvrattrf,pvrattrf,avrattrf,ncrattrf,pcrattrf,pprattrf,outr)
+  visualize(pdbrf,nvrattrf,pvrattrf,avrattrf,ncrattrf,pcrattrf,pprattrf,outr,png=False)
 
   rc("stop now")
