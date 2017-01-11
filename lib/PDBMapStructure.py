@@ -202,7 +202,7 @@ class PDBMapStructure(Structure):
     # Identify and align corresponding transcripts
     # prot2chain = {}
     for chain in self.structure[0]:
-      print "Getting transcripts for %s.%s"%(self.id,chain.id)
+      print "   # Getting transcripts for %s.%s"%(self.id,chain.id)
       # # If a chain of the same protein has already been solved, use solution
       # # BUT NOTE: must update Alignment->Chain backreference after deep copy
       # if chain.unp in prot2chain:
@@ -214,7 +214,7 @@ class PDBMapStructure(Structure):
       # Query all transcripts associated with the chain's UNP ID
       candidate_transcripts = PDBMapTranscript.query_from_unp(chain.unp)
       if len(candidate_transcripts) < 1:
-        error_msg += "UniProt indicates no EnsEMBL transcripts for %s.%s (%s)"%(self.id,chain.id,chain.unp)
+        error_msg += "No EnsEMBL transcript matches %s.%s (%s); "%(self.id,chain.id,chain.unp)
         # raise Exception("ERROR (PDBMapStructure): %s\n"%error_msg)
       # Align chains candidate transcripts
       alignments = {}

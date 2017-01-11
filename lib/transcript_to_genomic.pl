@@ -1,9 +1,6 @@
 #!/usr/bin/perl
 
-# use lib "/usr/analysis/software/ensembl-api/ensembl/modules";
-#use lib "/dors/capra_lab/bin/ensembl-api/75/ensembl/modules";
-# use lib "/dors/capra_lab/bin/ensembl-api/80/ensembl/modules";
-use lib "/dors/capra_lab/opt/ensembl/modules";
+use lib "/dors/capra_lab/opt/ensembl_87/ensembl/modules";
 
 use Bio::EnsEMBL::Registry;
 
@@ -18,7 +15,7 @@ $transcript = $transcript_adaptor->fetch_by_stable_id($transcript_id);
 
 # Check that the transcript query was successful
 if (!defined $transcript) {
-  print STDERR "No transcript found for ID (Non-Human or Non-Existant): $transcript_id\n";
+  print STDERR "Not a valid human transcript ID: $transcript_id\n";
   exit 1; # clearly indicate that no transcript was found
 }
 

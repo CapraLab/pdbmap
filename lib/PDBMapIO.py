@@ -63,6 +63,7 @@ class PDBMapParser(PDBParser):
             continue # chain not human, or other exclusion criteria
           # Apply DBREF fields from asymmetric unit to biological assembly
           c.unp      = dbref[c.id]['unp']
+          c.gene     = dbref[c.id]['gene']
           c.pdbstart = dbref[c.id]['pdbstart']
           c.pdbend   = dbref[c.id]['pdbend']
           c.offset   = dbref[c.id]['offset']
@@ -154,6 +155,28 @@ class PDBMapParser(PDBParser):
     if not s.header['resolution']:
       s.header['resolution'] = -1.0
  
+    # Load the contents of the PDB file
+    ext = os.path.basename(fname).split('.')[-1]
+    if ext == 'gz':
+      fin = [l for l in gzip.open(fname,'rb')]
+    else:
+      fin = [l for l in open(fname,'rb')]
+
+    # Extract the SEQADV information and annotate any conflict residues
+    for r in s.get_residues():
+      if "conflict" not in dir(r):
+        r.conflict = None # Initialize all residues to null conflict
+    seqadv = [line for line in fin if line.startswith("SEQADV") and
+                line[24:28].strip() == "UNP"]
+    # Assign each conflict to the associated residue
+    for row in seqadv:
+      chain  = row[16]
+      seqid  = int(row[18:22])
+      cnflct = row[49:70].strip()
+      if chain in s[0] and seqid in s[0][chain]:
+        s[0][chain][seqid].conflict = cnflct
+
+    # Extract the DBREF information or query from SIFTS
     dbref_fields = []
     if io:
       # Query structure-protein alignment information from SIFTS
@@ -162,18 +185,19 @@ class PDBMapParser(PDBParser):
       q += "WHERE pdbid=%s AND uniprot_acc!='' group by chain,uniprot_acc"
       res = io.secure_query(q,(pdbid,),cursorclass='Cursor')
       dbref_fields = [list(r) for r in res]
+    # if len(dbref_fields) < 1:
+      # # Attempt to parse DBREF fields if SIFTS unavailable
+      # dbref_fields = [line for line in fin if line[0:6]=="DBREF " and
+      #           line[26:32].strip() == "UNP"]
+      # Attempt to read from the pdb file any information missing in SIFTS
+      for line in fin:
+         # If a chain is present in DBREF but not SIFTS, add it.
+        if line[0:6].strip() == "DBREF" and line[26:32].strip() == "UNP":
+          if line[12:14].strip() not in [r[0] for r in dbref_fields]:
+            dbref_fields.append(line)
+
     if len(dbref_fields) < 1:
-      # Attempt to parse DBREF fields if SIFTS unavailable
-      ext = os.path.basename(fname).split('.')[-1]
-      if ext == 'gz':
-        fin = gzip.open(fname,'rb')
-      else:
-        fin = open(fname,'rb')
-      dbref_fields = [line for line in fin if line[0:6]=="DBREF " and
-                line[26:32].strip() == "UNP"]
-      fin.close()
-    if len(dbref_fields) < 1:
-      msg = "ERROR (PDBMapIO) No DBREF or SIFTS available for %s."%s.id
+      msg = "   ERROR (PDBMapIO) No DBREF or SIFTS available for %s."%s.id
       raise Exception(msg)
     dbref = {}
     for ref in dbref_fields:
@@ -225,7 +249,9 @@ class PDBMapParser(PDBParser):
         # If both chains are non-human, then this chain will either be replaced
         # with a human chain-segment in a future DBREF, or it will be dropped
         # as a non-human chain during preprocessing.
-      s[0][chain].unp      = unp
+      s[0][chain].unp  = unp
+      gene = None if not species == "HUMAN" else PDBMapProtein.unp2hgnc(unp) 
+      s[0][chain].gene = gene
       # Do not overwrite an earlier pdbstart (disordered hybrid chains)
       if pdbstart not in dir(s[0][chain]) or pdbstart < s[0][chain].pdbstart:
         s[0][chain].pdbstart = pdbstart
@@ -235,25 +261,25 @@ class PDBMapParser(PDBParser):
         s[0][chain].pdbend   = pdbend
       s[0][chain].species  = species
       s[0][chain].hybrid   = hybrid
-      dbref[chain] = {'unp':unp,'pdbstart':pdbstart,'offset':offset,'pdbend':pdbend,
+      dbref[chain] = {'unp':unp,'gene':gene,'pdbstart':pdbstart,'offset':offset,'pdbend':pdbend,
                       'species':species,'hybrid':hybrid,'drop_resis':[r for r in drop_resis]}
 
     # Sanitize free text fields
-    s.header["name"]     = str(s.header["name"]).translate(None,"'\"")
-    s.header["author"]   = str(s.header["author"]).translate(None,"'\"")
+    s.header["name"]     = str(s.header["name"]    ).translate(None,"'\"")
+    s.header["author"]   = str(s.header["author"]  ).translate(None,"'\"")
     s.header["keywords"] = str(s.header["keywords"]).translate(None,"'\"")
     s.header["compound"] = str(s.header["compound"]).translate(None,"'\"")
-    s.header["journal"]  = str(s.header["journal"]).translate(None,"'\"")
+    s.header["journal"]  = str(s.header["journal"] ).translate(None,"'\"")
     s.header["structure_method"]    = str(s.header["structure_method"]).translate(None,"'\"")
     s.header["structure_reference"] = str(s.header["structure_reference"]).translate(None,"'\"")
 
     try:
       # Preprocess the asymmetric and biological units for this protein
-      print "Processing the asymmetric unit"
+      print "   # Processing the asymmetric unit"
       s = PDBMapParser.process_structure(s) # *must* occur before biounits
     except Exception as e:
       # If the structure is invalid (non-human, empty, errors, etc) pass along exception
-      raise Exception("ERROR (PDBMapIO): %s"%str(e))
+      raise Exception("   ERROR (PDBMapIO): %s"%str(e))
     m = s[0]
     # Calculate relative solvent accessibility for this model
     ssrsa = {}
@@ -272,6 +298,7 @@ class PDBMapParser(PDBParser):
         r.k   = info['kappa']
         r.a   = info['alpha']
         ssrsa[(c.id,r.seqid,r.icode)] = (r.ss,r.rsa,r.phi,r.psi,r.tco,r.k,r.a)
+
     # Process the biological assemblies for this structure
     for biounit_fname in biounit_fnames:
       try:
@@ -288,12 +315,12 @@ class PDBMapParser(PDBParser):
         biounit = PDBMapStructure(biounit,pdb2pose={}) # must pass empty dictionary: python bug
         fin.close()
       except Exception as e:
-        msg = "ERROR (PDBMapIO) Error while parsing %s biounit %d: %s"%(pdbid,bioid,str(e).replace('\n',' '))
+        msg = "   ERROR (PDBMapIO) Error while parsing %s biounit %d: %s"%(pdbid,bioid,str(e).replace('\n',' '))
         raise Exception(msg)
-      print "\nProcessing biounit %d"%bioid
+      print "   # Processing biounit %d"%bioid
       biounit = PDBMapParser.process_structure(biounit,biounit=bioid,dbref=dbref)
       if not biounit:
-        msg = "ERROR (PDBMapIO) Biological assembly %s.%d contains no human protein chains.\n"%(pdbid,bioid)
+        msg = "   ERROR (PDBMapIO) Biological assembly %s.%d contains no human protein chains.\n"%(pdbid,bioid)
         sys.stderr.write(msg)
         continue
       # Add the models for this biological assembly to the PDBMapStructure
@@ -302,6 +329,10 @@ class PDBMapParser(PDBParser):
         for c in m:
           for r in c:
             r.ss,r.rsa,r.phi,r.psi,r.tco,r.k,r.a = ssrsa[(c.id,r.seqid,r.icode)]
+            if (c.id,r.id[1]) in seqadv:
+              r.conflict = seqadv[(c.id,r.id[1])]
+            else:
+              r.conflict = None
         s.add(m)
     return s
 
@@ -315,7 +346,7 @@ class PDBMapParser(PDBParser):
       elif ext in ['txt','pdb','ent']:
         fin = open(fname,'rb')
       else:
-        msg = "ERROR (PDBMapParser) Unsupported file type: %s.\n"%ext
+        msg = "   ERROR (PDBMapParser) Unsupported file type: %s.\n"%ext
         raise Exception(msg)
       p = PDBParser()
       filterwarnings('ignore',category=PDBConstructionWarning)
@@ -324,7 +355,7 @@ class PDBMapParser(PDBParser):
       fin.close()
       m = PDBMapModel(s,model_summary)
     except Exception as e:
-      msg = "ERROR (PDBMapIO) Error while parsing %s: %s"%(modelid,str(e).replace('\n',' '))
+      msg = "   ERROR (PDBMapIO) Error while parsing %s: %s"%(modelid,str(e).replace('\n',' '))
       raise Exception(msg)
     
     s = PDBMapParser.process_structure(m)
@@ -334,7 +365,8 @@ class PDBMapParser(PDBParser):
     resinfo = PDBMapIO.dssp(m,fname,dssp='dssp')
     n = 0
     for c in m:
-      c.unp = unp
+      c.unp  = unp
+      c.gene = PDBMapProtein.unp2hgnc(unp)
       for r in c:
         info  = resinfo[(c.id,r.seqid,r.icode)]
         r.ss  = info['ss']
@@ -344,6 +376,7 @@ class PDBMapParser(PDBParser):
         r.tco = info['tco']
         r.k   = info['kappa']
         r.a   = info['alpha']
+        r.conflict = None
     return s
 
 class PDBMapIO(PDBIO):
@@ -514,18 +547,18 @@ class PDBMapIO(PDBIO):
         mfields['id'] += 1 # correct indexing
       for c in m:
         cquery  = "INSERT IGNORE INTO Chain "
-        cquery += "(label,structid,biounit,model,chain,unp,offset,hybrid,sequence) "
+        cquery += "(label,structid,biounit,model,chain,unp,gene,offset,hybrid,sequence) "
         cquery += "VALUES "
         cquery += '("%(label)s","%(id)s",'%sfields # structure id
         cquery += '%(biounit)d,%(id)d,'%mfields # model id
-        cquery += '"%(id)s","%(unp)s",%(offset)d,%(hybrid)d,"%(sequence)s")'
+        cquery += '"%(id)s","%(unp)s","%(gene)s",%(offset)d,%(hybrid)d,"%(sequence)s")'
         cfields = dict((key,c.__getattribute__(key)) for key in dir(c) 
                         if isinstance(key,collections.Hashable))
         cfields["label"] = self.slabel
         cquery = cquery%cfields
         queries.append(cquery)
         rquery  = "INSERT IGNORE INTO Residue "
-        rquery += "(label,structid,biounit,model,chain,resname,rescode,seqid,icode,x,y,z,ss,rsa,phi,psi,tco,kappa,alpha) "
+        rquery += "(label,structid,biounit,model,chain,resname,rescode,seqid,icode,x,y,z,ss,rsa,phi,psi,tco,kappa,alpha,conflict) "
         rquery += "VALUES "
         for r in c:
           rquery += '("%(label)s","%(id)s",'%sfields # structure id
@@ -534,9 +567,10 @@ class PDBMapIO(PDBIO):
           rquery += '"%(resname)s","%(rescode)s",%(seqid)d,'
           rquery += '"%(icode)s",%(x)f,%(y)f,%(z)f,'
           rquery += '"%(ss)s",%(rsa)s,%(phi)s,%(psi)s,'
-          rquery += '%(tco)s,%(k)s,%(a)s),'
+          rquery += '%(tco)s,%(k)s,%(a)s,%(conflict)s),'
           rfields = dict((key,r.__getattribute__(key)) for key in dir(r) 
                           if isinstance(key,collections.Hashable))
+          rfields["conflict"] = '"%s"'%rfields["conflict"] if rfields["conflict"] else '\N'
           for key,val in rfields.iteritems():
             if val is None:
               if key == 'ss':
@@ -545,6 +579,12 @@ class PDBMapIO(PDBIO):
                 rfields[key] = 'NULL'
           rfields["label"] = self.slabel
           rquery = rquery%rfields
+          # Break into multiple queries if length exceeds 100 million characters
+          if len(rquery) > 1000000:
+            queries.append(rquery[:-1])
+            rquery  = "INSERT IGNORE INTO Residue "
+            rquery += "(label,structid,biounit,model,chain,resname,rescode,seqid,icode,x,y,z,ss,rsa,phi,psi,tco,kappa,alpha,conflict) "
+            rquery += "VALUES "
         queries.append(rquery[:-1])
 
     # Upload the transcripts
@@ -562,6 +602,12 @@ class PDBMapIO(PDBIO):
             tquery += '("%s","%s","%s","%s",'%(self.slabel,t.transcript,t.protein,t.gene)
             tquery += '%d,"%s",'%(seqid,rescode)
             tquery += '"%s",%d,%d,%d),'%(chr,start,end,strand)
+          # Break into multiple queries if length exceeds 100 million characters
+          if len(tquery) > 1000000:
+            queries.append(tquery[:-1])
+            tquery  = "INSERT IGNORE INTO Transcript "
+            tquery += "(label,transcript,protein,gene,seqid,rescode,chr,start,end,strand) "
+            tquery += "VALUES "
       queries.append(tquery[:-1])
     except Exception as e:
       msg = "ERROR (PDBMapIO) Failed to get transcripts for %s: %s"%(s.id,str(e).rstrip('\n'))
@@ -575,6 +621,12 @@ class PDBMapIO(PDBIO):
       for c_seqid,t_seqid in a.pdb2seq.iteritems():
         aquery += '("%s","%s","%s",%d,'%(self.slabel,s.id,a.chain.id,c_seqid)
         aquery += '"%s",%d),'%(a.transcript.transcript,t_seqid)
+      # Break into multiple queries if length exceeds 100 million characters
+      if len(aquery) > 1000000:
+        queries.append(aquery[:-1])
+        aquery  = "INSERT IGNORE INTO Alignment "
+        aquery += "(label,structid,chain,chain_seqid,transcript,trans_seqid) "
+        aquery += "VALUES "
     queries.append(aquery[:-1])
 
     # Upload the alignment scores
@@ -584,7 +636,7 @@ class PDBMapIO(PDBIO):
     for a in s.get_alignments():
       asquery += '("%s","%s","%s","%s",%f,%f,%f,"%s"),'% \
                   (self.slabel,s.id,a.chain.id,a.transcript.transcript,
-                   a.score,a.perc_aligned,a.perc_identity,a.aln_string)
+                   a.score,a.perc_aligned,a.perc_identity,a.aln_str)
     queries.append(asquery[:-1])
 
     # Execute all queries at once to ensure everything completed.

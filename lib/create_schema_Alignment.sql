@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS Alignment (
 label VARCHAR(100), # Dataset label
 structid VARCHAR(50),
-chain VARCHAR(10),
+chain VARCHAR(10) BINARY,
 chain_seqid INT,
 transcript VARCHAR(50),
 trans_seqid INT,

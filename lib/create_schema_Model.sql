@@ -10,7 +10,7 @@ evalue DOUBLE,
 ga341 DOUBLE,
 zdope DOUBLE,
 pdbid VARCHAR(50),
-chain VARCHAR(10),
+chain VARCHAR(10) BINARY,
 identity DOUBLE,
 str_id BIGINT NOT NULL AUTO_INCREMENT, # Unique, direct-reference key
 PRIMARY KEY(label,modelid),

@@ -530,8 +530,7 @@ class PDBMapData():
         elif csq_header[i] == "Amino_acids":
           if not field: # No Value
             ref,alt = None,None
-          #FIXME: `type(field)==str or` looks like a bug. Is it?
-          elif type(field)==str or len(field.split('/')) < 2: # Only one value
+          elif len(field.split('/')) < 2: # Only one amino acid recorded
             ref,alt = field,field
           else: # Both specified
             ref,alt = field.split('/')[0:2]
@@ -541,7 +540,7 @@ class PDBMapData():
         elif csq_header[i] == "Codons":
           if not field: # No value
             ref,alt = None,None
-          elif type(field)==str or len(field) < 2: # Only one value
+          elif len(field.split('/')) < 2: # Only one codon recorded
             ref,alt = field,field
           else: # Both specified
             ref,alt = field.split('/')[0:2]

@@ -21,12 +21,15 @@ class PDBMapProtein():
 
   _refseq2unp = {}
   _unp2pdb    = {}
+  _pdb2unp    = {}
   _unp2ensp   = {}
   _ensp2unp   = {}
   _enst2ensp  = {}
+  _ensp2enst  = {}
   _unp2hgnc   = {}
   _hgnc2unp   = {}
   _unp2enst   = {}
+  _enst2unp   = {}
 
   def __init__(self):
     msg = "ERROR (PDBMapProtein) This class should not be instantiated."
@@ -110,29 +113,35 @@ class PDBMapProtein():
             enst = dbid # for clarity
             if unp in PDBMapProtein._unp2enst:
               PDBMapProtein._unp2enst[unp].append(enst)
-              PDBMapProtein._enst2unp[enst].append(unp)
             else:
               PDBMapProtein._unp2enst[unp] = [enst]
+            if enst in PDBMapProtein._enst2unp:
+              PDBMapProtein._enst2unp[enst].append(unp)
+            else:
               PDBMapProtein._enst2unp[enst] = [unp]
             # This entry is immediately followed by its corresponding ENSP
           elif db == "Ensembl_PRO":
             ensp = dbid # for clarity
             if unp in PDBMapProtein._unp2ensp:
               PDBMapProtein._unp2ensp[unp].append(ensp)
-              PDBMapProtein._ensp2unp[ensp].append(unp)
             else:
               PDBMapProtein._unp2ensp[unp] = [ensp]
+            if ensp in PDBMapProtein._ensp2unp:
+              PDBMapProtein._ensp2unp[ensp].append(unp)
+            else:
               PDBMapProtein._ensp2unp[ensp] = [unp]
             # This entry was immediately preceded by its corresponding ENST
-            PDBMapProtein.ensp2enst[ensp] = enst
-            PDBMapProtein.enst2ensp[enst] = ensp
+            PDBMapProtein._ensp2enst[ensp] = enst
+            PDBMapProtein._enst2ensp[enst] = ensp
           elif db == "PDB":
             pdb = dbid # for clarity
-            if unp in PDBMapProtein._unp2ensp:
+            if unp in PDBMapProtein._unp2pdb:
               PDBMapProtein._unp2pdb[unp].append(pdb)
-              PDBMapProtein._pdb2unp[pdb].append(unp)
             else:
               PDBMapProtein._unp2pdb[unp] = [pdb]
+            if pdb in PDBMapProtein._pdb2unp:
+              PDBMapProtein._pdb2unp[pdb].append(unp)
+            else:
               PDBMapProtein._pdb2unp[pdb] = [unp]
 
     #TEMPORARY FIX ONLY
@@ -222,8 +231,7 @@ class PDBMapProtein():
   @classmethod
   def check_loaded(cls):
     # Checks if external database ID mapping has been loaded
-    if not PDBMapProtein._refseq2unp or \
-       not PDBMapProtein._unp2pdb or \
+    if not PDBMapProtein._unp2pdb or \
        not PDBMapProtein._unp2enst or \
        not PDBMapProtein._unp2ensp:
       msg = "ERROR (UniProt) ID Mapping must be loaded before use."

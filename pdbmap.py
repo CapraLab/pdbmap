@@ -64,20 +64,24 @@ class PDBMap():
     if probe:
       self.probe = probe
 
-  def load_unp(self,unp,label=""):
+  def load_unp(self,unp,label=None,use_pdb=True,use_modbase=True):
     """ Loads all known structures associated with UniProt ID """
-    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,
-                          args.dbpass,args.dbname,slabel=label)
-    if self.pdb:
+    if self.pdb and use_pdb:
+      pdb_label = label if label else 'pdb'
+      io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,
+                          args.dbpass,args.dbname,slabel=pdb_label)
       pdbids = list(set(PDBMapProtein.PDBMapProtein.unp2pdb(unp)))
       for pdbid in pdbids:
         print " # Processing (%s) PDB %s # "%(label,pdbid)
         self.load_pdb(pdbid,label=label,io=io)
         sys.stdout.flush() # Force stdout flush after each PDB
-    if self.modbase:
+    if self.modbase and use_modbase:
+      mod_label = label if label else 'modbase'
+      io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,
+                          args.dbpass,args.dbname,slabel=mod_label)
       models = PDBMapModel.PDBMapModel.unp2modbase(unp)
       for model in models:
-        print " # (%s) Processing Model %s #"%(label,model[1])
+        print " # (%s) Processing ModBase %s #"%(label,model[3])
         self.load_model(model,label=label,io=io)
         sys.stdout.flush() # Force stdout flush after each model
 
@@ -89,15 +93,14 @@ class PDBMap():
                             args.dbpass,args.dbname,slabel=label)
     # Check if PDB is already in the database
     if io.structure_in_db(pdbid,label):
-      msg = "VALID (PDBMap) %s already in database.\n"%pdbid
-      sys.stderr.write(msg)
+      print "  VALID (PDBMap) %s already in database."%pdbid
       return 0
     # Load the PDB structure
     if not pdb_fname:
       pdb_fname = "%s/structures/all/pdb/pdb%s.ent.gz"%(self.pdb_dir,pdbid.lower())
       print "  # Fetching %s"%pdbid
       if not os.path.exists(pdb_fname):
-        msg = "ERROR (PDBMap) Cannot fetch %s. Not in PDB mirror.\n"%pdbid
+        msg = "  ERROR (PDBMap) Cannot fetch %s. Not in PDB mirror.\n"%pdbid
         sys.stderr.write(msg)
         return 1
     # Locate all biological assemblies
@@ -108,10 +111,10 @@ class PDBMap():
       io.set_structure(s)
       io.upload_structure()
     except Exception as e:
-      msg = "ERROR (PDBMap) %s: %s\n"%(pdbid,str(e))
+      msg = "  ERROR (PDBMap) %s: %s\n\n"%(pdbid,str(e))
       sys.stderr.write(msg)
       return 1
-    msg = "VALID (PDBMap) %s complete.\n"%pdbid
+    msg = "  VALID (PDBMap) %s complete.\n"%pdbid
     sys.stderr.write(msg)
     return 0
 
@@ -126,13 +129,13 @@ class PDBMap():
     # Check if model is already in the database
     modelid = model_summary[3] # extract ModBase model ID
     if io.model_in_db(modelid,label):
-      msg = "VALID (PDBMap) %s (%s) already in database.\n"%(modelid,label)
+      msg = "  VALID (PDBMap) %s (%s) already in database.\n"%(modelid,label)
       print msg
       return 0
 
     # Query UniProt ID if not provided
     if not unp:
-      unp = PDBMapProtein.ensp2unp(modelid.split('.')[0])
+      unp = PDBMapProtein.PDBMapProtein.ensp2unp(modelid.split('.')[0])[0]
 
     # Load the ModBase model
     if not model_fname:
@@ -142,20 +145,20 @@ class PDBMap():
       if not os.path.exists(model_fname):
         model_fname += '.gz' # check for compressed copy
       if not os.path.exists(model_fname):
-        msg = "ERROR (PDBMap) %s not in ModBase mirror.\n"%modelid
+        msg = "  ERROR (PDBMap) %s not in ModBase mirror.\n"%modelid
         sys.stderr.write(msg)
         return 1
     try:
       p = PDBMapIO.PDBMapParser()
-      print "Loading %s (%s) from %s..."%(modelid,unp,model_fname)
+      print "   # Loading %s (%s) from %s..."%(modelid,unp,model_fname.split('/')[-1])
       m = p.get_model(model_summary,model_fname,unp=unp)
       io.set_structure(m)
       io.upload_model()
     except Exception as e:
-      msg = "ERROR (PDBMap) %s: %s\n"%(modelid,str(e))
+      msg = "  ERROR (PDBMap) %s: %s\n"%(modelid,str(e))
       sys.stderr.write(msg)
       return 1
-    msg = "VALID (PDBMap) %s complete.\n"%modelid
+    msg = "  VALID (PDBMap) %s complete.\n"%modelid
     sys.stderr.write(msg)
     return 0
 
@@ -168,7 +171,7 @@ class PDBMap():
     if not os.path.exists(dfile):
       dfile = "%s.ped"%dfile # Test if PEDMAP basename
       if not os.path.exists(dfile):
-        msg = "ERROR (PDBMap) File does not exist: %s"%dfile
+        msg = "  ERROR (PDBMap) File does not exist: %s"%dfile
         raise Exception(msg)
     io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,dlabel=dname)
     # Determine file type
@@ -196,7 +199,7 @@ class PDBMap():
     elif ext in ["ped","map"] :
       generator = d.load_pedmap(dfile)
     else:
-      msg = "ERROR (PDBMap) Unsupported file type: %s"%ext
+      msg = "  ERROR (PDBMap) Unsupported file type: %s"%ext
       raise Exception(msg)
     # Pass the relevant generator to be uploaded
     nrows = io.upload_genomic_data(generator,dname)
@@ -878,12 +881,14 @@ class PDBMap():
     if args.sifts:
       print "Refreshing local SIFTS cache..."
       if os.path.exists(args.sifts):
+        # Record the most recent modification time for the SIFTS directory
         mtime = os.stat(args.sifts)[-2]
       else:
         mtime = None
       script_path   = os.path.dirname(os.path.realpath(args.sifts))
       get_sifts     = "cd %s; ./get_sifts.sh"%(script_path)
       os.system(get_sifts)
+      # Upload if any modifications were made to the SIFTS directory
       if not mtime or mtime != os.stat(args.sifts)[-2]:
         print "  Updating SIFTS in PDBMap...",
         sys.stdout.flush() # flush buffer before long query
@@ -1145,45 +1150,51 @@ __  __  __
                     sprot=args.sprot,pdb_dir=args.pdb_dir,
                     modbase_dir=args.modbase_dir,
                     modbase_summary=args.modbase_summary)
-    if not args.slabel:
-      args.slabel = "uniprot-pdb"
+    # if not args.slabel:
+    #   args.slabel = "uniprot-pdb"
     if len(args.args)<1: 
       msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> load_unp unpid [unpid,...]\n"
       msg += "   or: pdbmap.py -c conf_file --slabel=<slabel> load_unp all"
       print msg; sys.exit(0)
     elif args.args[0] == 'all':
-      # All PDB-mapped UniProt IDs (later expand to all UniProt IDs)
-      all_pdb_unp = PDBMapProtein.PDBMapProtein.sprot
-      n = len(all_pdb_unp)
+      # All human UniProt IDs
+      # all_unp = [unp for unp in PDBMapProtein.PDBMapProtein.sprot \
+      #             if PDBMapProtein.PDBMapProtein.unp2species[unp]=="HUMAN"]
+      # All human UniProt IDs with ENST mappings
+      # All Human, Swiss-Prot proteins with EnsEMBL transcript cross-references
+      all_unp = [unp for unp in PDBMapProtein.PDBMapProtein._unp2enst \
+                  if unp in PDBMapProtein.PDBMapProtein.sprot and \
+                  PDBMapProtein.PDBMapProtein.unp2species[unp]=="HUMAN"]
+      n = len(all_unp)
       # If this is a parallel command with partition parameters
       if args.ppart != None and args.ppidx != None:
         psize = n / args.ppart # floor
         if (args.ppart-1) == args.ppidx:
-          all_pdb_unp = all_pdb_unp[args.ppidx*psize:]
+          all_unp = all_unp[args.ppidx*psize:]
         else:
-          all_pdb_unp = all_pdb_unp[args.ppidx*psize:(args.ppidx+1)*psize]
+          all_unp = all_unp[args.ppidx*psize:(args.ppidx+1)*psize]
         msg = "WARNING(PDBMap) Subprocess uploading partition %d/%d of Swiss-Prot\n"%(args.ppidx+1,args.ppart)
         sys.stderr.write(msg)
-        for i,unp in enumerate(all_pdb_unp):
-          print "## Processing (%s) %s (%d/%d) ##"%(args.slabel,unp,i+(args.ppidx*psize)+1,n)
+        for i,unp in enumerate(all_unp):
+          print "\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,unp,i+(args.ppidx*psize)+1,n)
           pdbmap.load_unp(unp,label=args.slabel)
       # This is a standard, full-set load_unp command
       else:
         msg = "WARNING (PDBMap) Uploading all %d Swiss-Prot UniProt IDs.\n"%n
         sys.stderr.write(msg)
-        for i,unp in enumerate(all_pdb_unp):
-          print "## Processing (%s) %s (%d/%d) ##"%(args.slabel,unp,i,n)
+        for i,unp in enumerate(all_unp):
+          print "\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,unp,i,n)
           pdbmap.load_unp(unp,label=args.slabel)
     elif len(args.args) == 1:
       # Process one UniProt ID
       unp = args.args[0]
-      print "## Processing (%s) %s ##"%(args.slabel,unp)
+      print "\n## Processing (%s) %s ##"%(args.slabel,unp)
       pdbmap.load_unp(unp,label=args.slabel)
     else:
       # Process many UniProt IDs
       n = len(args.args)
       for i,unp in enumerate(args.args):
-        print "## Processing (%s) %s (%d/%d) ##"%(args.slabel,unp,i,n)
+        print "\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,unp,i,n)
         pdbmap.load_unp(unp,label=args.slabel)
 
   ## load_model ##
@@ -1202,6 +1213,7 @@ __  __  __
       raise Exception(msg)
     model_summary = args.args[0]
     if args.args[1] in ['all','*','.']:
+      args.slabel = args.slabel if args.slabel else "modbase"
       model_summary = args.modbase_summary
       models = glob.glob("%s/Homo_sapiens_2016/model/*.pdb.gz"%args.modbase_dir)
     elif "*" in args.args[1]:
@@ -1452,7 +1464,7 @@ __  __  __
     if len(args.args) < 1:
       msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> colocalization entity unp mut1[,mut2,...] [relaxdir] [fastafile]"
       print msg; sys.exit(1)
-    args.slabel = args.slabel if args.slabel else "uniprot-pdb"
+    args.slabel = args.slabel if args.slabel else "pdb"
     pdbmap = PDBMap(idmapping=args.idmapping)
     entity = args.args[0]
     io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,slabel=args.slabel)

@@ -3,7 +3,7 @@ label VARCHAR(100), # Dataset label
 structid VARCHAR(50),
 biounit INT,
 model INT,
-chain VARCHAR(10),
+chain VARCHAR(10) BINARY,
 resname VARCHAR(10),
 rescode VARCHAR(1),
 seqid INT,
@@ -18,6 +18,7 @@ psi DOUBLE,
 tco DOUBLE,
 kappa DOUBLE,
 alpha DOUBLE,
+conflict VARCHAR(50),
 res_id BIGINT NOT NULL AUTO_INCREMENT, # Unique, direct-reference key
 ch_id BIGINT, # Chain direct-reference key
 PRIMARY KEY(label,structid,biounit,model,chain,seqid,icode),

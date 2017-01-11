@@ -43,5 +43,5 @@ KEY(label,asn_af),
 KEY(label,afr_af),
 KEY(label,eur_af),
 KEY(label,eas_af),
-KEY(label,sas_af),
+KEY(label,sas_af)
 )

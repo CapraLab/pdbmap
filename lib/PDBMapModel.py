@@ -159,22 +159,25 @@ class PDBMapModel(Structure):
     summary_path = "%s/%s"%(modbase_dir,summary_fname)
     if not os.path.exists(summary_path):
       msg = "ERROR: (PDBMapModel) Cannot load ModBase. %s does not exist."%summary_path
-      raise(msg)
+      raise(Exception(msg))
     fin = open(summary_path,'rb')
     fin.readline() # burn the header
     reader = csv.reader(fin,delimiter='\t')
     for row in reader:
-      ensp,i = row[1].split('_')
+      # Skip models not constructed from EnsEMBL protein sequences
+      if not row[3].startswith("ENSP"): continue
+      # Extract the EnsEMBL protein identifier
+      ensp,_ = row[3].split('.') # Strip the EnsEMBL protein verion number
       unps = PDBMapProtein.ensp2unp(ensp)
       unp  = None if not unps else unps[0]
-      if not unp: continue # Skip models without associated UniProt IDs
-      row.append(unp) # set UniProt ID as last field in model summary
+      # Skip models without associated UniProt IDs
+      if not unp: continue
+      # Set UniProt ID as last field in model summary
+      row.append(unp)
       if ensp in PDBMapModel.modbase_dict:
         PDBMapModel.modbase_dict[ensp].append(row)
       else:
         PDBMapModel.modbase_dict[ensp] = [row]
-    diff = [unp for unp in PDBMapProtein._unp2ensembltrans.keys()
-              if PDBMapProtein.unp2ensp(unp)[0] not in PDBMapModel.modbase_dict]
   
 # Main check
 if __name__== "__main__":

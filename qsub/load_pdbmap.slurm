@@ -17,9 +17,8 @@
 #SBATCH --ntasks=1
 #SBATCH --time=5-0
 #SBATCH --mem=10GB
-#SBATCH --account=p_meiler
+#SBATCH --account=capra_lab
 #SBATCH -o load_pdbmap/load_pdbmap-v12.%A[%a].out
-#SBATCH -e load_pdbmap/load_pdbmap-v12.%A[%a].err
 #=============================================================================#
 
 cd ..

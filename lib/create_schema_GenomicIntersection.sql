@@ -2,7 +2,7 @@ CREATE TABLE IF NOT EXISTS GenomicIntersection (
 dlabel VARCHAR(100), # Dataset label
 slabel VARCHAR(100), # Structure label
 structid VARCHAR(50), # Structure ID
-chain VARCHAR(10), # Structure chain
+chain VARCHAR(10) BINARY, # Structure chain
 seqid INT, # Position in chain sequence
 gc_id BIGINT,  # GenomicConsequence direct reference key
 gd_id BIGINT,  # GenomicData direct reference key

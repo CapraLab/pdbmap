@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS AlignmentScore (
 label VARCHAR(100), # Dataset label
 structid VARCHAR(50),
-chain VARCHAR(10),
+chain VARCHAR(10) BINARY,
 transcript VARCHAR(50),
 score REAL,
 perc_aligned REAL,
