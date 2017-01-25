@@ -39,7 +39,7 @@ QUICK_THRESH = 20000
 class PDBMap():
   def __init__(self,idmapping=None,sec2prim=None,sprot=None,
                 pdb_dir=None,modbase_dir=None,modbase_summary=None,
-                vep=None,plink=None,reduce=None,probe=None):
+                vep=None,reduce=None,probe=None):
     self.pdb     = False
     self.modbase = False
     # Initialize
@@ -57,8 +57,6 @@ class PDBMap():
       PDBMapModel.PDBMapModel.load_modbase(modbase_dir,modbase_summary)
     if vep:
       self.vep = vep
-    if plink:
-      self.plink = plink
     if reduce:
       self.reduce = reduce
     if probe:
@@ -165,9 +163,9 @@ class PDBMap():
   def load_data(self,dname,dfile,indexing=None,usevep=True,upload=True):
     """ Loads a data file into the PDBMap database """
     if usevep:
-      d = PDBMapData.PDBMapData(vep=self.vep,plink=self.plink,dname=dname)
+      d = PDBMapData.PDBMapData(vep=self.vep,dname=dname)
     else:
-      d = PDBMapData.PDBMapData(plink=self.plink,dname=dname)
+      d = PDBMapData.PDBMapData(dname=dname)
     if not os.path.exists(dfile):
       dfile = "%s.ped"%dfile # Test if PEDMAP basename
       if not os.path.exists(dfile):
@@ -968,7 +966,6 @@ __  __  __
     "sec2prim" : "",
     "sprot"  : "",
     "vep"    : "variant_effect_predictor.pl",
-    "plink"  : "plink",
     "reduce" : "reduce",
     "probe"  : "probe",
     "slabel" : "",
@@ -1027,8 +1024,6 @@ __  __  __
               help="Swiss-Prot file location")
   parser.add_argument("--vep", 
               help="Variant Effect Predictor location")
-  parser.add_argument("--plink", 
-              help="PLINK location")
   parser.add_argument("--slabel", 
               help="Structural label for this session")
   parser.add_argument("--dlabel", 
@@ -1239,7 +1234,7 @@ __  __  __
       msg  = "usage: pdbmap.py -c conf_file [--novep] load_data <data_file> <data_name> [data_file data_name] ...\n"
       msg += "alt:   pdbmap.py -c conf_file [--novep] --dlabel=<data_name> load_data <data_file> [data_file] ...\n"
       print msg; sys.exit(1)
-    pdbmap = PDBMap(vep=args.vep,plink=args.plink)
+    pdbmap = PDBMap(vep=args.vep)
     # Process many data file(s) (set(s))
     if not args.dlabel: # Assign individual labels
       dfiles = zip(args.args[0::2],args.args[1::2])

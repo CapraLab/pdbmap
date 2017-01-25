@@ -63,6 +63,9 @@ from lib.PDBMapTranscript import PDBMapTranscript
 from lib.PDBMapAlignment import PDBMapAlignment
 import lib.amino_acids as amino_acids
 
+# Determine the script directory
+script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+
 #=============================================================================#
 ## Parse Command Line Options ##
 
@@ -96,11 +99,11 @@ parser.set_defaults(**defaults)
 # Input parameters
 parser.add_argument("entity",type=str,
                     help="Gene ID, UniProt AC, PDB ID, or PDB filename")
-parser.add_argument("--fasta",type=str,
-                    help="UniProt fasta file for the reference sequence")
 parser.add_argument("variants",type=str,nargs='?',
                     help="Comma-separated list of protein HGVS or \
                           a filename containing one identifier per line")
+parser.add_argument("--fasta",type=str,
+                    help="UniProt fasta file for the reference sequence")
 parser.add_argument("--pathogenic",type=str,
                     help="User-defined set of pathogenic variants")
 parser.add_argument("--neutral",type=str,
@@ -366,8 +369,8 @@ def query_1kg(io,sid,refid=None,chains=None):
   if refid:
     # Add chains IDs
     res = [r+[c] for r in res for c in chains]
-    # Add null pdb_pos (not yet aligned)
-    res = [[None]+r for r in res]
+    # # Add null pdb_pos (not yet aligned)
+    # res = [[None]+r for r in res]
   return res
 
 def query_exac(io,sid,refid=None,chains=None):
@@ -388,8 +391,8 @@ def query_exac(io,sid,refid=None,chains=None):
   if refid:
     # Add chains IDs
     res = [r+[c] for r in res for c in chains]
-    # Add null pdb_pos (not yet aligned)
-    res = [[None]+r for r in res]
+    # # Add null pdb_pos (not yet aligned)
+    # res = [[None]+r for r in res]
   return res
 
 def query_benign(io,sid,refid=None,chains=None):
@@ -413,8 +416,8 @@ def query_benign(io,sid,refid=None,chains=None):
   if refid:
     # Add chains IDs
     res = [r+[c] for r in res for c in chains]
-    # Add null pdb_pos (not yet aligned)
-    res = [[None]+r for r in res]
+    # # Add null pdb_pos (not yet aligned)
+    # res = [[None]+r for r in res]
   return res
 
 def query_pathogenic(io,sid,refid=None,chains=None):
@@ -438,8 +441,8 @@ def query_pathogenic(io,sid,refid=None,chains=None):
   if refid:
     # Add chains IDs
     res = [r+[c] for r in res for c in chains]
-    # Add null pdb_pos (not yet aligned)
-    res = [[None]+r for r in res]
+    # # Add null pdb_pos (not yet aligned)
+    # res = [[None]+r for r in res]
   return res
 
 def query_drug(io,sid,refid=None,chains=None):
@@ -463,8 +466,8 @@ def query_drug(io,sid,refid=None,chains=None):
   if refid:
     # Add chains IDs
     res = [r+[c] for r in res for c in chains]
-    # Add null pdb_pos (not yet aligned)
-    res = [[None]+r for r in res]
+    # # Add null pdb_pos (not yet aligned)
+    # res = [[None]+r for r in res]
   return res
 
 def query_somatic(io,sid,refid=None,chains=None):
@@ -488,8 +491,8 @@ def query_somatic(io,sid,refid=None,chains=None):
   if refid:
     # Add chains IDs
     res = [r+[c] for r in res for c in chains]
-    # Add null pdb_pos (not yet aligned)
-    res = [[None]+r for r in res]
+    # # Add null pdb_pos (not yet aligned)
+    # res = [[None]+r for r in res]
   return res
 
 def get_coord_files(entity,io):
@@ -689,18 +692,18 @@ def plot_roc(fpr,tpr,fig=None,save=True):
   ## Plot the ROC curve
   roc_auc = auc(fpr,tpr)
   if not fig:
-    fig = plt.figure(figsize=(7,7))
+    fig = plt.figure(figsize=(5,5))
     # plt.title("%s ROC"%label)
     plt.plot([0,1],[0,1],'k--')
     plt.xlim([0.,1.])
     plt.ylim([0.,1.])
-    plt.xlabel("False Positive Rate",fontsize=15)
-    plt.ylabel("True Positive Rate",fontsize=15)
+    plt.xlabel("False Positive Rate",fontsize=14)
+    plt.ylabel("True Positive Rate",fontsize=14)
   l = "PathProx AUC: %5.2f"%roc_auc
   plt.plot(fpr,tpr,color='k',label=l,linewidth=4)
   sns.despine()
   if save:
-    plt.legend(loc="lower right",fontsize=12)
+    plt.legend(loc="lower right",fontsize=10)
     plt.savefig("%s_pathprox_roc.pdf"%(args.label),dpi=300)
     plt.savefig("%s_pathprox_roc.png"%(args.label),dpi=300)
     plt.close(fig)
@@ -709,17 +712,17 @@ def plot_roc(fpr,tpr,fig=None,save=True):
 def plot_pr(rec,prec,pr_auc,fig=None,save=True):
   ## Plot the PR curve
   if not fig:
-    fig = plt.figure(figsize=(7,7))
+    fig = plt.figure(figsize=(5,5))
     # plt.title("%s PR"%label)
     plt.xlim([0.,1.])
     plt.ylim([0.,1.])
-    plt.xlabel("Recall",fontsize=15)
-    plt.ylabel("Precision",fontsize=15)
+    plt.xlabel("Recall",fontsize=14)
+    plt.ylabel("Precision",fontsize=14)
   l = "PathProx AUC: %5.2f"%pr_auc
   plt.plot(rec,prec,color='k',label=l,linewidth=4)
   sns.despine()
   if save:
-    plt.legend(loc="lower left",fontsize=12)
+    plt.legend(loc="lower left",fontsize=10)
     plt.savefig("%s_pathprox_pr.pdf"%(args.label),dpi=300)
     plt.savefig("%s_pathprox_pr.png"%(args.label),dpi=300)
     plt.close(fig)
@@ -759,21 +762,30 @@ def load_io(args):
   PDBMapProtein.load_idmapping(args.idmapping)
   return io
 
-def var2coord(s,p,n,c):
+def var2coord(s,p,n,c,q=[]):
   # Construct a dataframe containing all variant sets
-  vdf = pd.DataFrame(columns=["unp_pos","ref","alt","chain","dcode"])
+  vdf = pd.DataFrame(columns=["unp_pos","ref","alt","chain","dcode","qt"])
   if p:
     pdf = pd.DataFrame(p,columns=["unp_pos","ref","alt","chain"])
     pdf["dcode"] = 1
+    pdf["qt"]    = np.nan
     vdf = vdf.append(pdf)
   if n:
     ndf = pd.DataFrame(n,columns=["unp_pos","ref","alt","chain"])
     ndf["dcode"] = 0
+    ndf["qt"]    = np.nan
     vdf = vdf.append(ndf)
   if c:
     cdf = pd.DataFrame(c,columns=["unp_pos","ref","alt","chain"])
     cdf["dcode"] = -1
+    cdf["qt"]    = np.nan
     vdf = vdf.append(cdf)
+  if q:
+    qdf = pd.DataFrame(q,columns=["unp_pos","ref","alt","chain","qt"])
+    qdf["dcode"] = np.nan
+    # Update column order to match  binary datasets
+    qdf = qdf[["unp_pos","ref","alt","chain","dcode","qt"]]
+    vdf = vdf.append(qdf)
   vdf = vdf.drop_duplicates().reset_index(drop=True)
 
   msg = None
@@ -786,7 +798,7 @@ def var2coord(s,p,n,c):
 
   # Defer to pathogenic annotation if conflicted. DO NOT OVERWRITE CANDIDATES!
   def pathdefer(g):
-    return g if all(g["dcode"]==0) else g[(g["dcode"]==1) | (g["dcode"]<0)]
+    return g if all(g["dcode"]==0) else g[g["dcode"]!=0]
   vdf = vdf.groupby(["unp_pos","ref","alt","chain"]).apply(pathdefer)
   
   # Construct a dataframe from the coordinate file
@@ -821,7 +833,7 @@ def var2coord(s,p,n,c):
 
   # Check that both variant categories are populated
   msg = None
-  if (sdf["dcode"]==0).sum() < 3:
+  if (sdf["dcode"]==0).sum() < 3:# and not sdf["qt"].notnull().sum() > 3:
     msg = "\nERROR: Structure contains %d neutral variants (PathProx minimum 3).\n"%(sdf["dcode"]==0).sum()
     if not args.add_exac and not args.add_1kg:
       msg += "Consider using --add_exac or --add_1kg.\n"
@@ -833,7 +845,7 @@ def var2coord(s,p,n,c):
       msg += "Please manually specify neutral variants.\n"
   if msg:
     sys.stderr.write("%s\n"%msg)
-  if (sdf["dcode"]==1).sum() < 3:
+  if (sdf["dcode"]==1).sum() < 3:# and not sdf["qt"].notnull().sum() > 3:
     msg = "\nERROR: Structure contains %d pathogenic variants (PathProx minimum 3).\n"%(sdf["dcode"]==1).sum()
     if not args.add_pathogenic and not args.add_somatic:
       msg += "Consider using --add_pathogenic or --add_somatic.\n"
@@ -961,14 +973,14 @@ def pstats(Pmat):
 
 def k_plot(T,K,Kz,lce,hce,ax=None,w=False):
   if not ax:
-    fig,ax = plt.subplots(1,1,figsize=(20,7))
+    fig,ax = plt.subplots(1,1,figsize=(15,5))
   # 95% Confidence
   ax.fill_between(T,lce,hce,alpha=0.2,
                       edgecolor='k',facecolor='k',
                       interpolate=True,antialiased=True)
   ax.scatter(T,K,s=50,color='darkred',edgecolor='white',lw=1,label=["Un-Weighted K","Weighted K"][w])
-  ax.set_xlabel("Distance Threshold (t)",fontsize=25)
-  ax.set_ylabel("K",fontsize=25,rotation=90)
+  ax.set_xlabel("Distance Threshold (t)",fontsize=16)
+  ax.set_ylabel("K",fontsize=16,rotation=90)
   ax.set_xlim([min(T),max(T)])
   if any(K<0) or any(lce<0) or any(hce<0):
     ax.set_ylim([-1.05,1.05])
@@ -984,25 +996,25 @@ def k_plot(T,K,Kz,lce,hce,ax=None,w=False):
 
 def saveKplot(T,K,Kz,lce,hce,label="",w=False):
   global sid
-  fig,ax = plt.subplots(1,1,figsize=(20,7))
+  fig,ax = plt.subplots(1,1,figsize=(15,5))
   k_plot(T,K,Kz,lce,hce,ax)
   sns.despine()
-  ax.set_title("Ripley's K",fontsize=25)
-  ax.legend(loc="lower right",fontsize=18)
+  ax.set_title("Ripley's K",fontsize=16)
+  ax.legend(loc="lower right",fontsize=14)
   plt.savefig("%s_%s_K_plot.pdf"%(args.label,label),dpi=300,bbox_inches='tight')
   plt.savefig("%s_%s_K_plot.png"%(args.label,label),dpi=300,bbox_inches='tight')
   plt.close(fig)
 
 def d_plot(T,D,Dz,lce,hce,ax=None,w=False):
   if not ax:
-    fig,ax = plt.subplots(1,1,figsize=(20,7))
+    fig,ax = plt.subplots(1,1,figsize=(15,5))
   # 95% Confidence
   ax.fill_between(T,lce,hce,alpha=0.2,
                       edgecolor='k',facecolor='k',
                       interpolate=True,antialiased=True)
   ax.scatter(T,D,s=50,color='darkred',edgecolor='white',lw=1,label=["Un-Weighted D","Weighted D"][w])
-  ax.set_xlabel("Distance Threshold (t)",fontsize=25)
-  ax.set_ylabel("D",fontsize=25,rotation=90)
+  ax.set_xlabel("Distance Threshold (t)",fontsize=16)
+  ax.set_ylabel("D",fontsize=16,rotation=90)
   ax.set_xlim([min(T),max(T)])
   if any(D<0) or any(lce<0) or any(hce<0):
     ax.set_ylim([-1.05,1.05])
@@ -1018,11 +1030,11 @@ def d_plot(T,D,Dz,lce,hce,ax=None,w=False):
 
 def saveDplot(T,D,Dz,lce,hce,label="",w=False):
   global sid
-  fig,ax = plt.subplots(1,1,figsize=(20,7))
+  fig,ax = plt.subplots(1,1,figsize=(15,5))
   d_plot(T,D,Dz,lce,hce,ax)
   sns.despine()
-  ax.set_title("Ripley's D",fontsize=25)
-  ax.legend(loc="lower right",fontsize=18)
+  ax.set_title("Ripley's D",fontsize=16)
+  ax.legend(loc="lower right",fontsize=14)
   plt.savefig("%s_D_plot.pdf"%args.label,dpi=300,bbox_inches='tight')
   plt.savefig("%s_D_plot.png"%args.label,dpi=300,bbox_inches='tight')
   plt.close(fig)
@@ -1158,10 +1170,11 @@ def prep_outdir(outdir):
 ## Begin Analysis ##
 
 # Load any user-provided variant sets
-if (args.pathogenic or args.neutral or args.variants) and \
-    not args.fasta:
-    msg = "FASTA files must be provided when analyzing user-specified variants.\n"
-    sys.stderr.write(msg); sys.exit(1)
+# User-defined variants are now assumed to match the canonical reference sequence.
+# if (args.pathogenic or args.neutral or args.variants) and \
+#     not args.fasta:
+#     msg = "FASTA files must be provided when analyzing user-specified variants.\n"
+#     sys.stderr.write(msg); sys.exit(1)
 
 # If requested, load database variant sets
 io = load_io(args) # Database IO object
@@ -1186,11 +1199,14 @@ for sid,bio,cf in get_coord_files(args.entity,io):
     print "\nSub-analysis label set to %s"%args.label
 
   # Check for existing results
-  if os.path.exists("%s/%s_variants.attr"%(args.outdir,args.label)):
+  if os.path.exists("%s/.%s.complete"%(args.outdir,args.label)):
     # Do not overwrite unless specified by the user
     if not args.overwrite:
       msg = "\nStructure %s[%s] has been processed. Use --overwrite to overwrite.\n"%(sid,bio)
       sys.stderr.write(msg); continue
+    else:
+      # Remove the complete flag and reanalyze
+      os.remove("%s/.%s.complete"%(args.outdir,args.label))
 
   # Read and renumber the coordinate file:
   s_renum,_,_    = read_coord_file(cf,sid,bio,chain=args.chain,
@@ -1232,7 +1248,7 @@ for sid,bio,cf in get_coord_files(args.entity,io):
   prep_outdir(args.outdir)
 
   # Annotate coordinate file with pathogenic, neutral, and candidate labels
-  sdf = var2coord(s,p,n,c)
+  sdf   = var2coord(s,p,n,c)
   nflag = (sdf["dcode"]==0).sum() > 2
   pflag = (sdf["dcode"]==1).sum() > 2
 
@@ -1443,11 +1459,11 @@ for sid,bio,cf in get_coord_files(args.entity,io):
   # Report scores for candidate variants
   if args.variants:
     print "\nNeutral constraint scores for candidate missense variants:"
-    print sdf.ix[sdf["dcode"]<0,["unp_pos","ref","alt","neutcon"]].sort_values( \
-          by=["neutcon","unp_pos"],ascending=[False,True]).groupby(["unp_pos"]).apply(np.mean).to_string(index=False)
+    print sdf.ix[sdf["dcode"]<0,["unp_pos","ref","alt","neutcon_z"]].sort_values( \
+          by=["neutcon_z","unp_pos"],ascending=[False,True]).groupby(["unp_pos"]).apply(np.mean).to_string(index=False)
     print "\nPathogenic constraint scores for candidate missense variants:"
-    print sdf.ix[sdf["dcode"]<0,["unp_pos","ref","alt","pathcon"]].sort_values( \
-          by=["pathcon","unp_pos"],ascending=[False,True]).groupby(["unp_pos"]).apply(np.mean).to_string(index=False)
+    print sdf.ix[sdf["dcode"]<0,["unp_pos","ref","alt","pathcon_z"]].sort_values( \
+          by=["pathcon_z","unp_pos"],ascending=[False,True]).groupby(["unp_pos"]).apply(np.mean).to_string(index=False)
     print "\nPathProx scores for candidate missense variants:"
     print sdf.ix[sdf["dcode"]<0,["unp_pos","ref","alt","pathprox"]].sort_values( \
           by=["pathprox","unp_pos"],ascending=[False,True]).groupby(["unp_pos"]).apply(np.mean).to_string(index=False)
@@ -1456,7 +1472,7 @@ for sid,bio,cf in get_coord_files(args.entity,io):
   print "\nVisualizing with Chimera (this may take a while)..."
   params = [args.label,sid,str(bio)]
   # Run the Chimera visualization script
-  script = '"../../scripts/pathvis.py %s"'%' '.join(params)
+  script = '"%s/pathvis.py %s"'%(script_dir,' '.join(params))
   cmd    = "TEMP=$PYTHONPATH; unset PYTHONPATH; chimera --nogui --silent --script %s; export PYTHONPATH=$TEMP"%script
   # Allow Mac OSX to use the GUI window
   if platform.system() == 'Darwin':
@@ -1464,10 +1480,13 @@ for sid,bio,cf in get_coord_files(args.entity,io):
   try:
     print "\nRunning Chimera script:"
     print "\n%s\n"%cmd
-    status = os.system(cmd)
+    status  = os.system(cmd)
     if status:
       raise Exception("Chimera process returned non-zero exit status.")
   except Exception as e:
     raise
 
-  print "\nAnalysis complete."
+  # Mark this analysis as complete
+  open(".%s.complete"%args.label,'wb').close()
+
+print "\nAll analyses complete."

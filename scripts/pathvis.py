@@ -52,11 +52,22 @@ if __name__ == '__main__':
       rc("copy file %s_structure.png width 3 height 3 units inches dpi 300"%out)
     # Reduce ribbon transparency for variant plots
     rc("transparency 70,r")
+    # Display both pathogenic and neutral
+    if os.path.exists(avattrf) and png:
+      rc("defattr %s raiseTool false"%avattrf)
+      rc("disp :/pathogenicity>-2 & @ca")
+      rc("rangecolor pathogenicity,a 1 red 0 blue")
+      rc("disp :/pathogenicity<0 & @ca")
+      rc("color black,a :/pathogenicity<0 & @ca")
+      rc("copy file %s_variants.png width 3 height 3 units inches dpi 300"%out)
+      rc("~disp")
     # Display neutral only
     if os.path.exists(nvattrf) and png:
       rc("defattr %s raiseTool false"%nvattrf)
       rc("disp :/neutral & @ca")
       rc("color blue,a")
+      rc("disp :/pathogenicity<0 & @ca")
+      rc("color black,a :/pathogenicity<0 & @ca")
       rc("copy file %s_neutral.png width 3 height 3 units inches dpi 300"%out)
       rc("~disp")
     # Display pathogenic only
@@ -64,34 +75,37 @@ if __name__ == '__main__':
       rc("defattr %s raiseTool false"%pvattrf)
       rc("disp :/pathogenic & @ca")
       rc("color red,a")
+      rc("disp :/pathogenicity<0 & @ca")
+      rc("color black,a :/pathogenicity<0 & @ca")
       rc("copy file %s_pathogenic.png width 3 height 3 units inches dpi 300"%out)
-      rc("~disp")
-    # Display both pathogenic and neutral
-    if os.path.exists(avattrf) and png:
-      rc("defattr %s raiseTool false"%avattrf)
-      rc("disp :/pathogenicity>-9 & @ca")
-      rc("rangecolor pathogenicity,a 1 red 0 blue")
-      rc("copy file %s_variants.png width 3 height 3 units inches dpi 300"%out)
       rc("~disp")
     rc("transparency 0,r") # confirm opacity
     # Display neutral constraint
     if os.path.exists(ncattrf) and png:
       rc("defattr %s raiseTool false"%ncattrf)
       rc("rangecolor neutcon,r min red max white")
+      rc("disp :/pathogenicity<0 & @ca")
+      rc("color black,a :/pathogenicity<0 & @ca")
       rc("copy file %s_neutcon.png width 3 height 3 units inches dpi 300"%out)
     # Display pathogenic constraint
     if os.path.exists(pcattrf) and png:
       rc("defattr %s raiseTool false"%pcattrf)
       rc("rangecolor pathcon,r max red min white")
+      rc("disp :/pathogenicity<0 & @ca")
+      rc("color black,a :/pathogenicity<0 & @ca")
       rc("copy file %s_pathcon.png width 3 height 3 units inches dpi 300"%out)
     # Display PathProx
     if os.path.exists(ppattrf) and png:
       rc("defattr %s raiseTool false"%ppattrf)
       rc("rangecolor pathprox,r max red min blue 0 white")
+      rc("disp :/pathogenicity<0 & @ca")
+      rc("color black,a :/pathogenicity<0 & @ca")
       rc("copy file %s_pathprox.png width 3 height 3 units inches dpi 300"%out)
     # Export the scene and exit
     rc("disp :/pathogenicity>-9 & @ca")
     rc("rangecolor pathogenicity,a 1 red 0 blue")
+    rc("disp :/pathogenicity<0 & @ca")
+    rc("color black,a :/pathogenicity<0 & @ca")
     rc("save ./%s.py"%out)
     os.chmod("./%s.py"%out,774)
     rc("close all")

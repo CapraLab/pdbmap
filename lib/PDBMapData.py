@@ -25,31 +25,26 @@ from lib import bed # PyVCF emulator for BED files
 
 class PDBMapData():
   
-  def __init__(self,vep="",plink="plink",dname='1kg3'):
-    self.vep = vep
-    self.dname=dname
+  def __init__(self,vep="",dname=''):
+    self.vep   = vep
+    self.dname = dname
     if self.vep and not os.path.exists(self.vep):
       msg = "ERROR (PDBMapData) VEP location invalid: %s"%vep
       raise Exception(msg)
     if self.vep:
       # Check for a dbconn file
-      registry = "%s/dbconn.conf"%os.path.dirname(vep)
       cache    = "/dors/capra_lab/data/vep/"
       # cache    = os.path.expanduser(cache) # replace ~ with explicit home directory
       if not os.path.exists(cache):
         msg = "WARNING (PDBMapData) No cache exists. Using network connection.\n"
         sys.stderr.write(msg)
         cache = None
-      # if not os.path.exists(registry):
-      #   msg = "WARNING (PDBMapData) No registry specified. Using Ensembl.\n"
-      #   sys.stderr.write(msg)
-      #   registry = None
       # Construct the VEP command
       self.vep_cmd = [self.vep,'-i','']
       # Specify the input type
       self.vep_cmd.extend(['--format',''])
       # Use the local VEP cache
-      self.vep_cmd.extend(['--cache','--offline'])
+      self.vep_cmd.extend(['--cache','--offline','--dir',cache])
       # Disable the progress bars
       self.vep_cmd.extend(['--no_progress'])
       # Increase buffer size to improve runtime (default 5,000)
@@ -252,7 +247,7 @@ class PDBMapData():
           snpcount += 1
           yield self.record_parser(record,info_headers,csq_headers)
     ## We are now allowing Synonymous SNPs to be mapped ##
-    print "Total SNPs (syn+nonsyn) in %s: %d"%(fname,snpcount)
+    print "\nTotal SNPs (syn+nonsyn) in %s: %d"%(fname,snpcount)
     # print "Nonsynonymous SNPs in %s: %d"%(fname,nscount)
 
   def load_pedmap(self,fname):
@@ -309,29 +304,11 @@ class PDBMapData():
     # Extract and convert info types
     type_conv = {"Integer":"BIGINT","Float":"DOUBLE","Flag":"TINYINT","String":"TEXT"}
     info_types  = [type_conv[info.type] for info in parser.infos.values()]
-    # csq_header  = []
-    # if "CSQ" in parser.infos:
-    #   csq_header = parser.infos["CSQ"].desc.split(': ')[-1].split('|')
-    #   info_header.remove("CSQ")
     for char in ['.',' ','/','\\','(',')','[',']','-','!','+','=']:
         info_header = [f.replace(char,'_') for f in info_header]
-        # csq_header  = [f.replace(char,'_') for f in csq_header]
     header = var_header + info_header #+ csq_header
     # Use the first row to infer data types for the INFO fields
     record = parser.next()
-    #REPLACED: VCF explicitly lists field types
-    # # Use the first row to infer data types for the CSQ fields
-    # csq_types = []
-    # if "CSQ" in parser.infos:
-    #   for col in record.INFO["CSQ"]:
-    #     try:
-    #       col = float(col)
-    #       csq_types.append("DOUBLE")
-    #     except ValueError,TypeError:
-    #       if len(col) > 150:
-    #         csq_types.append("TEXT")
-    #       else:
-    #         csq_types.append("VARCHAR(250)") # reasonably large varchar
     types    = header_types + info_types #+ csq_types
     # Set default values for each type
     defaults = {"BIGINT":0,"DOUBLE":0.0,"TINYINT":0,"TEXT":"''","VARCHAR(100)":"''"}
@@ -345,13 +322,13 @@ class PDBMapData():
                   for i in range(len(header))]
     # Include as many non-TEXT columns in primary key as allowed (16)
     # Additional INFO (like END) may justify duplicates within the standard VCF fields
-    query = "CREATE TABLE IF NOT EXISTS %s (%s, PRIMARY KEY(%s))"
+    query = "CREATE TABLE IF NOT EXISTS %s.%s (%s, PRIMARY KEY(%s))"
     pk = ','.join([h for i,h in enumerate(header) if types[i]!="TEXT"][:16])
-    query = query%(self.dname,', '.join(table_def),pk)
+    query = query%(io.dbname,self.dname,', '.join(table_def),pk)
     # Create the table
     io.secure_command(query)
     # Populate the table with contents of VCF file
-    query_head  = "INSERT IGNORE INTO %s "%self.dname
+    query_head  = "INSERT IGNORE INTO %s.%s "%(io.dbname,self.dname)
     query_head += "(%s) VALUES "%','.join(['`%s`'%h for h in header])
     query = query_head
     def record2row(record,infos):#,csq_header=None):
@@ -362,9 +339,6 @@ class PDBMapData():
       # Replace any empty lists with None
       row =  [r if type(r)!=list or len(r)<1 else r[0] for r in row]
       row =  [r if r else None for r in row]
-      # if csq_header:
-      #   csq  = record.INFO["CSQ"].split("|")
-      #   row += [csq[f] for f in csq_header]
       return row
     # Add the first record to insert rows
     rows   = record2row(record,parser.infos)
@@ -410,6 +384,7 @@ class PDBMapData():
         header = [f.replace(char,'_') for f in header]
       reader = csv.reader(fin,delimiter='\t')
       row1   = reader.next()
+      prepend_chr = True if row1[0][:3] != "chr" else False
     # Remove header from bed file
     types = ["VARCHAR(100)","INT","INT","VARCHAR(100)"]
     for i,col in enumerate(row1):
@@ -432,20 +407,20 @@ class PDBMapData():
             types.insert(i,"TEXT")
           else:
             types.insert(i,"VARCHAR(250)") # reasonably large varchar
-    table_def = ["%s %s"%(header[i],types[i]) for i in range(len(header))]
-    query = "DROP TABLE IF EXISTS %s"
-    query = query%self.dname
+    table_def = ["`%s` %s"%(header[i],types[i]) for i in range(len(header))]
+    query = "CREATE TABLE IF NOT EXISTS %s.%s (%s, PRIMARY KEY(chr,start,end,name))"
+    query = query%(io.dbname,self.dname,','.join(table_def))
     io.secure_command(query)
-    query = "CREATE TABLE IF NOT EXISTS %s (%s, PRIMARY KEY(chr,start,end,name))"
-    query = query%(self.dname,','.join(table_def))
-    io.secure_command(query)
-    query  = "LOAD DATA LOCAL INFILE '%s' INTO TABLE %s "%(fname,self.dname)
+    query  = "LOAD DATA LOCAL INFILE '%s' INTO TABLE %s.%s "%(fname,io.dbname,self.dname)
     if delim != '\t':
       query += r"FIELDS TERMINATED BY '%s'"%delim
     else:
       query += r"FIELDS TERMINATED BY '\t'"
     query += "IGNORE 1 LINES"
     io.secure_command(query)
+    if prepend_chr:
+      query = "UPDATE %s.%s SET chr=CONCAT('chr',chr)"%(io.dbname,self.dname)
+      io.secure_command(query)
     # Make any necessary indexing conversions
     if indexing == 'ucsc':
       query = "UPDATE IGNORE %s SET start=start+1, end=end+1 ORDER BY start,end DESC"%self.dname

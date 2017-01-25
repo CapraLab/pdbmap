@@ -396,6 +396,12 @@ class PDBMapIO(PDBIO):
     if not createdb:
       self._connect()
 
+  def __del__(self):
+    # Guarantee all database connections are closed
+    for con in self._cons:
+      con.close()
+
+
   def is_nmr(self,pdbid,label=-1):
     # None is a valid argument to label
     if label == -1:
@@ -580,7 +586,7 @@ class PDBMapIO(PDBIO):
           rfields["label"] = self.slabel
           rquery = rquery%rfields
           # Break into multiple queries if length exceeds 100 million characters
-          if len(rquery) > 1000000:
+          if len(rquery) > 100000:
             queries.append(rquery[:-1])
             rquery  = "INSERT IGNORE INTO Residue "
             rquery += "(label,structid,biounit,model,chain,resname,rescode,seqid,icode,x,y,z,ss,rsa,phi,psi,tco,kappa,alpha,conflict) "
@@ -603,7 +609,7 @@ class PDBMapIO(PDBIO):
             tquery += '%d,"%s",'%(seqid,rescode)
             tquery += '"%s",%d,%d,%d),'%(chr,start,end,strand)
           # Break into multiple queries if length exceeds 100 million characters
-          if len(tquery) > 1000000:
+          if len(tquery) > 100000:
             queries.append(tquery[:-1])
             tquery  = "INSERT IGNORE INTO Transcript "
             tquery += "(label,transcript,protein,gene,seqid,rescode,chr,start,end,strand) "
@@ -622,7 +628,7 @@ class PDBMapIO(PDBIO):
         aquery += '("%s","%s","%s",%d,'%(self.slabel,s.id,a.chain.id,c_seqid)
         aquery += '"%s",%d),'%(a.transcript.transcript,t_seqid)
       # Break into multiple queries if length exceeds 100 million characters
-      if len(aquery) > 1000000:
+      if len(aquery) > 100000:
         queries.append(aquery[:-1])
         aquery  = "INSERT IGNORE INTO Alignment "
         aquery += "(label,structid,chain,chain_seqid,transcript,trans_seqid) "
