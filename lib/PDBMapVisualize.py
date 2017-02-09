@@ -3,22 +3,18 @@
 # Project        : PDBMap
 # Filename       : PDBMapVisualize.py
 # Author         : R. Michael Sivley
-# Organization   : Center for Human Genetics Research,
+# Organization   : Vanderbilt Genetics Institute,
 #                : Department of Biomedical Informatics,
-#                : Vanderbilt University Medical Center
+#                : Vanderbilt University
 # Email          : mike.sivley@vanderbilt.edu
-# Date           : 2014-02-27
-# Description    : Visualization tool for PDBMap variation.
+# Date           : 2017-02-09
+# Description    : Visualization tool for PDBMap.
 #=============================================================================#
 
 # See main check for cmd line parsing
-import sys,os,csv,time,math,platform
-# from pymol import cmd
-max_dist = -999 # Used by show_density and dist
+import sys,os,csv,time,platform
 
 class PDBMapVisualize():
-
-  dens_mat = None # Class variable for show_desnity
   
   def __init__(self,io,pdb_dir='data/rcsb',modbase_dir='data/modbase'):
     """ Initialize the PDBMapVisualize object. """
@@ -26,7 +22,7 @@ class PDBMapVisualize():
     self.pdb_dir = pdb_dir
     self.modbase_dir = modbase_dir
 
-  def visualize_structure(self,structid,biounit=0,anno_list=['maf'],eps=None,mins=None,spectrum_range=[],group=None,colors=[],permute=False,syn=False):
+  def visualize_structure(self,structid,biounit=0,anno_list=['maf'],spectrum_range=[],group=None,colors=[],permute=False,syn=False):
     """ Visualize the annotated dataset within a structure """
     biounit = 0 if biounit<0 else biounit
     print "Visualizing %s.%s..."%(structid,biounit)
@@ -114,36 +110,6 @@ class PDBMapVisualize():
     maxm = len(set(res['model']))
     if maxm < 2:
       res['model'] = [0 for m in res['model']]
-
-    # If DBSCAN Eps specified
-    if eps and mins:
-      import numpy as np
-      from sklearn.cluster import DBSCAN
-      from scipy.spatial.distance import pdist,squareform
-      cols = ['model','seqid','chain']
-      location = np.array([list(coord) for coord in zip(res['x'],res['y'],res['z'])])
-      seen = set()
-      seen_add = seen.add
-      newres = dict((k,[]) for k in res.keys())
-      for i in range(len(res['x'])):
-        coord = (res['x'][i],res['y'][i],res['z'][i])
-        if not (coord in seen or seen_add(coord)):
-          for key in res:
-            newres[key].append(res[key][i])
-      res = newres
-      location = np.array([list(coord) for coord in zip(res['x'],res['y'],res['z'])])
-      distance = squareform(pdist(location,'euclidean'))
-      clusters = DBSCAN(eps=eps,min_samples=mins,metric='precomputed').fit(distance).labels_
-      noise    = int(min(clusters) >= 0)
-      clusters = [c+1 for c in clusters]
-      res['clusters_%d_%d'%(eps,mins)] = clusters
-      cls =  ['grey','red','blue','green','orange','yellow']
-      cls += ['brown','purple','black','white','pink','magenta']
-      cls += ['sienna','firebrick','khaki','turquoise']
-      cls += ['cyan','slate','chartreuse']
-      cls *= len(set(clusters)) / len(cls) + 1
-      colors.append(cls[noise:len(set(clusters))+noise])
-      anno_list.append('clusters_%d_%d'%(eps,mins))
 
     # Output all annotations to results file
     cols = ['model','seqid','chain']
@@ -244,8 +210,8 @@ class PDBMapVisualize():
                 'minval':minval,'maxval':maxval,'resis':out,'struct_loc':struct_loc,'resrenumber':resrenumber}
       self.visualize(params,group=group)
 
-  def visualize_unp(self,unpid,anno_list=['maf'],eps=None,mins=None,spectrum_range=[],colors=[],syn=False):
-    """ Visualize the annotated dataset associated with a protein """
+  def visualize_unp(self,unpid,anno_list=['maf'],spectrum_range=[],colors=[],syn=False):
+    """ Visualize the annotated dataset in all structures/model of the specified protein """
     print "Visualizing protein %s"%(unpid)
     res_list  = self.io.load_unp(unpid)
     # Visualize for each biological assembly
@@ -260,19 +226,19 @@ class PDBMapVisualize():
           biounits = [r[0] for r in res]
         for biounit in biounits:
           print "Visualizing structure %s.%s"%(entity,biounit)
-          self.visualize_structure(entity,biounit,anno_list,eps,mins,spectrum_range,group=unpid,colors=colors,syn=syn)
+          self.visualize_structure(entity,biounit,anno_list,spectrum_range,group=unpid,colors=colors,syn=syn)
       elif entity_type == 'model':
         # Query all biological assemblies
         biounits = [-1]
         for biounit in biounits:
           print "Visualizing model %s.%s"%(entity,biounit)
-          self.visualize_structure(entity,biounit,anno_list,eps,mins,spectrum_range,group=unpid,colors=colors,syn=syn)
+          self.visualize_structure(entity,biounit,anno_list,spectrum_range,group=unpid,colors=colors,syn=syn)
       else:
-        msg = "ERROR (PDBMapVisualize) Invalid entity_type for %s: %s"%(entity,entity_type)
+        msg = "ERROR (PDBMapVisualize) Cannot visualize %s of type %s"%(entity,entity_type)
         raise Exception(msg)
 
-  def visualize_all(self,anno_list=['maf'],eps=None,mins=None,spectrum_range=[],colors=[],syn=False):
-    """ Visualize all structures and models for the annotated dataset """
+  def visualize_all(self,anno_list=['maf'],spectrum_range=[],colors=[],syn=False):
+    """ Visualize all structures and models annotated by the specified dataset """
     print "Visualizing dataset %s"%self.io.dlabel
     query = "SELECT DISTINCT structid FROM GenomicIntersection WHERE dlabel=%s"
     res   = [r for r in self.io.secure_query(query,(self.io.dlabel,),cursorclass='Cursor')]
@@ -285,17 +251,18 @@ class PDBMapVisualize():
         bres   = self.io.secure_query(query,(s,),cursorclass='Cursor')
         biounits = [r[0] for r in bres]
       for b in biounits:
-        self.visualize_structure(s,b,anno_list,eps,mins,spectrum_range,group='all',colors=colors,syn=syn)
+        self.visualize_structure(s,b,anno_list,spectrum_range,group='all',colors=colors,syn=syn)
     models = [r[0] for r in res if self.io.detect_entity_type(r[0]) == 'model']
     for m in models:
       biounits = [-1]
       bres   = self.io.secure_query(query,(m,),cursorclass='Cursor')
       biounits = [r[0] for r in bres]
       for b in biounits:
-        self.visualize_model(m,b,anno_list,eps,mins,spectrum_range,group='all',colors=colors,syn=syn)
+        self.visualize_model(m,b,anno_list,spectrum_range,group='all',colors=colors,syn=syn)
 
   def visualize(self,params,group=None):
-    # Visualize with PyMol
+    """ Run the Chimera visualization with the specified parameters """
+    # Setup the visualization output directory
     timestamp = str(time.strftime("%Y%m%d-%H"))
     res_dir = 'results/pdbmap_%s_%s_%s'
     if group:
@@ -305,16 +272,17 @@ class PDBMapVisualize():
     params['res_dir'] = res_dir
     if not os.path.exists(res_dir):
       os.system('mkdir -p %s'%res_dir)
-
-    # Visualize with Chimera
+    # Setup the chimera visualization parameters
     params['minval'] = "%0.6f"%params['minval']
     params['maxval'] = "%0.6f"%params['maxval']
     params['colors'] = '-' if not params['colors'] else ','.join(params['colors'])
-    keys   = ['structid','biounit','anno','attrf','minval','maxval','struct_loc','res_dir','colors','resrenumber','vtype']
+    keys   = ['structid','biounit','anno','attrf','minval','maxval',
+                'struct_loc','res_dir','colors','resrenumber','vtype']
+    # Generate the subprocess command string
     script = '"lib/PDBMapVisualize.py %s"'%' '.join([str(params[key]).translate(None,' ') for key in keys])
     cmd    = "TEMP=$PYTHONPATH; unset PYTHONPATH; chimera --nogui --silent --script %s; export PYTHONPATH=$TEMP"%script
-    # Allow Mac OSX to use the GUI window
     if platform.system() == 'Darwin':
+      # Allow Mac OSX to use the GUI window
       cmd  = "TEMP=$PYTHONPATH; unset PYTHONPATH; chimera --silent --script %s; export PYTHONPATH=$TEMP"%script
     try:
       status = os.system(cmd)
@@ -323,161 +291,12 @@ class PDBMapVisualize():
     except Exception as e:
       raise
 
-  # Executed in PyMol
-  @classmethod
-  def overwrite_bfactor(cls,pdbid,chain,resi,value):
-    """ Overwrites the b-factors for all atoms in a residue """
-    pdbid = pdbid.lower()
-    if chain == 'A':
-      # Some modbase models do not have chains, and have been dummy coded to A
-      selection = "(%s and (chain %s or chain '') and resi %d)"%(pdbid,chain,resi)
-    else:
-      selection = "(%s and chain %s and resi %d)"%(pdbid,chain,resi)
-    exp = "b=%f"%value
-    command = "alter %s, %s"%(selection,exp)
-    cmd.alter(selection,exp)
-    return command
-
-  # Executed in PyMol
-  @classmethod
-  def reset_bfactor(cls,pdbid,val=0.0):
-    """ Sets b-factor for all atoms to the same value """
-    exp = "b=%d"%val
-    cmd.alter(pdbid,exp)
-
-  # Called directly from PyMol
-  @classmethod
-  def overwrite_bfactors(cls,pdbid,scores,resis=None,discrete=False,
-                         binary=False,displaytype='cartoon',surface=False,
-                         var_spheres=False,spec_range=None):
-    """ Visualizes variant characteristics or scores in a structure """
-    col = 3 # specify the score column
-    pdbid = pdbid.lower()
-    if isinstance(scores,str): # if filename, read file
-      fin = open(scores,'rU')
-      reader = csv.reader(fin,delimiter='\t')
-      if resis:
-        scores = [row for row in reader if row[0].lower()==pdbid and int(row[2]) in resis]
-      else:
-        scores = [row for row in reader if row[0].lower()==pdbid]
-      fin.close()
-    for score in scores:
-      if not score[col] or score[col] == 'NULL':
-        score[col] = -1
-    uniq_scores = [float(score[col]) for score in scores if float(score[col]) > 0]
-    if spec_range and uniq_scores:
-      min_score = spec_range[0]
-      max_score = spec_range[1]
-    elif uniq_scores:
-      min_score = min(uniq_scores) - 0.0001
-      max_score = max(uniq_scores)
-    else:
-      msg = "ERROR: %s contains no valid scores."%pdbid
-      raise Exception(msg)
-
-    PDBMapVisualize.reset_bfactor(pdbid,min_score-10)
-    commands = [PDBMapVisualize.overwrite_bfactor(row[0],row[1],int(row[2]),float(row[col])) for row in scores]
-    include = "br. b > %f"%min_score
-    exclude = "br. b < %f"%min_score
-    print("Minimum score: %s"%min_score)
-    print("Maximum score: %s"%max_score)
-
-    # Generate models
-    if surface:
-      cmd.create("surface_obj",pdbid)
-      cmd.color("grey","surface_obj")
-    cmd.hide("everything","all")
-    cmd.show(representation=displaytype)
-    cmd.set(name="cartoon_discrete_colors",value="on")
-    if var_spheres:
-        cmd.show(selection="name CA and br. b > -1.1",representation="spheres")
-        cmd.set(name="sphere_scale",value=1)
-    if surface:
-      cmd.show(selection="surface_obj",representation="surface")
-      cmd.set(selection="surface_obj",name="transparency",value=0.5)
-
-    # Assign colors
-    cmd.bg_color("white")
-    cmd.color("grey","all")
-    if binary:
-      cmd.color("red", selection="br. b=1")
-    elif discrete:
-      discrete_colors = ["","firebrick","density","forest","tv_yellow","deeppurple","orange","orange","deepteal","white","black","grey"]
-      for i in range(1,int(max_score)+1):
-        cmd.color(discrete_colors[i],selection="br. b=%d"%i)
-    else:
-      cmd.spectrum("b","blue_red",selection=include,minimum=min_score,maximum=max_score)
-    cmd.color("grey",exclude)
-    cmd.orient("all")
-    return commands
-
-  # Executed in PyMol
-  @classmethod
-  def show_density(cls,pdbid,pdbmap_file,variants_file,radius):
-    """ Calculates and visualizes variant density in a structure """
-    radius = float(radius)
-    if not PDBMapVisualize.dens_mat:
-      # columns: chain,seqres,x,y,z
-      fin = open(pdbmap_file,'rU')
-      fin.readline() # burn the header
-      reader = csv.reader(fin,delimiter='\t')
-      residues = [row[1:] for row in reader if row[0].lower()==pdbid]
-      fin = open(variants_file,'rU')
-      fin.readline() # burn the header
-      reader = csv.reader(fin,delimiter='\t')
-      variants = [row[1:] for row in reader if row[0].lower()==pdbid]
-
-      # Compute the distance "matrix"
-      dist_mat = {}
-      for res_chain,res_seqres,x,y,z in residues:
-        res_pos = (x,y,z)
-        for var_chain,var_seqres,i,j,k,chrom,start,end,var_name in variants:
-          var_pos = (i,j,k)
-          if (res_chain,res_seqres) not in dist_mat:
-            dist_mat[(res_chain,res_seqres)] = []
-          dist_mat[(res_chain,res_seqres)].append(dist((x,y,z),(i,j,k)))
-
-      # Convert the distance matrix into a density "matrix"
-      PDBMapVisualize.dens_mat = []
-      for chain,seqres in dist_mat:
-        distances = dist_mat[(chain,seqres)]
-        for k in range(int(max_dist)):
-          num_neighbors = len([x for x in distances if x <= k])
-          PDBMapVisualize.dens_mat.append((chain,seqres,k,num_neighbors)) 
-            
-    # Reduce to requested k
-    k_dense_map = [[pdbid,row[0],row[1],row[3]] for row in PDBMapVisualize.dens_mat if row[2]<=radius]
-    PDBMapVisualize.overwrite_bfactors(pdbid,k_dense_map,displaytype='mesh')
-
-  # # Once computed, store permanently, extracting different k values
-  # PDBMapVisualize.dens_mat = None
-
-
-def dist(ipos,jpos):
-  global max_dist
-  dist_x = abs(float(ipos[0]) - float(jpos[0])) ** 2
-  dist_y = abs(float(ipos[1]) - float(jpos[1])) ** 2
-  dist_z = abs(float(ipos[2]) - float(jpos[2])) ** 2
-  xyz_dist = math.sqrt(dist_x+dist_y+dist_z)
-  max_dist = max(max_dist,xyz_dist)
-  return xyz_dist
-
-## Copied from biolearn
-def multidigit_rand(digits):
-  import random
-  randlist = [random.randint(1,10) for i in xrange(digits)]
-  multidigit_rand = int(''.join([str(x) for x in randlist]))
-  return multidigit_rand
-
-# Add overwrite_bfactors to PyMol scope
-# cmd.extend("PDBMapVisualize.overwrite_bfactors",PDBMapVisualize.overwrite_bfactors)
-# cmd.extend("PDBMapVisualize.show_density",PDBMapVisualize.show_density)
-
-# Chimera executable
+# Chimera visualization executable; called as a subprocess
+# by the class methods defined above
 if __name__ == '__main__':
   from chimera import runCommand as rc
   from chimera import replyobj
-  # args = [sys.argv.split(' ')]
+  # Parse the command line arguments
   args = sys.argv
   params = {'structid':args[1],'biounit':int(args[2]),'anno':args[3],'attrf':args[4],
             'minval':float(args[5]),'maxval':float(args[6]),'struct_loc':args[7],
@@ -509,7 +328,6 @@ if __name__ == '__main__':
     # Identify all annotated residues as spheres
     rc("disp %s@ca"%resi[0])
     # And show atom/bonds around annotated residues
-    #rc("bonddisplay always %s za<5"%resi[0])
   # Define variant representation
   rc("represent bs")
   rc("setattr m autochain 0")
@@ -536,11 +354,6 @@ if __name__ == '__main__':
     rc("color gray,a :/%(anno)s=%(minval)s"%params)
     rc("color gray,a :/%(anno)s<%(minval)s"%params)
   rc("transparency 70,r")
-  # Renumber residues to reference sequence
-  # This fails for discontinuous chains because numbering remains
-  # sequential regardless of the gap length.
-  # for chain,seqid in params["resrenumber"].iteritems():
-  #   rc("resrenumber %s :.%d"%(chain,seqid))
   # Export the scene
   rc("save %(res_dir)s/%(structid)s_biounit%(biounit)d_%(anno)s_%(vtype)s.py"%params)
   # Export the image
@@ -550,8 +363,3 @@ if __name__ == '__main__':
   rc("copy file %(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(anno)s_%(vtype)s.png width 1600 height 1600 units points dpi 300"%params)
   rc("close all")
   rc("stop now")
-  # Export the movie 
-  #FIXME: terrible quality on these videos
-  # rc("movie record; turn y 3 120; wait 120; movie stop")
-  # rc("movie encode quality highest output %(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(anno)s.mp4"%params)
-
