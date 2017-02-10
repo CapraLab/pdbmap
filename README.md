@@ -39,6 +39,41 @@ This command will download or refresh a local mirror of and/or necessary files f
 The location of any of these resources may be changed. Users should update DEFAULT.config with location of all necessary resources. Note that existing copies of these datasets may be used, but the functionallity of `--refresh` may be affected. Parsing of the PDB and ModBase directory structures is also sensitive to change, so consider downloading the datasets with PDBMap and then moving the directories into a shared location; update the configuration file with the new location.
 
 ## Loading Structural Information into PDBMap
+To load **only** protein structures from the Protein Data Bank into PDBMap, use
+```
+./pdbmap.py -c config/<USER>.config load_pdb all
+```
+To load **only** protein structural models from ModBase into PDBMap, use
+```
+./pdbmap.py -c config/<USER>.config load_model all
+```
+To load **all** PDB structures and ModBase models for all Swiss-Prot human proteins (recommended), use
+```
+./pdbmap.py -c config/<USER>.config load_unp all
+```
+In the database, all PDB structures receive the label `pdb` and all ModBase models receive the label `modbase` unless otherwise specified.
 
+To load the entire PDBMap structural database in parallel using `N` SLURM jobs, update `slurm/load_pdbmap.slurm` with your SLURM account information, then use,
+```
+sbatch --array=0-N slurm/load_pdbmap.slurm N
+```
 
 ## Loading Genomic Information into PDBMap
+Any genomic dataset can be loaded into PDBMap. By default, scripts are provided to download local copies of variant data from
+* The Single Nucleotide Polymorphism Database (dbSNP)
+* The 1000 Genomes Project
+* The Exome Sequencing Project (ESP)
+* The Exome Aggregation Consortium (ExAC)
+* The Catalogue of Somatic Mutations in Cancer (COSMIC)
+* The GWAS Catalogue
+* ClinVar
+Each of these datasets can be downloaded by running the `get_<dataset>.sh` script within the corresponding directories.
+
+To load a genomic dataset into PDBMap, use
+```
+./pdbmap.py -c config/<USER>.config load_data <data_file> <data_name>
+```
+or
+```
+./pdbmap.py -c config/<USER>.config --dlabel=<data_name> load_data <data_file> [<data_file> ...]
+```
