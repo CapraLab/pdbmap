@@ -4,7 +4,7 @@ PDBMap is a command line tool and database interface designed to facilitate the 
 
 ## PDBMap External Dependencies
 
-PDBMap is a portal between the fields of genetics and structural biology, and as such it relies on several other software packages. A complete list of necessary packages are provided below:
+PDBMap is a portal between the fields of genetics and structural biology, and as such it relies on several (free) software packages and databases. Unfortunately, these cannot be distributed with PDBMap and must be installed separately. A complete list of the packages are provided below:
 
 * [UCSF Chimera (Headless)](https://www.cgl.ucsf.edu/chimera/cgi-bin/secure/chimera-get.py?file=alpha/chimera-alpha-linux_x86_64_osmesa.bin)
 * [MySQL](https://dev.mysql.com/downloads/os-linux.html)
@@ -100,3 +100,23 @@ You can also compare the distribution to the synonymous distribution of minor al
 ```
 ./pdbmap.py -c config/<USER>.config visualize 2SHP exac maf.synonymous 1
 ```
+
+## Navigating the PDBMap MySQL Database
+The MySQL database is composed of several tables, generally organized into structural tables, genomic tables, the intersection table, and supplementary tables. 
+The join order for the structure tables is:
+```
+Structure
+          -> Chain -> Residue -> Alignment -> Transcript
+Model              -> AlignmentScore
+                 
+```
+Each table is joined on its common columns. For example, Residue and Chain are joined on matching `slabel`, `structid`, and `chain` columns.
+
+The join order for the genomic tables is:
+```
+GenomicData -> GenomicConsequence -> GenomicIntersection
+            -> Supplementary Tables
+```
+Most genetic datasets are uploaded in their original form to supplemental tables prior to being processed and uploaded into PDBMap. Joined with GenomicData on their chromosomal position, these tables allow users to incorporate additional information not supported by the default PDBMap schemas.
+
+A detailed layout of the PDBMap database schema is provided <here>.
