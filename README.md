@@ -75,3 +75,14 @@ To load a genomic dataset into PDBMap, use
 OR
 ./pdbmap.py -c config/<USER>.config --dlabel=<data_name> load_data <data_file> [<data_file> ...]
 ```
+Genetic datasets are often distributed by-chromosome and are thus easily parallelizable. SLURM scripts for some of the default datasets are provided and may be used a templates for designing SLURM scripts for other datasets. To load data in parallel, use
+```
+sbatch --array=1-24 slurm/load_exac.slurm 
+```
+
+## Intersecting Structural and Genomic Information
+Once the structural and genomic datasets have each been loaded into PDBMap, they must be intersected to construct the direct mapping from nucleotide to amino acid. This can be a lengthy process, but it must only be performed once for each dataset. Once intersected, queries are very efficient, enabling large-scale, high-throughput analysis of genetic information within its protein structural context. To intersect two datasets, use
+```
+./pdbmap -c config/<USER>.config --slabel=pdb --dlabel=exac intersect
+```
+This command download the structural and genomic data to flat files indexed by chromosomal position, perform an intersection using `intersectBed`, and upload the results back to the database. If you are working with smaller datasets, you may consider adding the `quick` flag after `intersect`. This will perform the intersection using a MySQL join instead of `intersectBed`, which may decrease runtime. This is highly discouraged for larger datasets.
