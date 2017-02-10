@@ -4,9 +4,11 @@ PDBMap is a command line tool and database interface designed to facilitate the 
 
 PDBMap is a portal between the fields of genetics and structural biology, and as such it relies on several other software packages. A complete list of necessary installations (that cannot be shipped with the PDBMap distribution) are provided below:
 
-Chimera
-Ensembl Database
-Ensembl API
-Ensembl Variant Effect Predictor
-DSSP
-...
+* [UCSF Chimera (Headless)](https://www.cgl.ucsf.edu/chimera/cgi-bin/secure/chimera-get.py?file=alpha/chimera-alpha-linux_x86_64_osmesa.bin)
+* [MySQL](https://dev.mysql.com/downloads/os-linux.html)
+* [Ensembl Core and Variation Database](http://www.ensembl.org/info/docs/webcode/mirror/install/ensembl-data.html)
+* [Ensembl Perl API](http://www.ensembl.org/info/docs/api/api_git.html)
+* [Ensembl Variant Effect Predictor](https://github.com/Ensembl/ensembl-tools/tree/release/87/scripts)
+ * A new beta version of VEP is now available on [github](https://github.com/Ensembl/ensembl-vep)
+* [DSSP](ftp://ftp.cmbi.ru.nl/pub/software/dssp/)
+
