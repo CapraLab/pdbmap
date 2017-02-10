@@ -16,6 +16,8 @@ PDBMap is a portal between the fields of genetics and structural biology, and as
 
 All of these resources must be installed prior to using PDBMap. Note that all Ensembl resources should use the same genome build and all versions should match. All genomic data loaded into the database must match the Ensembl genome build. All existing resources have been built and maintained using genome build GRCh37/hg19.
 
+It is also recommended that, when possible, PDBMap is installed on a SLURM cluster. None of the PDBMap functionality requires parellelization, but many tasks lend themselves to parallelization and SLURM scripts for many common tasks are provided for convenience.
+
 ## Instantiating the PDBMap Database
 
 To instantiate the PDBMap database, users should create a copy of DEFAULT.config with their MySQL login information and the location of all necessary resources, and then run the following command:
