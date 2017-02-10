@@ -1,11 +1,12 @@
 # PDBMap
 
-PDBMap is a command line tool and database interface designed to facilitate the analysis of genetic features in protein structures. This software includes methods for parsing and uploading structural information from the Protein Data Bank, ModBase, and custom protein structural models. It also includes methods for parsing and uploading genetic datasets in VCF, BED, and other file formats. These datasets are then intersected using BEDTools or MySQL to create a direct mapping between each nucleotide and each associated amino acid in all associated protein structures. A schematic overview of the [PDBMap Pipeline](./docs/PDBMapPipeline.png) is provided.
+PDBMap is a (primarily) python command line tool and database interface designed to facilitate the visualization and analysis of genomic features in protein structures. This software includes methods for parsing and uploading structural information from the Protein Data Bank, ModBase, and custom protein structural models. It also includes methods for parsing and uploading genetic datasets in VCF and BED file formats. These datasets are then intersected using BEDTools or MySQL to create a direct mapping between each nucleotide and each associated amino acid in all associated protein structures. A schematic overview of the [PDBMap Pipeline](./docs/PDBMapPipeline.png) is provided.
 
 ## PDBMap External Dependencies
 
 PDBMap is a portal between the fields of genetics and structural biology, and as such it relies on several (free) software packages and databases. Unfortunately, these cannot be distributed with PDBMap and must be installed separately. A complete list of the packages are provided below:
 
+* [Python 2.7](https://www.python.org/downloads/)
 * [UCSF Chimera (Headless)](https://www.cgl.ucsf.edu/chimera/cgi-bin/secure/chimera-get.py?file=alpha/chimera-alpha-linux_x86_64_osmesa.bin)
 * [MySQL](https://dev.mysql.com/downloads/os-linux.html)
 * [Ensembl Core and Variation Database](http://www.ensembl.org/info/docs/webcode/mirror/install/ensembl-data.html)
