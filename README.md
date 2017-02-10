@@ -72,8 +72,6 @@ Each of these datasets can be downloaded by running the `get_<dataset>.sh` scrip
 To load a genomic dataset into PDBMap, use
 ```
 ./pdbmap.py -c config/<USER>.config load_data <data_file> <data_name>
-```
-or
-```
+OR
 ./pdbmap.py -c config/<USER>.config --dlabel=<data_name> load_data <data_file> [<data_file> ...]
 ```
