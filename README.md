@@ -12,3 +12,4 @@ PDBMap is a portal between the fields of genetics and structural biology, and as
  * A new beta version of VEP is now available on [github](https://github.com/Ensembl/ensembl-vep)
 * [DSSP](ftp://ftp.cmbi.ru.nl/pub/software/dssp/)
 
+Note that all Ensembl resources should use the same genome build and all versions should match. All genomic data loaded into the database must match the Ensembl genome build. All existing resources have been built and maintained using genome build GRCh37/hg19.
