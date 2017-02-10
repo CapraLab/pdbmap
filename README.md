@@ -13,3 +13,14 @@ PDBMap is a portal between the fields of genetics and structural biology, and as
 * [DSSP](ftp://ftp.cmbi.ru.nl/pub/software/dssp/)
 
 Note that all Ensembl resources should use the same genome build and all versions should match. All genomic data loaded into the database must match the Ensembl genome build. All existing resources have been built and maintained using genome build GRCh37/hg19.
+
+All other databases and resources required by PDBMap can be downloaded and installed using the following command:
+```
+./pdbmap.py -c config/DEFAULT.config --refresh
+```
+This command will download or refresh a local mirror of and/or necessary files from the following databases:
+* RCSB Protein Data Bank (solved protein structures)
+* ModBase (computationally predicted homology models)
+* UniProt (Swiss-Prot, ID mapping, secondary-to-primary AC mapping)
+* SIFTS (residue-level functional annotation and pdb-to-reference sequence alignment)
+* PFAM (functional domain annotations)
