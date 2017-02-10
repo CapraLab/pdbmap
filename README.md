@@ -2,6 +2,8 @@
 
 PDBMap is a command line tool and database interface designed to facilitate the analysis of genetic features in protein structures. This software includes methods for parsing and uploading structural information from the Protein Data Bank, ModBase, and custom protein structural models. It also includes methods for parsing and uploading genetic datasets in VCF, BED, and other file formats. These datasets are then intersected using BEDTools or MySQL to create a direct mapping between each nucleotide and each associated amino acid in all associated protein structures.
 
+## PDBMap External Dependencies
+
 PDBMap is a portal between the fields of genetics and structural biology, and as such it relies on several other software packages. A complete list of necessary packages are provided below:
 
 * [UCSF Chimera (Headless)](https://www.cgl.ucsf.edu/chimera/cgi-bin/secure/chimera-get.py?file=alpha/chimera-alpha-linux_x86_64_osmesa.bin)
@@ -13,6 +15,8 @@ PDBMap is a portal between the fields of genetics and structural biology, and as
 * [DSSP](ftp://ftp.cmbi.ru.nl/pub/software/dssp/)
 
 All of these resources must be installed prior to using PDBMap. Note that all Ensembl resources should use the same genome build and all versions should match. All genomic data loaded into the database must match the Ensembl genome build. All existing resources have been built and maintained using genome build GRCh37/hg19.
+
+## Instantiating the PDBMap Database
 
 To instantiate the PDBMap database, users should create a copy of DEFAULT.config with their MySQL login information and the location of all necessary resources, and then run the following command:
 ```
@@ -31,3 +35,8 @@ This command will download or refresh a local mirror of and/or necessary files f
 * PFAM (functional domain annotations)
 
 The location of any of these resources may be changed. Users should update DEFAULT.config with location of all necessary resources. Note that existing copies of these datasets may be used, but the functionallity of `--refresh` may be affected. Parsing of the PDB and ModBase directory structures is also sensitive to change, so consider downloading the datasets with PDBMap and then moving the directories into a shared location; update the configuration file with the new location.
+
+## Loading Structural Information into PDBMap
+
+
+## Loading Genomic Information into PDBMap
