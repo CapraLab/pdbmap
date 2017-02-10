@@ -25,4 +25,4 @@ This command will download or refresh a local mirror of and/or necessary files f
 * SIFTS (residue-level functional annotation and pdb-to-reference sequence alignment)
 * PFAM (functional domain annotations)
 
-The location of any of these resources can be changed. Users should create a copy of DEFAULT.config with their MySQL login information and the location of all necessary resources. Note that existing copies of these datasets may be used, but the functionallity of `--refresh` may be affected. Parsing of the PDB and ModBase directory structures is also sensitive to change, so consider allowing PDBMap to maintain these datasets.
+The location of any of these resources can be changed. Users should create a copy of DEFAULT.config with their MySQL login information and the location of all necessary resources. Note that existing copies of these datasets may be used, but the functionallity of `--refresh` may be affected. Parsing of the PDB and ModBase directory structures is also sensitive to change, so consider downloading the datasets with PDBMap and then moving the directories into a shared location; update the configuration file with the new location.
