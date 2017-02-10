@@ -12,7 +12,7 @@ PDBMap is a portal between the fields of genetics and structural biology, and as
 * [Ensembl Perl API](http://www.ensembl.org/info/docs/api/api_git.html)
 * [Ensembl Variant Effect Predictor (and cache)](https://github.com/Ensembl/ensembl-tools/tree/release/87/scripts)
  * A new beta version of VEP is now available on [github](https://github.com/Ensembl/ensembl-vep)
-* [DSSP](ftp://ftp.cmbi.ru.nl/pub/software/dssp/)
+* [DSSP](http://swift.cmbi.ru.nl/gv/dssp/)
 
 All of these resources must be installed prior to using PDBMap. Note that all Ensembl resources should use the same genome build and all versions should match. All genomic data loaded into the database must match the Ensembl genome build. All existing resources have been built and maintained using genome build GRCh37/hg19.
 
@@ -83,6 +83,20 @@ sbatch --array=1-24 slurm/load_exac.slurm
 ## Intersecting Structural and Genomic Information
 Once the structural and genomic datasets have each been loaded into PDBMap, they must be intersected to construct the direct mapping from nucleotide to amino acid. This can be a lengthy process, but it must only be performed once for each dataset. Once intersected, queries are very efficient, enabling large-scale, high-throughput analysis of genetic information within its protein structural context. To intersect two datasets, use
 ```
-./pdbmap -c config/<USER>.config --slabel=pdb --dlabel=exac intersect
+./pdbmap.py -c config/<USER>.config --slabel=pdb --dlabel=exac intersect
 ```
 This command download the structural and genomic data to flat files indexed by chromosomal position, perform an intersection using `intersectBed`, and upload the results back to the database. If you are working with smaller datasets, you may consider adding the `quick` flag after `intersect`. This will perform the intersection using a MySQL join instead of `intersectBed`, which may decrease runtime. This is highly discouraged for larger datasets.
+
+## Visualizing Genomic Information in Structure
+The visualization capabilities of PDBMap are built around Chimera. Any property of a genomic dataset can be visualized by specifying the dataset and property name along with the specified gene, protein, or structure name. For example, to visualize the location of all ExAC missense variants in the first biological assembly of 2SHP, use
+```
+./pdbmap.py -c config/<USER>.config visualize 2SHP exac . 1
+```
+A new directory will be added to the `results/` directory containing several files, including a Chimera scene and an automatically generated png image of the variant-to-structure mapping. If you would instead like to color each missene variant by its minor allele frequency, 
+```
+./pdbmap.py -c config/<USER>.config visualize 2SHP exac maf 1
+```
+You can also compare the distribution to the synonymous distribution of minor allele frequencies,
+```
+./pdbmap.py -c config/<USER>.config visualize 2SHP exac maf.synonymous 1
+```
