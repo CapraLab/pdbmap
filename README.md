@@ -8,7 +8,7 @@ Once the PDBMap database has been loaded, the PDBMap library can be imported fro
 
 PDBMap is a portal between the fields of genetics and structural biology, and as such it relies on several (free) software packages and databases. Unfortunately, these cannot be distributed with PDBMap and must be installed separately. A complete list of the packages are provided below:
 
-* [Python 2.7](https://www.python.org/downloads/) (We recommend [Anaconda2.7](https://www.continuum.io/downloads))
+* [Python 2.7](https://www.python.org/downloads/) (We recommend [Anaconda](https://www.continuum.io/downloads))
 * [UCSF Chimera (Headless)](https://www.cgl.ucsf.edu/chimera/cgi-bin/secure/chimera-get.py?file=alpha/chimera-alpha-linux_x86_64_osmesa.bin)
 * [MySQL](https://dev.mysql.com/downloads/os-linux.html)
 * [Ensembl Core and Variation Database](http://www.ensembl.org/info/docs/webcode/mirror/install/ensembl-data.html)
