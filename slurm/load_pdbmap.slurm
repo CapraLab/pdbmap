@@ -7,7 +7,7 @@
 #                : Department of Biomedical Informatics,
 #                : Vanderbilt University Medical Center
 # Email          : mike.sivley@vanderbilt.edu
-# Date           : 2015-11-19
+# Date           : 2017-02-10
 # Description    : Builds PDBMap v12 from the RCSB Protein Data Bank.
 #=============================================================================#
 # Slurm Parameters
@@ -21,5 +21,4 @@
 #SBATCH -o load_pdbmap/load_pdbmap-v12.%A[%a].out
 #=============================================================================#
 
-cd ..
-./pdbmap.py -c config/v12.config --ppart=$1 --ppidx=${SLURM_ARRAY_TASK_ID} --slabel=uniprot-pdb load_unp all
+./pdbmap.py -c config/v12.config --ppart=$1 --ppidx=${SLURM_ARRAY_TASK_ID} load_unp all
