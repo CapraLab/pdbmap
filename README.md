@@ -19,6 +19,11 @@ PDBMap is a portal between the fields of genetics and structural biology, and as
 
 All of these resources must be installed prior to using PDBMap. Note that all Ensembl resources should use the same genome build and all versions should match. All genomic data loaded into the database must match the Ensembl genome build. All existing resources have been built and maintained using genome build GRCh37/hg19.
 
+```
+apt-get install anaconda2
+pip install biopython
+```
+
 It is also recommended that, when possible, PDBMap be installed on a SLURM cluster. Many PDBMap tasks, like loading large numbers of protein structures, lend themselves well to parallelization. SLURM scripts for many common tasks are provided for convenience. Before launching many jobs to the cluster, check that your MySQL server is configured to manage the corresponding number of connections.
 
 ## Instantiating the PDBMap Database
