@@ -20,8 +20,22 @@ PDBMap is a portal between the fields of genetics and structural biology, and as
 All of these resources must be installed prior to using PDBMap. Note that all Ensembl resources should use the same genome build and all versions should match. All genomic data loaded into the database must match the Ensembl genome build. All existing resources have been built and maintained using genome build GRCh37/hg19.
 
 ```
+# Installation Procedure
+# Python
 apt-get install anaconda2
 pip install biopython
+
+# Download the Ensembl GRCh37 Variant Effect Predictor (VEP) v87
+wget -0 ensembl-tools-release-87.zip https://github.com/Ensembl/ensembl-tools/archive/release/87.zip
+cd ensembl-tools-release-87/scripts
+wget ftp://ftp.ensembl.org/pub/release-87/variation/VEP/homo_sapiens_refseq_vep_87_GRCh37.tar.gz
+mkdir /path/to/vep/
+
+# Download the Ensembl GRCh37 API v87
+
+# Download the Ensembl GRCh37 Database v87
+wget -m -P grch37/release-87/mysql/homo_sapiens_core_87_37 ftp://ftp.ensembl.org/pub/grch37/release-87/mysql/homo_sapiens_core_87_37/ 
+wget -m -P grch37/release-87/mysql/homo_sapiens_variation_87_37 ftp://ftp.ensembl.org/pub/grch37/release-87/mysql/homo_sapiens_variation_87_37/ 
 ```
 
 It is also recommended that, when possible, PDBMap be installed on a SLURM cluster. Many PDBMap tasks, like loading large numbers of protein structures, lend themselves well to parallelization. SLURM scripts for many common tasks are provided for convenience. Before launching many jobs to the cluster, check that your MySQL server is configured to manage the corresponding number of connections.
