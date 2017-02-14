@@ -10,7 +10,7 @@ PDBMap is a portal between the fields of genetics and structural biology, and as
 
 * [Python 2.7](https://www.python.org/downloads/) (We recommend [Anaconda](https://www.continuum.io/downloads))
 * [MySQL](https://dev.mysql.com/downloads/os-linux.html)
-* [Ensembl Core and Variation Database](http://www.ensembl.org/info/docs/webcode/mirror/install/ensembl-data.html)
+* [Ensembl Core Database](http://www.ensembl.org/info/docs/webcode/mirror/install/ensembl-data.html)
 * [Ensembl Perl API](http://www.ensembl.org/info/docs/api/api_git.html)
 * [Ensembl Variant Effect Predictor (and cache)](https://github.com/Ensembl/ensembl-tools/tree/release/87/scripts)
  * A new beta version of VEP is now available on [github](https://github.com/Ensembl/ensembl-vep)
@@ -24,18 +24,6 @@ All of these resources must be installed prior to using PDBMap. Note that all En
 # Python
 apt-get install anaconda2
 pip install biopython
-
-# Download the Ensembl GRCh37 Variant Effect Predictor (VEP) v87
-wget -0 ensembl-tools-release-87.zip https://github.com/Ensembl/ensembl-tools/archive/release/87.zip
-cd ensembl-tools-release-87/scripts
-wget ftp://ftp.ensembl.org/pub/release-87/variation/VEP/homo_sapiens_refseq_vep_87_GRCh37.tar.gz
-mkdir /path/to/vep/
-
-# Download the Ensembl GRCh37 API v87
-
-# Download the Ensembl GRCh37 Database v87
-wget -m -P grch37/release-87/mysql/homo_sapiens_core_87_37 ftp://ftp.ensembl.org/pub/grch37/release-87/mysql/homo_sapiens_core_87_37/ 
-wget -m -P grch37/release-87/mysql/homo_sapiens_variation_87_37 ftp://ftp.ensembl.org/pub/grch37/release-87/mysql/homo_sapiens_variation_87_37/ 
 ```
 
 It is also recommended that, when possible, PDBMap be installed on a SLURM cluster. Many PDBMap tasks, like loading large numbers of protein structures, lend themselves well to parallelization. SLURM scripts for many common tasks are provided for convenience. Before launching many jobs to the cluster, check that your MySQL server is configured to manage the corresponding number of connections.
