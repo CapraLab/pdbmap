@@ -30,6 +30,7 @@ class PDBMapProtein():
   _hgnc2unp   = {}
   _unp2enst   = {}
   _enst2unp   = {}
+  _sec2prim   = {}
 
   def __init__(self):
     msg = "ERROR (PDBMapProtein) This class should not be instantiated."
@@ -43,12 +44,18 @@ class PDBMapProtein():
   @classmethod
   def unp2enst(cls,unp):
     # Return Ensembl Transcript ID associated with UniProt ID
-    return PDBMapProtein._unp2enst.get(unp,[])
+    try:
+      return PDBMapProtein._unp2enst.get(unp,[])
+    except:
+      return PDBMapProtein._unp2enst.get(PDBMapProtein._sec2prim[unp],[]) 
 
   @classmethod
   def unp2hgnc(cls,unp):
     # Return HGNC gene name associated with UniProt ID
-    return PDBMapProtein._unp2hgnc[unp]
+    try:
+      return PDBMapProtein._unp2hgnc[unp]
+    except:
+      return PDBMapProtein._unp2hgnc[PDBMapProtein._sec2prim[unp]]
 
   @classmethod
   def hgnc2unp(cls,hgnc):
@@ -58,7 +65,10 @@ class PDBMapProtein():
   @classmethod
   def unp2ensp(cls,unp):
     # Return Ensembl Protein ID associated with UniProt ID
-    return PDBMapProtein._unp2ensp.get(unp,[])
+    try:
+      return PDBMapProtein._unp2ensp.get(unp,[])
+    except:
+      return PDBMapProtein._unp2ensp.get(PDBMapProtein._sec2prim[unp],[])
 
   @classmethod
   def ensp2unp(cls,ensp):
@@ -73,12 +83,16 @@ class PDBMapProtein():
   @classmethod
   def unp2pdb(cls,unp):
     # Return Protein Data Bank ID associated with UniProt ID
-    return PDBMapProtein._unp2pdb.get(unp,[])
+    try:
+      return PDBMapProtein._unp2pdb.get(unp,[])
+    except:
+      return PDBMapProtein._unp2pdb.get(PDBMapProtein._sec2prim[unp],[])
 
   @classmethod
-  def isunp(cls,unpid):
+  def isunp(cls,unp):
     # Return True if the provided ID is a UNP ID
-    return unpid in PDBMapProtein._unp2pdb
+    return unp in PDBMapProtein._unp2hgnc \
+      or unp in PDBMapProtein._sec2prim
 
   @classmethod
   def ishgnc(cls,hgncid):
@@ -89,7 +103,7 @@ class PDBMapProtein():
   def load_idmapping(cls,idmapping_fname):
       
     #TEMPORARY FIX ONLY
-    if "HUMAN_9606_idmapping.dat.gz" in idmapping_fname:  
+    if "HUMAN_9606_idmapping_sprot.dat.gz" in idmapping_fname:  
       # Load UniProt crossreferences, keyed on UniProt
       with gzip.open(idmapping_fname) as fin:
         reader = csv.reader(fin,delimiter='\t')
@@ -102,9 +116,16 @@ class PDBMapProtein():
           else:
             # Proteins with a single (thus canonical) isoform have no identifier
             unp,iso = unp,"1"
-          # Only record EnsEMBL transcripts/proteins matching the UniProt canonical isoform
-          if iso != "1":
-            continue
+          # This is necessary to avoid an unnecessary GRCh37/GRCh38 version mismatch
+          # e.g. Some canonical isoforms in UniProt map to transcripts that only exist
+          # in GRCh38. However, -002+ isoforms sometimes match previous transcripts
+          # from GRCh37, so they need to be retained for completeness.
+          # The best fix would be to update all genetic resources and datasets to GRCh38, but
+          # so long as our collaborators and all major genetics cohorts continue to provide 
+          # all data in GRCh37, that is not a feasible solution.
+          # # Only record EnsEMBL transcripts/proteins matching the UniProt canonical isoform
+          # if iso != "1":
+          #   continue
           if db=="Gene_Name":
             hgnc = dbid # for clarity
             PDBMapProtein._unp2hgnc[unp]  = hgnc
@@ -205,7 +226,7 @@ class PDBMapProtein():
         # Ensure that this primary AC is human and mappable
         if prim in PDBMapProtein._unp2enst:
           sec2prim[sec] = prim
-    PDBMapProtein.sec2prim = sec2prim
+    PDBMapProtein._sec2prim = sec2prim
 
   @classmethod
   def load_sprot(cls,sprot_fname):
@@ -237,7 +258,7 @@ class PDBMapProtein():
       msg = "ERROR (UniProt) ID Mapping must be loaded before use."
       raise Exception(msg)
     # Checks if secondary to primary UniProt ID mapping has been loaded
-    if not PDBMapProtein.sec2prim:
+    if not PDBMapProtein._sec2prim:
       return False
     return True
 

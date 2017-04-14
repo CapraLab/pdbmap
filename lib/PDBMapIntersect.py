@@ -3,11 +3,11 @@
 # Project        : PDBMap
 # Filename       : PDBMapIntersect.py
 # Author         : R. Michael Sivley
-# Organization   : Vanderbilt Genetics Institute,
+# Organization   : Center for Human Genetics Research,
 #                : Department of Biomedical Informatics,
-#                : Vanderbilt University
+#                : Vanderbilt University Medical Center
 # Email          : mike.sivley@vanderbilt.edu
-# Date           : 2017-02-09
+# Date           : 2014-02-27
 # Description    : Service class designed to intersect structural and 
 #                : genomic, and sequence datasets. Does not alter original 
 #                : datasets. Calculates intersection with intersectBed and 
@@ -16,19 +16,19 @@
 #=============================================================================#
 
 # See main check for cmd line parsing
-from PDBMapIO import PDBMapIO
+from lib import PDBMapIO
 import sys,os,csv,random
 import subprocess as sp
 
 class PDBMapIntersect():
-  def __init__(self,io):
+  def __init__(self,pdbmapio):
     """ Initialization requires a PDBMapIO object """
-    self.io = io
+    self.io = pdbmapio
 
   def quick_intersect(self,dlabel,slabel=None,dtype='Genomic'):
     # Intersects small datasets using a mysql join
     if dtype == "Genomic":
-      pass # This is the only intersection currently implemented.
+      pass
     elif dtype == 'Protein':
       msg = "ERROR (PDBMapIntersect) Protein intersection not implemented."
       raise Exception(msg)
@@ -61,8 +61,8 @@ class PDBMapIntersect():
     # dtype options: Genomic, [Protein, Structural]
     
     # Define the two temp filenames
-    temp1  = "temp/%d.TEMP"%PDBMapIO.multidigit_rand(10)
-    temp2  = "temp/%d.TEMP"%PDBMapIO.multidigit_rand(10)
+    temp1  = "temp/%d.TEMP"%multidigit_rand(10)
+    temp2  = "temp/%d.TEMP"%multidigit_rand(10)
     try: # Ensure proper file cleanup
       # Query and write data ranges to temp file
       if dtype == 'Genomic':
@@ -111,24 +111,45 @@ class PDBMapIntersect():
       sp.check_call(["dos2unix",temp1])
       sp.check_call(["dos2unix",temp2])
 
+      ## Temp files written. Beginning Intersection and upload. ##
+
       # Intersect with intersectBed and upload output to PDBMap.IntersectGenome
       print " # Performing intersection #"
       cmd = ["intersectBed","-wb","-a",temp1,"-b",temp2]
       p = sp.Popen(cmd,stdout=sp.PIPE)
-      parser = PDBMapIO.process_parser(p)
+      parser = process_parser(p)
       nrows = self.io.upload_intersection(parse_intersection(parser),
                       buffer_size=buffer_size)
 
       # Remove temp files only if no exception
-      sp.check_call(["rm","-f",temp1])
-      sp.check_call(["rm","-f",temp2])
+      #sp.check_call(["rm","-f",temp1])
+      #sp.check_call(["rm","-f",temp2])
         
     except Exception as e: 
       msg  = "ERROR (PDBMapIntersect) Exception during "
-      msg += "%s intersection of %s and %s: %s"%(dtype,dlabel,slabel,str(e))
+      msg += "%s Intersection of %s and %s: %s"%(dtype,dlabel,slabel,str(e))
       sys.stderr.write(msg+'\n')
       raise
+      # raise Exception(msg)
+    finally:
+      # # Remove temp files
+      # sp.check_call(["rm","-f",temp1])
+      # sp.check_call(["rm","-f",temp2])
+      pass
     return(nrows) # Return the number of intersections
+    
+## Copied from biolearn
+def multidigit_rand(digits):
+  randlist = [random.randint(1,10) for i in xrange(digits)]
+  multidigit_rand = int(''.join([str(x) for x in randlist]))
+  return multidigit_rand
+
+## Copied from snp_stats
+def process_parser(p):
+  while True:
+    line = p.stdout.readline()
+    if not line: break
+    yield line
 
 ## Adapted from snp_stats
 def parse_intersection(parser):

@@ -3,20 +3,28 @@
 # Project        : PDBMap
 # Filename       : PDBMapModel.py
 # Author         : R. Michael Sivley
-# Organization   : Vanderbilt Genetics Institute,
+# Organization   : Center for Human Genetics Research,
 #                : Department of Biomedical Informatics,
-#                : Vanderbilt University
+#                : Vanderbilt University Medical Center
 # Email          : mike.sivley@vanderbilt.edu
-# Date           : 2017-02-09
+# Date           : 2014-04-01
 # Description    : PDBMapStructure equivalent for ModBase models
+#=============================================================================#
+# PBS Parameters
+#PBS -M mike.sivley@vanderbilt.edu
+#PBS -m bae
+#PBS -l nodes=vision.mc.vanderbilt.edu
+#PBS -l mem=5000mb
+#PBS -l walltime=1:00:00:00
 #=============================================================================#
 
 # See main check for cmd line parsing
+import argparse
 import sys,os,csv
 from Bio.PDB.Structure import Structure
-from PDBMapProtein import PDBMapProtein
-from PDBMapTranscript import PDBMapTranscript
-from PDBMapAlignment import PDBMapAlignment
+from lib.PDBMapProtein import PDBMapProtein
+from lib.PDBMapTranscript import PDBMapTranscript
+from lib.PDBMapAlignment import PDBMapAlignment
 
 class PDBMapModel(Structure):
   

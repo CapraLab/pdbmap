@@ -3,31 +3,26 @@
 # Project        : PDBMap
 # Filename       : PDBMapIO.py
 # Author         : R. Michael Sivley
-# Organization   : Vanderbilt Genetics Institute,
+# Organization   : Center for Human Genetics Research,
 #                : Department of Biomedical Informatics,
-#                : Vanderbilt University
+#                : Vanderbilt University Medical Center
 # Email          : mike.sivley@vanderbilt.edu
-# Date           : 2017-02-09
-# Description    : Contains the PDBMapParser and PDBMapIO class definitions.
-#                : PDBMapParser is a subclass of Bio.PDB.PDBParser and is
-#                : responsible for reading and processing structures and 
-#                : models for upload to the PDBMap database.
-#                : PDBMapIO manages a variety of IO operations important for 
-#                : reading files, uploading data to the database, facilitating
-#                : secure MySQL queries and commands, etc.
+# Date           : 2014-02-09
+# Description    : PDBParser class utilizing Bio.PDB.PDBParser and mysql to
+#                : read and upload structures to the PDBMap.Structure database.
 #=============================================================================#
 
 # See main check for cmd line parsing
-import sys,os,collections,gzip,time,random
-import MySQLdb, MySQLdb.cursors
+import sys,os,csv,collections,gzip,time,random
 import subprocess as sp
-import numpy as np
-import Bio.PDB
 from Bio.PDB.PDBParser import PDBParser
 from Bio.PDB.PDBIO import PDBIO
+import Bio.PDB
+import numpy as np
 from PDBMapModel import PDBMapModel
 from PDBMapProtein import PDBMapProtein
 from PDBMapStructure import PDBMapStructure
+import MySQLdb, MySQLdb.cursors
 from warnings import filterwarnings,resetwarnings
 from Bio.PDB.PDBExceptions import PDBConstructionWarning
 
@@ -128,7 +123,7 @@ class PDBMapParser(PDBParser):
       filterwarnings('ignore',category=PDBConstructionWarning)
       s = p.get_structure(pdbid,fin)
       resetwarnings()
-      s = PDBMapStructure(s,quality)
+      s = PDBMapStructure(s,quality,pdb2pose={})
       fin.close()
     except Exception as e:
       msg = "ERROR (PDBMapIO) Error while parsing %s: %s"%(pdbid,str(e).replace('\n',' '))
@@ -176,7 +171,11 @@ class PDBMapParser(PDBParser):
     # Assign each conflict to the associated residue
     for row in seqadv:
       chain  = row[16]
-      seqid  = int(row[18:22])
+      try:
+        seqid  = int(row[18:22])
+      except:
+        # This SEQADV marks a deletion, which has no PDB position
+        continue # Skip this entry and proceed to next
       cnflct = row[49:70].strip()
       if chain in s[0] and seqid in s[0][chain]:
         s[0][chain][seqid].conflict = cnflct
@@ -309,15 +308,15 @@ class PDBMapParser(PDBParser):
       try:
         if os.path.basename(biounit_fname).split('.')[-1] == 'gz':
           fin   = gzip.open(biounit_fname,'rb')
-          bioid = int(os.path.basename(biounit_fname).split('.')[-2][-1])
+          bioid = int(os.path.basename(biounit_fname).split('.')[-2][3:])
         else:
           fin   = open(biounit_fname,'rb')
-          bioid = int(os.path.basename(biounit_fname).split('.')[-1][-1])
+          bioid = int(os.path.basename(biounit_fname).split('.')[-1][3:])
         p = PDBParser()
         filterwarnings('ignore',category=PDBConstructionWarning)
         biounit = p.get_structure(pdbid,fin)
         resetwarnings()
-        biounit = PDBMapStructure(biounit)
+        biounit = PDBMapStructure(biounit,pdb2pose={}) # must pass empty dictionary: python bug
         fin.close()
       except Exception as e:
         msg = "   ERROR (PDBMapIO) Error while parsing %s biounit %d: %s"%(pdbid,bioid,str(e).replace('\n',' '))
@@ -402,16 +401,17 @@ class PDBMapIO(PDBIO):
       self._connect()
 
   def __del__(self):
-    # Guarantees that all database connections are closed
+    # Guarantee all database connections are closed
     for con in self._cons:
       con.close()
+
 
   def is_nmr(self,pdbid,label=-1):
     # None is a valid argument to label
     if label == -1:
       label=self.slabel
     self._connect()
-    query  = "SELECT pdbid FROM Structure WHERE pdbid=%s and method like '%solution nmr%' "
+    query  = "SELECT * FROM Structure WHERE pdbid=%s and method like '%%nmr%%' "
     if label:
       query += "AND label=%s "
     query += "LIMIT 1"
@@ -428,7 +428,7 @@ class PDBMapIO(PDBIO):
     if label == -1:
       label=self.slabel
     self._connect()
-    query  = "SELECT pdbid FROM Structure WHERE pdbid=%s "
+    query  = "SELECT * FROM Structure WHERE pdbid=%s "
     if label:
       query += "AND label=%s "
     query += "LIMIT 1"
@@ -445,7 +445,7 @@ class PDBMapIO(PDBIO):
     if label == -1:
       label=self.slabel
     self._connect()
-    query = "SELECT modelid FROM Model WHERE modelid=%s "
+    query = "SELECT * FROM Model WHERE modelid=%s "
     if label:
       query += "AND label=%s "
     query += "LIMIT 1"
@@ -462,7 +462,7 @@ class PDBMapIO(PDBIO):
     if label == -1:
       label=self.slabel
     self._connect()
-    query = "SELECT unp FROM Chain WHERE unp=%s "
+    query = "SELECT * FROM Chain WHERE unp=%s "
     if label:
       query += "AND label=%s"
     query += "LIMIT 1"
@@ -501,11 +501,19 @@ class PDBMapIO(PDBIO):
         return False,None
     return False,None
 
-  # Query all biological assemblies, exclude the asymmetric unit
-  def get_biounits(pdbid):
-    query = "SELECT DISTINCT biounit FROM Chain WHERE label=%s AND structid=%s AND biounit>0"
-    res   = self.secure_query(query,(self.slabel,entity,),cursorclass='Cursor')
-    return [r[0] for r in res]
+  def genomic_datum_in_db(self,name,label=None):
+    self._connect()
+    query  = "SELECT * FROM Structure WHERE name=%s "
+    if label:
+      query += "AND label=%s "
+    query += "LIMIT 1"
+    if label:
+      self._c.execute(query,(name,label))
+    else:
+      self._c.execute(query,name)
+    res = True if self._c.fetchone() else False
+    self._close()
+    return res
 
   def upload_structure(self,model=False,sfields=None):
     """ Uploads the current structure in PDBMapIO """
@@ -563,6 +571,13 @@ class PDBMapIO(PDBIO):
         rquery += "(label,structid,biounit,model,chain,resname,rescode,seqid,icode,x,y,z,ss,rsa,phi,psi,tco,kappa,alpha,conflict) "
         rquery += "VALUES "
         for r in c:
+          # If length exceeds 10 thousand characters, start a new query
+          if len(rquery) > 10000:
+            queries.append(rquery[:-1])
+            rquery  = "INSERT IGNORE INTO Residue "
+            rquery += "(label,structid,biounit,model,chain,resname,rescode,seqid,icode,x,y,z,ss,rsa,phi,psi,tco,kappa,alpha,conflict) "
+            rquery += "VALUES "
+          # Continue with the next query
           rquery += '("%(label)s","%(id)s",'%sfields # structure id
           rquery += '%(biounit)d,%(id)d,'%mfields # model id
           rquery += '"%(id)s",'%cfields  # chain id
@@ -581,12 +596,6 @@ class PDBMapIO(PDBIO):
                 rfields[key] = 'NULL'
           rfields["label"] = self.slabel
           rquery = rquery%rfields
-          # Break into multiple queries if length exceeds 100 million characters
-          if len(rquery) > 100000:
-            queries.append(rquery[:-1])
-            rquery  = "INSERT IGNORE INTO Residue "
-            rquery += "(label,structid,biounit,model,chain,resname,rescode,seqid,icode,x,y,z,ss,rsa,phi,psi,tco,kappa,alpha,conflict) "
-            rquery += "VALUES "
         queries.append(rquery[:-1])
 
     # Upload the transcripts
@@ -601,15 +610,15 @@ class PDBMapIO(PDBIO):
       for t in s.get_transcripts(io=self):
         if t.transcript not in seen or seen.add(t.transcript):
           for seqid,(rescode,chr,start,end,strand) in t.sequence.iteritems():
+            # If length exceeds 10 thousand characters, start a new query
+            if len(tquery) > 10000:
+              queries.append(tquery[:-1])
+              tquery  = "INSERT IGNORE INTO Transcript "
+              tquery += "(label,transcript,protein,gene,seqid,rescode,chr,start,end,strand) "
+              tquery += "VALUES "
             tquery += '("%s","%s","%s","%s",'%(self.slabel,t.transcript,t.protein,t.gene)
             tquery += '%d,"%s",'%(seqid,rescode)
             tquery += '"%s",%d,%d,%d),'%(chr,start,end,strand)
-          # Break into multiple queries if length exceeds 100 million characters
-          if len(tquery) > 100000:
-            queries.append(tquery[:-1])
-            tquery  = "INSERT IGNORE INTO Transcript "
-            tquery += "(label,transcript,protein,gene,seqid,rescode,chr,start,end,strand) "
-            tquery += "VALUES "
       queries.append(tquery[:-1])
     except Exception as e:
       msg = "ERROR (PDBMapIO) Failed to get transcripts for %s: %s"%(s.id,str(e).rstrip('\n'))
@@ -621,14 +630,14 @@ class PDBMapIO(PDBIO):
     aquery += "VALUES "
     for a in s.get_alignments():
       for c_seqid,t_seqid in a.pdb2seq.iteritems():
+        # If length exceeds 10 thousand characters, start a new query
+        if len(aquery) > 10000:
+          queries.append(aquery[:-1])
+          aquery  = "INSERT IGNORE INTO Alignment "
+          aquery += "(label,structid,chain,chain_seqid,transcript,trans_seqid) "
+          aquery += "VALUES "
         aquery += '("%s","%s","%s",%d,'%(self.slabel,s.id,a.chain.id,c_seqid)
         aquery += '"%s",%d),'%(a.transcript.transcript,t_seqid)
-      # Break into multiple queries if length exceeds 100 million characters
-      if len(aquery) > 100000:
-        queries.append(aquery[:-1])
-        aquery  = "INSERT IGNORE INTO Alignment "
-        aquery += "(label,structid,chain,chain_seqid,transcript,trans_seqid) "
-        aquery += "VALUES "
     queries.append(aquery[:-1])
 
     # Upload the alignment scores
@@ -666,7 +675,7 @@ class PDBMapIO(PDBIO):
       sys.stderr.write(msg)
       return(1)
 
-    # Upload the Model summary information
+    # Prepare the Model summary information (if no errors occurred)
     mquery  = 'INSERT IGNORE INTO Model '
     mquery += '(label,modelid,unp,method,no35,rmsd,mpqs,evalue,ga341,zdope,pdbid,chain,identity)'
     mquery += 'VALUES ('
@@ -677,13 +686,12 @@ class PDBMapIO(PDBIO):
                   if isinstance(key,collections.Hashable))
     mfields["label"] = self.slabel
     mquery = mquery%mfields
-    # Execute upload query
+    # First, pass the underlying PDBMapStructure to upload_structure
+    self.upload_structure(model=True,sfields=mfields)
+    # Then execute the Model upload query
     self._connect()
     self._c.execute(mquery)
     self._close()
-    # Pass the underlying PDBMapStructure to upload_structure
-    self.upload_structure(model=True,sfields=mfields)
-
 
   def upload_genomic_data(self,dstream,dname):
     """ Uploads genomic data via a PDBMapData generator """
@@ -919,9 +927,12 @@ class PDBMapIO(PDBIO):
   def load_unp(self,unpid):
     """ Identifies all associated structures and models, then pulls those structures. """
     query = PDBMapIO.unp_query
-    q = self.secure_query(query,qvars=(self.slabel,unpid),
+    q = self.secure_query(query,qvars=('pdb',unpid),
                                         cursorclass='Cursor')
     entities = [r[0] for r in q]
+    q = self.secure_query(query,qvars=('modbase',unpid),
+                                        cursorclass='Cursor')
+    entities.extend([r[0] for r in q])
     print "%s found in %d structures/models."%(unpid,len(entities))
     res = []
     for entity in entities:
@@ -1001,6 +1012,49 @@ class PDBMapIO(PDBIO):
     cmd = "scripts/sifts_parser.py -c %s %s"%(conf_file,fdir)
     os.system(cmd)
     return -1
+    ## This code used to have to do range-inferences to derive
+    ## 1-to-1 mappings from start-end mappings. We're now using
+    ## the 1-to-1 XML files from SIFTS, so this preprocessing
+    ## is no longer necessary and the data can be loaded directly
+    ## from the XML file via a simple sifts XML parser.
+    # if sprot:
+    #   PDBMapProtein.load_sprot(sprot)
+    #   humansp = PDBMapProtein.sprot
+    # else:
+    #   humansp = None
+    # rc = 0
+    # with open(fname,'rb') as fin:
+    #   fin.readline(); fin.readline() # skip first two lines
+    #   reader = csv.reader(fin,delimiter='\t')
+    #   for row in reader:
+    #     q  = "INSERT IGNORE INTO sifts "
+    #     q += "(pdbid,chain,sp,pdb_seqid,sp_seqid) VALUES "
+    #     v = []
+    #     pdbid,chain,sp = row[0:3]
+    #     pdbid = pdbid.strip()
+    #     if humansp and row[2] not in humansp:
+    #       continue # not a human protein
+    #     try:
+    #       res_beg,res_end,pdb_beg,pdb_end,sp_beg,sp_end = [int(x) for x in row[3:]]
+    #     except:
+    #       # msg  = "WARNING (PDBMapIO) SIFTS icode error: "
+    #       # msg += "%s,%s,%s\n"%(pdbid,chain,sp)
+    #       # sys.stderr.write(msg)
+    #       continue
+    #     res_range = range(res_beg,res_end+1)
+    #     pdb_range = range(pdb_beg,pdb_end+1)
+    #     sp_range  = range(sp_beg,sp_end+1)
+    #     if len(res_range) != len(pdb_range) or len(pdb_range) != len(sp_range):
+    #       # msg  = "WARNING (PDBMapIO) SIFTS range mismatch: "
+    #       # msg += "%s,%s,%s\n"%(pdbid,chain,sp)
+    #       # sys.stderr.write(msg) 
+    #       continue
+    #     for i,seqid in enumerate(pdb_range):
+    #       v.append("('%s','%s','%s',%d,%d)"%(pdbid,chain,sp,seqid,sp_range[i]))
+    #     # Upload after each row
+    #     q = q+','.join(v)
+    #     rc += self.secure_command(q)
+    # return rc
 
   def load_pfam(self,fname):
     query  = "LOAD DATA LOCAL INFILE %s "
@@ -1104,6 +1158,8 @@ class PDBMapIO(PDBIO):
         msg += "\n Executed Query: \n%s"%self._c._last_executed
       raise Exception(msg)
     finally:
+      # msg = "Executed Query: \n%s\n"%self._c._last_executed
+      # print msg
       resetwarnings()
       self._close()
 
@@ -1208,11 +1264,13 @@ class PDBMapIO(PDBIO):
   AND a.structid=%%s AND a.biounit=%%s
   ORDER BY b.unp,a.seqid DESC;
   """
+  # Removing non-asymmetric unit clause since biounit is always specified explicitly anyway
+  # and sometimes the asymmetric unit is wanted. Retaining below:
+  # AND (c.method LIKE '%%%%nmr%%%%' OR b.biounit>0 OR NOT ISNULL(d.modelid))
 
   # Queries all structures and models associated with a given UniProt ID
   unp_query = """SELECT DISTINCT structid FROM Chain WHERE label=%s AND unp=%s;"""
 
-# 3-letter to 1-letter
 aa_code_map = {"ala" : "A",
         "arg" : "R",
         "asn" : "N",
@@ -1235,11 +1293,8 @@ aa_code_map = {"ala" : "A",
         "trp" : "W",
         "tyr" : "Y",
         "val" : "V"}
-# 1-letter to 3-letter
 for key,val in aa_code_map.items():
   aa_code_map[val] = key        
-
-# Maximum Ala-X-Ala solvent accessibility
 solv_acc = {"A" : 115,
         "R" : 225,
         "N" : 150,
@@ -1264,18 +1319,11 @@ solv_acc = {"A" : 115,
         "V" : 155,
         "X" : 180} # Undetermined amino acid SA taken from Sander 1994
 
-# Generates N-digit random numbers for temporary file naming
+## Copied from biolearn
 def multidigit_rand(digits):
   randlist = [random.randint(1,10) for i in xrange(digits)]
   multidigit_rand = int(''.join([str(x) for x in randlist]))
   return multidigit_rand
-
-# Convenience function to parse process stdout
-def process_parser(p):
-  while True:
-    line = p.stdout.readline()
-    if not line: break
-    yield line
 
 # Main check
 if __name__== "__main__":

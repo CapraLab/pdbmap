@@ -3,11 +3,11 @@
 # Project        : PDBMap
 # Filename       : PDBMapAlignment.py
 # Author         : R. Michael Sivley
-# Organization   : Vanderbilt Genetics Institute,
+# Organization   : Center for Human Genetics Research,
 #                : Department of Biomedical Informatics,
-#                : Vanderbilt University
+#                : Vanderbilt University Medical Center
 # Email          : mike.sivley@vanderbilt.edu
-# Date           : 2017-02-09
+# Date           : 2014-02-12
 # Description    : Defines the PDBMapAlignment class for calculating and
 #                : representing an alignment between a PDBMapStructure and
 #                : a PDBMapAlignment.
@@ -77,9 +77,12 @@ class PDBMapAlignment():
                 # Successfully aligned with SIFTS. Do not continue processing.
                 return pdb2seq,seq2pdb,aln_str,score,perc_aligned,perc_identity
             else:
-                msg  = "    WARNING (PDBMapAlignment) SIFTS error "
-                msg += "(%0.f%% identity). Realigning %s to %s.\n"
-                sys.stderr.write(msg%(perc_identity*100,chain.id,transcript.transcript))
+                msg  = "    WARNING (PDBMapAlignment) SIFTS error (%0.f%% identity). Realigning %s to %s.\n"%(perc_identity*100,chain.id,transcript.transcript)
+                # msg  = "    WARNING (PDBMapAlignment) Error in SIFTS alignment.\n"
+                # msg += "    Chain %s (%s) aligned to %s.\n"%(chain.id,chain.unp,transcript.transcript)
+                # msg += "    Sequence identity between chain %s and %s is %.0f%%\n"%(chain.id,transcript.transcript,perc_identity*100)
+                # msg += "    Manually re-aligning sequences.\n"
+                sys.stderr.write(msg)
 
     # Determine start indices
     c_start = min([r.seqid for r in chain.get_residues()])
@@ -116,7 +119,7 @@ class PDBMapAlignment():
     t_ind     = [x for x in self._gap_shift(aln_trans,t_start,t_gap)]
 
     # # Create a single alignment string
-                           # if beg/end gap or original gap
+                            # if beg/end gap or original gap
     aln_chain = ''.join(['-' if not c_ind[i] or c_ind[i]+c_start in c_gap else s for i,s in enumerate(aln_chain)])
     aln_trans = ''.join(['-' if not t_ind[i] or t_ind[i]+t_start in t_gap else s for i,s in enumerate(aln_trans)])
     aln_str = "%s\n%s"%(aln_chain,aln_trans)
@@ -154,6 +157,8 @@ class PDBMapAlignment():
         # Alignment Gap
         else:
             yield None
+    
+    
 
 # Main check
 if __name__== "__main__":
