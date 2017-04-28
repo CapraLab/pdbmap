@@ -12,8 +12,7 @@ PDBMap is a portal between the fields of genetics and structural biology, and as
 * [MySQL](https://dev.mysql.com/downloads/os-linux.html)
 * [Ensembl Core Database](http://www.ensembl.org/info/docs/webcode/mirror/install/ensembl-data.html) (use of the Ensembl public MySQL server is supported, but may result in slow runtimes)
 * [Ensembl Perl API](http://www.ensembl.org/info/docs/api/api_git.html)
-* [Ensembl Variant Effect Predictor (and cache)](https://github.com/Ensembl/ensembl-tools/tree/release/87/scripts)
- * A new beta version of VEP is now available on [github](https://github.com/Ensembl/ensembl-vep)
+* [Ensembl Variant Effect Predictor (and cache)](https://github.com/Ensembl/ensembl-tools/tree/release/87/scripts) (a new beta version of VEP is now available on [github](https://github.com/Ensembl/ensembl-vep))
 * [UCSF Chimera (Headless)](https://www.cgl.ucsf.edu/chimera/cgi-bin/secure/chimera-get.py?file=alpha/chimera-alpha-linux_x86_64_osmesa.bin) (for visualization)
 * [DSSP](http://swift.cmbi.ru.nl/gv/dssp/) (for secondary structure and solvent accessibility)
 
