@@ -10,7 +10,7 @@ PDBMap is a portal between the fields of genetics and structural biology, and as
 
 * [Python 2.7](https://www.python.org/downloads/) (We recommend [Anaconda](https://www.continuum.io/downloads))
 * [MySQL](https://dev.mysql.com/downloads/os-linux.html)
-* [Ensembl Core Database](http://www.ensembl.org/info/docs/webcode/mirror/install/ensembl-data.html)
+* [Ensembl Core Database](http://www.ensembl.org/info/docs/webcode/mirror/install/ensembl-data.html) (use of the Ensembl public MySQL server is supported, but may result in slow runtimes)
 * [Ensembl Perl API](http://www.ensembl.org/info/docs/api/api_git.html)
 * [Ensembl Variant Effect Predictor (and cache)](https://github.com/Ensembl/ensembl-tools/tree/release/87/scripts)
  * A new beta version of VEP is now available on [github](https://github.com/Ensembl/ensembl-vep)
