@@ -27,10 +27,9 @@ from Bio.PDB.PDBIO import PDBIO
 from Bio.PDB.PDBParser import PDBParser
 from warnings import filterwarnings,resetwarnings
 from Bio.PDB.PDBExceptions import PDBConstructionWarning
-from lib import PDBMapIO,PDBMapStructure,PDBMapProtein
+from lib import PDBMapIO,PDBMapParser,PDBMapStructure,PDBMapProtein
 from lib import PDBMapAlignment,PDBMapData,PDBMapTranscript
 from lib import PDBMapIntersect,PDBMapModel
-from lib.PDBMapNetwork import PDBMapNetwork
 from lib.PDBMapVisualize import PDBMapVisualize
 
 # Row count threshold for quick-intersection
