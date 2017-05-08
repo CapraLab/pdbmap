@@ -13,6 +13,7 @@
 
 # See main check for cmd line parsing
 import sys,os,csv,time,math,platform
+from lib import PDBMapModel
 # from pymol import cmd
 max_dist = -999 # Used by show_density and dist
 
@@ -20,11 +21,10 @@ class PDBMapVisualize():
 
   dens_mat = None # Class variable for show_desnity
   
-  def __init__(self,io,pdb_dir='data/rcsb',modbase_dir='data/modbase'):
+  def __init__(self,io,pdb_dir='data/rcsb'):
     """ Initialize the PDBMapVisualize object. """
     self.io = io
     self.pdb_dir = pdb_dir
-    self.modbase_dir = modbase_dir
 
   def visualize_structure(self,structid,biounit=0,anno_list=['maf'],eps=None,mins=None,spectrum_range=[],group=None,colors=[],permute=False,syn=False):
     """ Visualize the annotated dataset within a structure """
@@ -235,7 +235,8 @@ class PDBMapVisualize():
       colors = None if not colors else colors[a]
       # Locate the asymmetric unit or biological assembly
       if modelflag:
-        struct_loc = "%s/models/model/%s.pdb.gz"%(self.modbase_dir,structid.upper())
+        # Extract the Ensembl protein ID from the ModBase model ID
+        struct_loc = PDBMapModel.get_coord_file(structid.upper())
       elif int(biounit) == 0:
         struct_loc = "%s/structures/all/pdb/pdb%s.ent.gz"%(self.pdb_dir,structid)
       else:

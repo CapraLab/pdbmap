@@ -200,7 +200,6 @@ class PDBMapStructure(Structure):
     if self.transcripts:
       return self.transcripts
     # Identify and align corresponding transcripts
-    # prot2chain = {}
     for chain in self.structure[0]:
       print "   # Getting transcripts for %s.%s"%(self.id,chain.id)
       # # If a chain of the same protein has already been solved, use solution
@@ -213,6 +212,7 @@ class PDBMapStructure(Structure):
       # else:
       # Query all transcripts associated with the chain's UNP ID
       candidate_transcripts = PDBMapTranscript.query_from_unp(chain.unp)
+      print "Candidate transcripts for UniProt AC %s: %s"%(chain.unp,','.join(candidate_transcripts))
       if len(candidate_transcripts) < 1:
         error_msg += "No EnsEMBL transcript matches %s.%s (%s); "%(self.id,chain.id,chain.unp)
         # raise Exception("ERROR (PDBMapStructure): %s\n"%error_msg)

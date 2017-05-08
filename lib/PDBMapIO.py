@@ -120,13 +120,9 @@ class PDBMapIO(PDBIO):
   def gene_in_db(self,gene,label=-1):
     # None is a valid argument to label
     if label == -1:
-      label=self.dlabel
+      label=self.slabel
     self._connect()
-    query  = "SELECT protein FROM GenomicData a "
-    query += "INNER JOIN GenomicConsequence b "
-    query += "ON a.label=b.label AND a.chr=b.chr "
-    query += "AND a.start=b.start AND a.end=b.end AND a.name=b.name "
-    query += "WHERE hgnc_gene=%s "
+    query  = "SELECT unp FROM Chain a WHERE gene=%s "
     if label:
       query += "AND label=%s"
     query += "LIMIT 1"
@@ -137,11 +133,7 @@ class PDBMapIO(PDBIO):
     res = self._c.fetchone()
     self._close()
     if res:
-      try:
-        return True,PDBMapProtein.ensp2unp(res['protein'])[0]
-      except:
-        sys.stderr.write("%s is a deprecated identifier.\n"%res['protein'])
-        return False,None
+      return True,res['unp'][0]
     return False,None
 
   def genomic_datum_in_db(self,name,label=None):

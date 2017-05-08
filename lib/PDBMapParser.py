@@ -19,10 +19,10 @@ from Bio.PDB.PDBParser import PDBParser
 from Bio.PDB.PDBIO import PDBIO
 import Bio.PDB
 import numpy as np
-from PDBMapModel import PDBMapModel
-from PDBMapProtein import PDBMapProtein
-from PDBMapStructure import PDBMapStructure
-from PDBMapIO import aa_code_map
+from lib.PDBMapModel import PDBMapModel
+from lib.PDBMapProtein import PDBMapProtein
+from lib.PDBMapStructure import PDBMapStructure
+from lib.PDBMapIO import PDBMapIO,aa_code_map
 import MySQLdb, MySQLdb.cursors
 from warnings import filterwarnings,resetwarnings
 from Bio.PDB.PDBExceptions import PDBConstructionWarning

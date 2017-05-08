@@ -30,8 +30,9 @@ class PDBMapModel(Structure):
   
   # Modbase Summary Dictionary
   # Maps Ensembl Protein IDs to Modbase Models
-  modbase_dir  = ''
-  modbase_dict = {}
+  modbase_dir   = ''
+  modbase_dict  = {}
+  _modelid2file = {}
 
   def _sfloat(self,obj):
     """ Safe float conversion """
@@ -61,6 +62,7 @@ class PDBMapModel(Structure):
     self.structure   = s
     self.quality     = quality
     self.transcripts = []
+    self.alignments  = []
 
     # Store the model summary information
     self.id      = model_summary[3]
@@ -107,7 +109,7 @@ class PDBMapModel(Structure):
       # But only keep the one matching this model's reference ENSP, if specified
       if self.id.startswith("ENSP"):
         candidate_transcripts = [ct for ct in candidate_transcripts if
-                               PDBMapProtein.enst2ensp(ct.transcript)==self.id.split('.')[0]]
+                               PDBMapProtein.enst2ensp(ct.transcript)==self.id.split('.')[0].split('_')[0]]
       if len(candidate_transcripts) < 1:
         return []
       if len(candidate_transcripts) > 1 and self.id.startswith("ENSP"):
@@ -135,6 +137,11 @@ class PDBMapModel(Structure):
       return self.alignments
 
   @classmethod
+  def get_models(cls):
+    """ Returns all recorded ModBase models """
+    return [m for v in PDBMapModel.modbase_dict.values() for m in v]
+
+  @classmethod
   def ensp2modbase(cls,ensp):
     """ Maps Ensembl protein IDs to ModBase models """
     models = PDBMapModel.modbase_dict.get(ensp,[])
@@ -153,31 +160,56 @@ class PDBMapModel(Structure):
     return models
 
   @classmethod
-  def load_modbase(cls,modbase_dir,summary_fname):
-    """ Loads a ModBase summary file into a lookup dictionary """
-    PDBMapModel.modbase_dir = modbase_dir
-    summary_path = "%s/%s"%(modbase_dir,summary_fname)
-    if not os.path.exists(summary_path):
-      msg = "ERROR: (PDBMapModel) Cannot load ModBase. %s does not exist."%summary_path
+  def get_coord_file(cls,modelid):
+    """ Returns the coordinate file location for the ModBase model ID """
+    if not PDBMapModel._modelid2file:
+      raise Exception("PDBMapModel.load_modbase must be called before using this method.")
+    return PDBMapModel._modelid2file.get(modelid,None)
+
+  @classmethod
+  def load_modbase(cls,modbase_dir,summary_fname,flag2013=False):
+    """ Adds a ModBase summary file to the lookup dictionary """
+    modbase_dir = modbase_dir.rstrip('/')
+    if not PDBMapModel.modbase_dir:
+      PDBMapModel.modbase_dir = [modbase_dir]
+    else:
+      PDBMapModel.modbase_dir.append(modbase_dir)
+    if not os.path.exists(summary_fname):
+      msg = "ERROR: (PDBMapModel) Cannot load ModBase. %s does not exist."%summary_fname
       raise(Exception(msg))
-    fin = open(summary_path,'rb')
+    fin = open(summary_fname,'rb')
     fin.readline() # burn the header
     reader = csv.reader(fin,delimiter='\t')
+    total_count = 0
+    mismatch_count = 0
     for row in reader:
+      if flag2013:
+        # Insert two dummy rows between columns 1 and 2 to match 2016 summary format
+        row.insert(1,None)
+        row.insert(1,None)
       # Skip models not constructed from EnsEMBL protein sequences
       if not row[3].startswith("ENSP"): continue
+      # Append the coordinate file location to the summary info
+      row.append("%s/%s.pdb.gz"%(modbase_dir,row[3]))
       # Extract the EnsEMBL protein identifier
-      ensp = row[3].split('.')[0] # Strip the EnsEMBL protein verion number
+      ensp = row[3].split('.')[0] # Strip the EnsEMBL protein verion number, if present
+      ensp = ensp.split('_')[0]   # Strip the ModBase model iteration number
       unps = PDBMapProtein.ensp2unp(ensp)
       unp  = None if not unps else unps[0]
+      total_count += 1
+      if not unp:
+        mismatch_count += 1
       # Skip models without associated UniProt IDs
       if not unp: continue
       # Set UniProt ID as last field in model summary
       row.append(unp)
+      # Populate Ensembl protein ID to model summary dictionary
       if ensp in PDBMapModel.modbase_dict:
         PDBMapModel.modbase_dict[ensp].append(row)
       else:
         PDBMapModel.modbase_dict[ensp] = [row]
+      # Populate ModBase model ID to coordinate file dictionary
+      PDBMapModel._modelid2file[row[3]] = row[-2]
   
 # Main check
 if __name__== "__main__":

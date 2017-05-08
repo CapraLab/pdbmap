@@ -53,9 +53,9 @@ class PDBMapTranscript():
       msg += "Using primary AC: %s\n"%unpid
       sys.stderr.write(msg)
     transids = PDBMapProtein.unp2enst(unpid)
-    # if len(transids) < 1:
-    #   msg = "  WARNING (UniProt) No transcript match for %s\n"%unpid
-    #   sys.stderr.write(msg)
+    if len(transids) < 1:
+      msg = "\n  WARNING (query_from_unp) No transcripts match %s\n"%unpid
+      sys.stderr.write(msg)
     # Query all transcript candidates and return
     res = []
     for transid in transids:
@@ -65,6 +65,7 @@ class PDBMapTranscript():
     # Only report an error if NO transcript matches were identified.
     if not res:
       msg = "   WARNING (PDBMapTranscript) No valid transcripts identified for %s"%unpid
+      sys.stderr.write(msg)
     return res
 
   @classmethod
@@ -103,8 +104,8 @@ class PDBMapTranscript():
                       'chr9','chr10','chr11','chr12','chr13','chr14','chr15',
                       'chr16','chr17','chr18','chr19','chr20','chr21','chr22',
                       'chrX','chrY','chrMT']:
-        # msg = "  WARNING (transcript_to_genomic.pl) Ignoring non-standard chromosome %s\n"%chrom
-        # sys.stderr.write(msg)
+        msg = "  WARNING (transcript_to_genomic.pl) Ignoring non-standard chromosome %s\n"%chrom
+        sys.stderr.write(msg)
         return None
       strand     = int(fields[8])
       sequence[seqid] = (rescode,chrom,start,end,strand)
