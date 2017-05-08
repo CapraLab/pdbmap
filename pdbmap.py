@@ -43,17 +43,17 @@ class PDBMap():
     self.modbase = False
     # Initialize
     if idmapping:
-      PDBMapProtein.PDBMapProtein.load_idmapping(idmapping)
+      PDBMapProtein.load_idmapping(idmapping)
     if sec2prim:
-      PDBMapProtein.PDBMapProtein.load_sec2prim(sec2prim)
+      PDBMapProtein.load_sec2prim(sec2prim)
     if sprot:
-      PDBMapProtein.PDBMapProtein.load_sprot(sprot)
+      PDBMapProtein.load_sprot(sprot)
     if pdb_dir:
       self.pdb = True
       self.pdb_dir = pdb_dir
     if modbase_dir and modbase_summary:
       self.modbase = True
-      PDBMapModel.PDBMapModel.load_modbase(modbase_dir,modbase_summary)
+      PDBMapModel.load_modbase(modbase_dir,modbase_summary)
     if vep:
       self.vep = vep
     if reduce:
@@ -65,18 +65,18 @@ class PDBMap():
     """ Loads all known structures associated with UniProt ID """
     if self.pdb and use_pdb:
       pdb_label = label if label else 'pdb'
-      io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,
+      io = PDBMapIO(args.dbhost,args.dbuser,
                           args.dbpass,args.dbname,slabel=pdb_label)
-      pdbids = list(set(PDBMapProtein.PDBMapProtein.unp2pdb(unp)))
+      pdbids = list(set(PDBMapProtein.unp2pdb(unp)))
       for pdbid in pdbids:
         print " # Processing (%s) PDB %s # "%(pdb_label,pdbid)
         self.load_pdb(pdbid,label=pdb_label,io=io)
         sys.stdout.flush() # Force stdout flush after each PDB
     if self.modbase and use_modbase:
       mod_label = label if label else 'modbase'
-      io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,
+      io = PDBMapIO(args.dbhost,args.dbuser,
                           args.dbpass,args.dbname,slabel=mod_label)
-      models = PDBMapModel.PDBMapModel.unp2modbase(unp)
+      models = PDBMapModel.unp2modbase(unp)
       for model in models:
         print " # (%s) Processing ModBase %s #"%(mod_label,model[3])
         self.load_model(model,label=mod_label,io=io)
@@ -89,7 +89,7 @@ class PDBMap():
     """ Loads a given PDB into the PDBMap database """
     if not io:
       # Create a PDBMapIO object
-      io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,
+      io = PDBMapIO(args.dbhost,args.dbuser,
                             args.dbpass,args.dbname,slabel=label)
     # Check if PDB is already in the database
     if io.structure_in_db(pdbid,label):
@@ -106,7 +106,7 @@ class PDBMap():
     # Locate all biological assemblies
     biounit_fnames = glob.glob("%s/biounit/coordinates/all/%s.pdb*.gz"%(self.pdb_dir,pdbid.lower()))
     try: # Load the structure
-      p  = PDBMapIO.PDBMapParser()
+      p  = PDBMapParser()
       s  = p.get_structure(pdbid,pdb_fname,biounit_fnames=biounit_fnames,io=io)
       io.set_structure(s)
       io.upload_structure()
@@ -123,7 +123,7 @@ class PDBMap():
     
     if not io:
       # Create a PDBMapIO object
-      io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,
+      io = PDBMapIO(args.dbhost,args.dbuser,
                             args.dbpass,args.dbname,slabel=label)
 
     # Check if model is already in the database
@@ -135,11 +135,11 @@ class PDBMap():
 
     # Query UniProt ID if not provided
     if not unp:
-      unp = PDBMapProtein.PDBMapProtein.ensp2unp(modelid.split('.')[0])[0]
+      unp = PDBMapProtein.ensp2unp(modelid.split('.')[0])[0]
 
     # Load the ModBase model
     if not model_fname:
-      modbase_dir = PDBMapModel.PDBMapModel.modbase_dir
+      modbase_dir = PDBMapModel.modbase_dir
       model_fname = "%s/Homo_sapiens_2016/model/%s.pdb"%(modbase_dir,modelid)
       print "  # Fetching %s"%modelid
       if not os.path.exists(model_fname):
@@ -149,7 +149,7 @@ class PDBMap():
         sys.stderr.write(msg)
         return 1
     try:
-      p = PDBMapIO.PDBMapParser()
+      p = PDBMapParser()
       print "   # Loading %s (%s) from %s..."%(modelid,unp,model_fname.split('/')[-1])
       m = p.get_model(model_summary,model_fname,unp=unp)
       io.set_structure(m)
@@ -165,15 +165,15 @@ class PDBMap():
   def load_data(self,dname,dfile,indexing=None,usevep=True,upload=True):
     """ Loads a data file into the PDBMap database """
     if usevep:
-      d = PDBMapData.PDBMapData(vep=self.vep,dname=dname)
+      d = PDBMapData(vep=self.vep,dname=dname)
     else:
-      d = PDBMapData.PDBMapData(dname=dname)
+      d = PDBMapData(dname=dname)
     if not os.path.exists(dfile):
       dfile = "%s.ped"%dfile # Test if PEDMAP basename
       if not os.path.exists(dfile):
         msg = "  ERROR (PDBMap) File does not exist: %s"%dfile
         raise Exception(msg)
-    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,dlabel=dname)
+    io = PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,dlabel=dname)
     # Determine file type
     ext = dfile.split('.')[-1].lower()
     if ext == 'gz':
@@ -215,8 +215,8 @@ class PDBMap():
   
   def intersect_data(self,dname,slabel=None,dtype="Genomic",quick=False):
     """ Intersects a loaded dataset with the PDBMap structural domain """
-    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,dlabel=dname,slabel=slabel)
-    i = PDBMapIntersect.PDBMapIntersect(io)
+    io = PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,dlabel=dname,slabel=slabel)
+    i = PDBMapIntersect(io)
     # Note: Only all-structures <-> genomic data intersections supported
     if quick:
     	nrows = i.quick_intersect(dname,slabel,dtype)
@@ -226,7 +226,7 @@ class PDBMap():
 
   def filter_data(self,dname,dfiles):
     # Determine which variants were loaded into PDBMap
-    io     = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,dlabel=dname)
+    io     = PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,dlabel=dname)
     query  = "SELECT DISTINCT b.name FROM GenomicIntersection as a "
     query += "INNER JOIN GenomicConsequence as b "
     query += "ON a.gc_id=b.gc_id WHERE a.dlabel=%s"
@@ -288,7 +288,7 @@ class PDBMap():
   def visualize(self,entity,biounits=[],struct_label='uniprot-pdb',
                 data_label='1kg',anno_list=['maf'],spectrum_range=[],colors=[]):
     """ Visualizes a PDBMap structure, model, or protein """
-    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,
+    io = PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,
                             slabel=struct_label,dlabel=data_label)
     v  = PDBMapVisualize(io,args.pdb_dir,args.modbase_dir)
     entity_type = io.detect_entity_type(entity) if not entity=='all' else 'all'
@@ -391,9 +391,9 @@ class PDBMap():
     resetwarnings()
     fin.close()
 
-    p = PDBMapIO.PDBMapParser()
+    p = PDBMapParser()
     s = p.process_structure(s,force=True)
-    s = PDBMapStructure.PDBMapStructure(s,refseq=refseq,pdb2pose={})
+    s = PDBMapStructure(s,refseq=refseq,pdb2pose={})
 
     if unp and not (modelflag or manualflag):
       # If this structure is in PDBMap (not provided by file), query the UNP chains
@@ -716,9 +716,9 @@ class PDBMap():
     p  = PDBParser()
     with gzip.open(bio,'rb') as fin:
       s = p.get_structure(structid,fin)
-    p = PDBMapIO.PDBMapParser()
+    p = PDBMapParser()
     s = p.process_structure(s,force=True)
-    s = PDBMapStructure.PDBMapStructure(s,refseq=refseq)
+    s = PDBMapStructure(s,refseq=refseq)
     if not relaxdir:
       s = s.clean()
     pdb2pose = s._pdb2pose
@@ -763,10 +763,10 @@ class PDBMap():
     # Load the relaxed wild-type structure
     p = PDBParser()
     s = p.get_structure(structid,"results/%s/%s_%s.relaxed.pdb"%(label,structid,biounit))
-    p = PDBMapIO.PDBMapParser()
+    p = PDBMapParser()
     s = p.process_structure(s,force=True)
     # I don't understand how pdb2pose *isn't* necessary, but it appears not to be
-    s = PDBMapStructure.PDBMapStructure(s,pdb2pose={},refseq=refseq)
+    s = PDBMapStructure(s,pdb2pose={},refseq=refseq)
     # dummy mutation (synonymous) for WT scores
     c,m  = muts[0]
     m    = m[0]+m[1:-1]+m[0]
@@ -820,10 +820,10 @@ class PDBMap():
     # Load the relaxed wild-type structure
     p = PDBParser()
     s = p.get_structure(structid,"results/%s/%s_%s.twicerelaxed.pdb"%(label,structid,biounit))
-    p = PDBMapIO.PDBMapParser()
+    p = PDBMapParser()
     s = p.process_structure(s,force=True)
-    # s = PDBMapStructure.PDBMapStructure(s,pdb2pose=pdb2pose)
-    s = PDBMapStructure.PDBMapStructure(s,pdb2pose={})
+    # s = PDBMapStructure(s,pdb2pose=pdb2pose)
+    s = PDBMapStructure(s,pdb2pose={})
     rss  = s.score()  # RosettaScore of the twice-relaxed WT
     rrep = s.fa_rep() # Rosetta full-atom repulsion of the twice-relaxed WT
     if not os.path.exists("results/%s/%s_%s.wt.scores"%(label,structid,biounit)):
@@ -1066,7 +1066,7 @@ __  __  __
       print "Aborting..."
     else:
       print "Creating database tables..."
-      io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,
+      io = PDBMapIO(args.dbhost,args.dbuser,
                             args.dbpass,args.dbname,createdb=True)
       # print "Refreshing remote data cache and populating tables..."
       print "\nDatabase created. Please set create_new_db to False."
@@ -1079,7 +1079,7 @@ __  __  __
 
   # Initialize PDBMap, refresh mirrored data if specified
   if args.cmd=="refresh":
-    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,
+    io = PDBMapIO(args.dbhost,args.dbuser,
                             args.dbpass,args.dbname)
     try:
       PDBMap().refresh_cache(args,io)
@@ -1100,7 +1100,7 @@ __  __  __
     elif args.args[0] == 'all':
       args.slabel = args.slabel if args.slabel else "pdb"
       # All human Swiss-Prot-containing PDB structures in the local mirror
-      all_pdb_ids   = PDBMapProtein.PDBMapProtein._pdb2unp.keys()
+      all_pdb_ids   = PDBMapProtein._pdb2unp.keys()
       fname         = "%s/structures/all/pdb/pdb%s.ent.gz"
       all_pdb_files = [fname%(args.pdb_dir,pdbid.lower()) for pdbid in all_pdb_ids]
       # Remove any PDB files not contained in the local PDB mirror
@@ -1167,17 +1167,17 @@ __  __  __
       print msg; sys.exit(0)
     elif args.args[0] == 'all':
       # All human UniProt IDs
-      # all_unp = [unp for unp in PDBMapProtein.PDBMapProtein.sprot \
-      #             if PDBMapProtein.PDBMapProtein.unp2species[unp]=="HUMAN"]
+      # all_unp = [unp for unp in PDBMapProtein.sprot \
+      #             if PDBMapProtein.unp2species[unp]=="HUMAN"]
       # All human UniProt IDs with ENST mappings
       # All Human, Swiss-Prot proteins with EnsEMBL transcript cross-references
       print "\nIdentifying all Swiss-Prot IDs with mapped Ensembl transcripts..."
-      all_unp = [unp for unp in PDBMapProtein.PDBMapProtein._unp2enst \
-                  if unp in PDBMapProtein.PDBMapProtein.sprot and \
-                  PDBMapProtein.PDBMapProtein.unp2species[unp]=="HUMAN"]
+      all_unp = [unp for unp in PDBMapProtein._unp2enst \
+                  if unp in PDBMapProtein.sprot and \
+                  PDBMapProtein.unp2species[unp]=="HUMAN"]
       # Filter this set to those not already in the database
       # print "Removing Swiss-Prot IDs already in %s..."%args.dbname
-      # io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname)
+      # io = PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname)
       # all_unp = [unp for unp in all_unp if \
       #           not (io.unp_in_db(unp,'pdb') or io.unp_in_db(unp,'modbase'))]
       n = len(all_unp)
@@ -1378,7 +1378,7 @@ __  __  __
         structid,bio = '.'.join(os.path.basename(entity).split('.')[:-exts]),0
         label = "%s_mutagenesis_%s"%(structid,str(time.strftime("%Y%m%d")))
     else:
-      io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,slabel=args.slabel)
+      io = PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,slabel=args.slabel)
       etype = io.detect_entity_type(entity)
       sfile = None
       label = "%s_mutagenesis_%s"%(entity,str(time.strftime("%Y%m%d")))
@@ -1483,7 +1483,7 @@ __  __  __
     args.slabel = args.slabel if args.slabel else "pdb"
     pdbmap = PDBMap(idmapping=args.idmapping)
     entity = args.args[0]
-    io = PDBMapIO.PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,slabel=args.slabel)
+    io = PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,slabel=args.slabel)
     if os.path.exists(entity):
       if os.path.isfile(entity):
         etype = "file"

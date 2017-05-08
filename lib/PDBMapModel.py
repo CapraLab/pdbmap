@@ -167,7 +167,7 @@ class PDBMapModel(Structure):
       # Skip models not constructed from EnsEMBL protein sequences
       if not row[3].startswith("ENSP"): continue
       # Extract the EnsEMBL protein identifier
-      ensp,_ = row[3].split('.') # Strip the EnsEMBL protein verion number
+      ensp = row[3].split('.')[0] # Strip the EnsEMBL protein verion number
       unps = PDBMapProtein.ensp2unp(ensp)
       unp  = None if not unps else unps[0]
       # Skip models without associated UniProt IDs
