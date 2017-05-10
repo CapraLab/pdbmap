@@ -82,8 +82,8 @@ class PDBMap():
                           args.dbpass,args.dbname,slabel=mod_label)
       models = PDBMapModel.unp2modbase(unp)
       for model in models:
-        print " # (%s) Processing ModBase %s #"%(mod_label,model[3])
-        self.load_model(model,model_fname=model[-2],label=mod_label,io=io,unp=unp)
+        print " # (%s) Processing ModBase %s #"%(mod_label,model['filename'])
+        self.load_model(model,label=mod_label,io=io)
         sys.stdout.flush() # Force stdout flush after each model
     if not pdbids and not models:
       msg = "  WARNING (PDBMap) No PDB structures or Modbase models found for %s\n"%unp
@@ -122,7 +122,7 @@ class PDBMap():
     sys.stderr.write(msg)
     return 0
 
-  def load_model(self,model_summary,model_fname=None,label="",io=None,unp=None,flag2013=False):
+  def load_model(self,model_summary,label="",io=None):
     """ Loads a given ModBase model into the PDBMap database """
     
     if not io:
@@ -131,7 +131,8 @@ class PDBMap():
                             args.dbpass,args.dbname,slabel=label)
 
     # Check if model is already in the database
-    modelid = model_summary[3] # extract ModBase model ID
+    modelid = model_summary['modelid'] # extract ModBase model ID
+    model_fname = model_summary['filename']
     if io.model_in_db(modelid,label):
       msg = "  VALID (PDBMap) %s (%s) already in database.\n"%(modelid,label)
       print msg
@@ -721,14 +722,31 @@ __  __  __
     if args.args[0] in ['all','*','.']:
       args.slabel = args.slabel if args.slabel else "modbase"
       models = PDBMapModel.get_models() # get all 2013 and 2016 ModBase models
-      for row in models:
-        pdbmap.load_model(row,model_fname=row[-2],label=args.slabel,io=None,unp=row[-1])
+      n = len(models)
+      # If this is a parallel command with partition parameters
+      if args.ppart != None and args.ppidx != None:
+        psize = n / args.ppart # floor
+        if (args.ppart-1) == args.ppidx:
+          models = models[args.ppidx*psize:]
+        else:
+          models = models[args.ppidx*psize:(args.ppidx+1)*psize]
+        msg = "WARNING(PDBMap) Subprocess uploading partition %d/%d of ModBase\n"%(args.ppidx+1,args.ppart)
+        sys.stderr.write(msg)
+        for i,row in enumerate(models):
+          print "## Processing (%s) %s (%d/%d) ##"%(args.slabel,row['modelid'],i+(args.ppidx*psize)+1,n)
+          pdbmap.load_model(row,label=args.slabel,io=None)
+      else:
+        msg = "WARNING (PDBMap) Uploading all %d ModBase 2013 and 2016 models.\n"%n
+        sys.stderr.write(msg)
+        for i,row in enumerate(models):
+          print "\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,row['modelid'],i,n)
+          pdbmap.load_model(row,label=args.slabel,io=None)
     # Parse user-supplied homology models
     else:
       if not args.slabel:
         args.slabel = 'manual'
       if not len(args.args) > 1:
-        msg = "ERROR (PDBMap): Must include model summary file with load_model"
+        msg = "ERROR (PDBMap): Must include ModBase-formatted summary file with load_model"
         raise Exception(msg)
       if "*" in args.args[1]:
         model_summary = [args.args[0]]
@@ -745,10 +763,17 @@ __  __  __
             if not row[3].startswith("ENSP"):
               i -= 1 # Not Ensembl. Decrement.
               continue
-            # Extract the Ensembl protein ID from the ModBase summary
-            print "## Processing (%s) %s (%d/%d) ##"%(args.slabel,row[3],i,n)
-            # Extract the ModBase 
-            pdbmap.load_model(row,model_fname=models[i],label=args.slabel,io=None,unp=args.unp)
+            row.append(models[i])
+            row.append(args.unp)
+            # If the summary file conforms to 2013 standard, reconcile with 2016
+            if len(row)!=len(PDBMapModel._info_fields)-2:
+              row.insert(1,None)
+              row.insert(1,None)
+            row = dict(zip(PDBMapModel._info_fields,row))
+            print "## Processing (%s) %s (%d/%d) ##"%(args.slabel,row['modelid'],i,n)
+            # Convert the model summary row to a dictionary
+            # Load the ModBase model
+            pdbmap.load_model(row,label=args.slabel,io=None)
 
   ## load_data ##
   elif args.cmd == "load_data":

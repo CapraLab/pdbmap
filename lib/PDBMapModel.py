@@ -30,9 +30,14 @@ class PDBMapModel(Structure):
   
   # Modbase Summary Dictionary
   # Maps Ensembl Protein IDs to Modbase Models
-  modbase_dir   = ''
+  modbase_dir   = []
   modbase_dict  = {}
+  _modelid2info = {}
   _modelid2file = {}
+  _info_fields  = ["run_name","mod_seq_id","mod_model_id","modelid","start","end",
+                    "sequence_identity","evalue","ga341","mpqs","zdope","template_pdb",
+                    "template_chain","template_start","template_end","hit_history",
+                    "tsvmod_method","tsvmod_no35","tsvmod_rmsd","filename","unp"]
 
   def _sfloat(self,obj):
     """ Safe float conversion """
@@ -50,9 +55,9 @@ class PDBMapModel(Structure):
     oid = chain.id
     chain.id = 'A'
     chain.species = "HUMAN"
-    chain.pdbstart = self._sint(model_summary[4])
-    chain.pdbend   = self._sint(model_summary[5])
-    chain.unp      = model_summary[19]
+    chain.pdbstart = self._sint(model_summary['start'])
+    chain.pdbend   = self._sint(model_summary['end'])
+    chain.unp      = model_summary['unp']
     chain.offset   = 0 # Assumed. Corrected by alignment.
     chain.hybrid   = 0
     s[0].child_dict['A'] = chain
@@ -65,22 +70,22 @@ class PDBMapModel(Structure):
     self.alignments  = []
 
     # Store the model summary information
-    self.id      = model_summary[3]
-    self.tvsmod_method = model_summary[16]
+    self.id      = model_summary['modelid']
+    self.tvsmod_method = model_summary['tvsmod_method']
     if self.tvsmod_method != 'NA':
-      self.tvsmod_no35   = self._sfloat(model_summary[17])
-      self.tvsmod_rmsd   = self._sfloat(model_summary[18])
+      self.tvsmod_no35   = self._sfloat(model_summary['tvsmod_no35'])
+      self.tvsmod_rmsd   = self._sfloat(model_summary['tvsmod_rmsd'])
     else:
       self.tvsmod_no35 = 'NULL'
       self.tvsmod_rmsd = 'NULL'
-    self.identity = self._sfloat(model_summary[6])
-    self.evalue   = self._sfloat(model_summary[7])
-    self.ga341    = self._sfloat(model_summary[8])
-    self.mpqs     = self._sfloat(model_summary[9])
-    self.zdope    = self._sfloat(model_summary[10])
-    self.pdbid    = model_summary[11]
-    self.chain    = model_summary[12]
-    self.unp      = model_summary[17]
+    self.identity = self._sfloat(model_summary['seequence_identity'])
+    self.evalue   = self._sfloat(model_summary['evalue'])
+    self.ga341    = self._sfloat(model_summary['ga341'])
+    self.mpqs     = self._sfloat(model_summary['mpqs'])
+    self.zdope    = self._sfloat(model_summary['zdope'])
+    self.pdbid    = model_summary['template_pdb']
+    self.chain    = model_summary['template_chain']
+    self.unp      = model_summary['unp']
     
   def __getattr__(self,attr):
     # Defer appropriate calls to the structure
@@ -160,6 +165,13 @@ class PDBMapModel(Structure):
     return models
 
   @classmethod
+  def get_info(cls,modelid):
+    """ Returns the info dictionary for this ModBase model """
+    if not PDBMapModel.modbase_dict:
+      raise Exception("PDBMapModel.load_modbase must be called before using this method.")
+    return PDBMapModel.modbase_dict.get(modelid,None)
+
+  @classmethod
   def get_coord_file(cls,modelid):
     """ Returns the coordinate file location for the ModBase model ID """
     if not PDBMapModel._modelid2file:
@@ -167,7 +179,7 @@ class PDBMapModel(Structure):
     return PDBMapModel._modelid2file.get(modelid,None)
 
   @classmethod
-  def load_modbase(cls,modbase_dir,summary_fname,flag2013=False):
+  def load_modbase(cls,modbase_dir,summary_fname):
     """ Adds a ModBase summary file to the lookup dictionary """
     modbase_dir = modbase_dir.rstrip('/')
     if not PDBMapModel.modbase_dir:
@@ -183,7 +195,8 @@ class PDBMapModel(Structure):
     total_count = 0
     mismatch_count = 0
     for row in reader:
-      if flag2013:
+      # If row length matches 2013 summary, reconcile columns with 2016
+      if len(row) != len(PDBMapModel._info_fields)-2:
         # Insert two dummy rows between columns 1 and 2 to match 2016 summary format
         row.insert(1,None)
         row.insert(1,None)
@@ -203,13 +216,17 @@ class PDBMapModel(Structure):
       if not unp: continue
       # Set UniProt ID as last field in model summary
       row.append(unp)
+      # Convert to dictionary
+      d = dict(zip(PDBMapModel._info_fields,row))
       # Populate Ensembl protein ID to model summary dictionary
       if ensp in PDBMapModel.modbase_dict:
-        PDBMapModel.modbase_dict[ensp].append(row)
+        PDBMapModel.modbase_dict[ensp].append(d['modelid'])
       else:
-        PDBMapModel.modbase_dict[ensp] = [row]
+        PDBMapModel.modbase_dict[ensp] = [d['modelid']]
+      # Populate the ModBase model ID to summary info dictionary
+      PDBMapModel._modelid2info[d['modelid']] = d
       # Populate ModBase model ID to coordinate file dictionary
-      PDBMapModel._modelid2file[row[3]] = row[-2]
+      PDBMapModel._modelid2file[d['modelid']] = d['filename']
   
 # Main check
 if __name__== "__main__":
