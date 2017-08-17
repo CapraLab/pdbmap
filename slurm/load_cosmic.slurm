@@ -28,14 +28,14 @@ ftail=".recode.vcf"
 
 # Syntax for autosomal chromosomes
 if ((${SLURM_ARRAY_TASK_ID} < 23 )); then
-  ./pdbmap.py -c config/v13.config --slabel=uniprot-pdb --dlabel=cosmic load_data ${fbase}${SLURM_ARRAY_TASK_ID}${ftail}
+  ./pdbmap.py -c config/v13.config --dlabel=cosmic load_data ${fbase}${SLURM_ARRAY_TASK_ID}${ftail}
 # Syntax for X chromosome
 elif ((${SLURM_ARRAY_TASK_ID} < 24)); then
-  ./pdbmap.py -c config/v13.config --slabel=uniprot-pdb --dlabel=cosmic load_data ${fbase}X${ftail}
+  ./pdbmap.py -c config/v13.config --dlabel=cosmic load_data ${fbase}X${ftail}
 # Syntax for Y chromosome
 elif ((${SLURM_ARRAY_TASK_ID} < 25)); then
-  ./pdbmap.py -c config/v13.config --slabel=uniprot-pdb --dlabel=cosmic load_data ${fbase}Y${ftail}
+  ./pdbmap.py -c config/v13.config --dlabel=cosmic load_data ${fbase}Y${ftail}
 # Syntax for MT chromosome
 else
-  ./pdbmap.py -c config/v13.config --slabel=uniprot-pdb --dlabel=cosmic load_data ${fbase}MT${ftail}
+  ./pdbmap.py -c config/v13.config --dlabel=cosmic load_data ${fbase}MT${ftail}
 fi

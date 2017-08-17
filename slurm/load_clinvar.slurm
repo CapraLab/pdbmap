@@ -25,5 +25,5 @@ cd pdbmap # move into pdbmap main directory
 fname="/dors/capra_lab/data/clinvar/clinvar.vcf.gz"
 
 # Syntax for autosomal chromosomes
-./pdbmap.py -c config/v13.config --slabel=uniprot-pdb --dlabel=clinvar load_data ${fname}
+./pdbmap.py -c config/v13.config --dlabel=clinvar load_data ${fname}
 

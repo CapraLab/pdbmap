@@ -27,14 +27,14 @@ ftail=".r0.3.sites.vep.snponly.biallelic.popaf.recode.vcf"
 
 # Syntax for autosomal chromosomes
 if ((${SLURM_ARRAY_TASK_ID} < 23 )); then
-  ./pdbmap.py -c config/v13.config --slabel=uniprot-pdb --novep --dlabel=exac load_data ${fbase}${SLURM_ARRAY_TASK_ID}${ftail}
+  ./pdbmap.py -c config/v13.config --novep --dlabel=exac load_data ${fbase}${SLURM_ARRAY_TASK_ID}${ftail}
 
 # Syntax for X chromosome
 elif ((${SLURM_ARRAY_TASK_ID} < 24)); then
-  ./pdbmap.py -c config/v13.config --slabel=uniprot-pdb --novep --dlabel=exac load_data ${fbase}X${ftail}
+  ./pdbmap.py -c config/v13.config --novep --dlabel=exac load_data ${fbase}X${ftail}
 
 # Syntax for Y chromosome
 else
-  ./pdbmap.py -c config/v13.config --slabel=uniprot-pdb --novep --dlabel=exac load_data ${fbase}Y${ftail}
+  ./pdbmap.py -c config/v13.config --novep --dlabel=exac load_data ${fbase}Y${ftail}
 
 fi

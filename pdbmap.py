@@ -31,6 +31,7 @@ from lib import PDBMapIO,PDBMapParser,PDBMapStructure,PDBMapProtein
 from lib import PDBMapAlignment,PDBMapData,PDBMapTranscript
 from lib import PDBMapIntersect,PDBMapModel
 from lib.PDBMapVisualize import PDBMapVisualize
+from lib import amino_acids
 
 # Row count threshold for quick-intersection
 QUICK_THRESH = 20000
@@ -289,7 +290,7 @@ class PDBMap():
     os.system("rm -f %s"%tempf) # Remove temp file
     return nrows # Return the number of kept variants
 
-  def visualize(self,entity,biounits=[],struct_label='uniprot-pdb',
+  def visualize(self,entity,biounits=[],struct_label='pdb',
                 data_label='1kg',anno_list=['maf'],spectrum_range=[],colors=[]):
     """ Visualizes a PDBMap structure, model, or protein """
     io = PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,
@@ -314,9 +315,6 @@ class PDBMap():
       idx = ['.synonymous' in a for i,a in enumerate(anno_list)].index(True)
       anno_list[idx] = anno_list[idx].replace('.synonymous','')
       print "\n%s will be plotted for synonymous variants."%anno_list[idx]
-      # idx = anno_list.index('synonymous')
-      # anno_list  = anno_list[0:idx]+anno_list[idx+1:]
-      # anno_list.append('daf')
     if 'popdaf' in anno_list:
       idx = anno_list.index('popdaf')
       anno_list  = anno_list[0:idx]+anno_list[idx+1:]
@@ -652,8 +650,6 @@ __  __  __
                     modbase2016_summary=args.modbase2016_summary,
                     modbase2013_dir=args.modbase2013_dir,
                     modbase2013_summary=args.modbase2013_summary)
-    # if not args.slabel:
-    #   args.slabel = "uniprot-pdb"
     if len(args.args)<1: 
       msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> load_unp unpid [unpid,...]\n"
       msg += "   or: pdbmap.py -c conf_file --slabel=<slabel> load_unp all"
@@ -813,7 +809,7 @@ __  __  __
       print msg; sys.exit(1)
     pdbmap = PDBMap(idmapping=args.idmapping)
     entity = args.args[0]
-    struct_label   = 'uniprot-pdb' if not args.slabel else args.slabel
+    struct_label   = 'pdb' if not args.slabel else args.slabel
     data_label = args.args[1]
     anno_list  = args.args[2].split(',')
     if len(args.args) > 3 and args.args[3].lower() not in ['all','.',' ']:

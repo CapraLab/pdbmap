@@ -29,15 +29,15 @@ ftail=".phase3_shapeit2_mvncall_integrated_v5a.20130502.genotypes.vcf.gz"
 
 # Syntax for autosomal chromosomes
 if ((${SLURM_ARRAY_TASK_ID} < 23 )); then
-  ./pdbmap.py -c config/v13.config --slabel=uniprot-pdb --dlabel=1kg3 load_data ${fbase}${SLURM_ARRAY_TASK_ID}${ftail}
+  ./pdbmap.py -c config/v13.config --dlabel=1kg3 load_data ${fbase}${SLURM_ARRAY_TASK_ID}${ftail}
 
 # Syntax for X chromosome
 elif ((${SLURM_ARRAY_TASK_ID} < 24)); then
-  ./pdbmap.py -c config/v13.config --slabel=uniprot-pdb --dlabel=1kg3 load_data ${fbase}X.phase3_shapeit2_mvncall_integrated_v1b.20130502.genotypes.vcf.gz
+  ./pdbmap.py -c config/v13.config --dlabel=1kg3 load_data ${fbase}X.phase3_shapeit2_mvncall_integrated_v1b.20130502.genotypes.vcf.gz
 
 # Syntax for Y chromosome
 else
-  ./pdbmap.py -c config/v13.config --slabel=uniprot-pdb --dlabel=1kg3 load_data ${fbase}Y.phase3_integrated_v1b.20130502.genotypes.vcf.gz
+  ./pdbmap.py -c config/v13.config --dlabel=1kg3 load_data ${fbase}Y.phase3_integrated_v1b.20130502.genotypes.vcf.gz
 
 fi
 

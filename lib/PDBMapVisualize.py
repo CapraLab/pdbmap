@@ -13,7 +13,7 @@
 
 # See main check for cmd line parsing
 import sys,os,csv,time,math,platform
-from lib import PDBMapModel
+
 # from pymol import cmd
 max_dist = -999 # Used by show_density and dist
 
@@ -236,6 +236,7 @@ class PDBMapVisualize():
       # Locate the asymmetric unit or biological assembly
       if modelflag:
         # Extract the Ensembl protein ID from the ModBase model ID
+        from lib import PDBMapModel
         struct_loc = PDBMapModel.get_coord_file(structid.upper())
       elif int(biounit) == 0:
         struct_loc = "%s/structures/all/pdb/pdb%s.ent.gz"%(self.pdb_dir,structid)
@@ -318,6 +319,7 @@ class PDBMapVisualize():
     if platform.system() == 'Darwin':
       cmd  = "TEMP=$PYTHONPATH; unset PYTHONPATH; chimera --silent --script %s; export PYTHONPATH=$TEMP"%script
     try:
+      print "Launching Chimera visualization script..."
       status = os.system(cmd)
       if status:
         raise Exception("Chimera process return non-zero exit status.")
@@ -470,10 +472,6 @@ def multidigit_rand(digits):
   multidigit_rand = int(''.join([str(x) for x in randlist]))
   return multidigit_rand
 
-# Add overwrite_bfactors to PyMol scope
-# cmd.extend("PDBMapVisualize.overwrite_bfactors",PDBMapVisualize.overwrite_bfactors)
-# cmd.extend("PDBMapVisualize.show_density",PDBMapVisualize.show_density)
-
 # Chimera executable
 if __name__ == '__main__':
   from chimera import runCommand as rc
@@ -501,7 +499,6 @@ if __name__ == '__main__':
   rc("defattr %(attrf)s raiseTool false"%params)
   # Initial colors
   rc("background solid white")
-  #rc("set bgTransparency")
   rc("ribcolor dim grey")
   rc("ribbackbone")
   rc("~disp")
@@ -510,7 +507,6 @@ if __name__ == '__main__':
     # Identify all annotated residues as spheres
     rc("disp %s@ca"%resi[0])
     # And show atom/bonds around annotated residues
-    #rc("bonddisplay always %s za<5"%resi[0])
   # Define variant representation
   rc("represent bs")
   rc("setattr m autochain 0")
@@ -523,8 +519,6 @@ if __name__ == '__main__':
       rc("color %s,a :/%s=%d"%(colors[i],params['anno'],val))
   elif len(params['resis']) < 2 or params['minval'] == params['maxval']:
     rc("color red,a :/%s & @ca"%params['anno'])
-    #for resi in params['resis']:
-    #  rc("color red,a %s@ca"%resi[0])
   elif params['minval'] > params['maxval']:
     rc("rangecolor %(anno)s,a %(maxval)0.6f red %(minval)0.6f blue"%params)
     rc("color green,a :/%(anno)s=%(minval)s"%params)
@@ -538,22 +532,12 @@ if __name__ == '__main__':
     rc("color gray,a :/%(anno)s=%(minval)s"%params)
     rc("color gray,a :/%(anno)s<%(minval)s"%params)
   rc("transparency 70,r")
-  # Renumber residues to reference sequence
-  # This fails for discontinuous chains because numbering remains
-  # sequential regardless of the gap length.
-  # for chain,seqid in params["resrenumber"].iteritems():
-  #   rc("resrenumber %s :.%d"%(chain,seqid))
   # Export the scene
   rc("save %(res_dir)s/%(structid)s_biounit%(biounit)d_%(anno)s_%(vtype)s.py"%params)
   # Export the image
-  rc("copy file %(res_dir)s/%(structid)s_biounit%(biounit)d_struct_%(anno)s_%(vtype)s.png width 1600 height 1600 units points dpi 300"%params)
+  rc("copy file %(res_dir)s/%(structid)s_biounit%(biounit)d_struct_%(anno)s_%(vtype)s.png width 5 height 5 units inches dpi 300"%params)
   # remove the structure, leaving only the variants
   rc("bonddisplay off")
-  rc("copy file %(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(anno)s_%(vtype)s.png width 1600 height 1600 units points dpi 300"%params)
+  rc("copy file %(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(anno)s_%(vtype)s.png width 5 height 5 units inches dpi 300"%params)
   rc("close all")
   rc("stop now")
-  # Export the movie 
-  #FIXME: terrible quality on these videos
-  # rc("movie record; turn y 3 120; wait 120; movie stop")
-  # rc("movie encode quality highest output %(res_dir)s/%(structid)s_biounit%(biounit)d_vars_%(anno)s.mp4"%params)
-

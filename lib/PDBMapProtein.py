@@ -31,6 +31,8 @@ class PDBMapProtein():
   _unp2enst   = {}
   _enst2unp   = {}
   _sec2prim   = {}
+  _unp2refseq = {}
+  _refseq2unp = {}
 
   def __init__(self):
     msg = "ERROR (PDBMapProtein) This class should not be instantiated."
@@ -38,8 +40,13 @@ class PDBMapProtein():
 
   @classmethod
   def refseq2unp(cls,refseq):
-    # Return UniProt ID associated with RefSeq ID
+    # Return UniProt ID associated with RefSeq protein
     return PDBMapProtein._refseq2unp[refseq]
+
+  @classmethod
+  def unp2refseq(cls,unp):
+    # Return RefSeq protein associatied with UniProt ID
+    return PDBMapProtein._unp2refseq[unp]
 
   @classmethod
   def unp2enst(cls,unp):
@@ -164,6 +171,16 @@ class PDBMapProtein():
               PDBMapProtein._pdb2unp[pdb].append(unp)
             else:
               PDBMapProtein._pdb2unp[pdb] = [unp]
+          elif db == "RefSeq":
+            refseq = dbid # for clarity
+            if refseq in PDBMapProtein._unp2refseq:
+              PDBMapProtein._unp2refseq[unp].append(refseq)
+            else:
+              PDBMapProtein._unp2refseq[unp] = [refseq]
+            if unp in PDBMapProtein._refseq2unp:
+              PDBMapProtein._refseq2unp[refseq].append(unp)
+            else:
+              PDBMapProtein._refseq2unp[refseq] = [unp]
 
     #TEMPORARY FIX ONLY
     elif "HUMAN_9606_idmapping_UNP-RefSeq-PDB-Ensembl.tab" in idmapping_fname:
