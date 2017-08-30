@@ -300,7 +300,6 @@ class PDBMap():
         return 1
     except Exception as e:
       msg = "ERROR (PDBMap) Visualization failed: %s"%str(e)
-      # raise Exception(msg)
       raise
 
   def summarize(self):
@@ -351,13 +350,6 @@ class PDBMap():
       script_path   = os.path.realpath(args.modbase2013_dir)
       get_modbase   = "cd %s; ./get_modbase_2013.sh"%(script_path)
       os.system(get_modbase)
-
-## Copied from biolearn
-def multidigit_rand(digits):
-  import random
-  randlist = [random.randint(1,10) for i in xrange(digits)]
-  multidigit_rand = int(''.join([str(x) for x in randlist]))
-  return multidigit_rand
 
 # Command line usage
 if __name__== "__main__":
@@ -489,7 +481,6 @@ __  __  __
       print "Creating database tables..."
       io = PDBMapIO(args.dbhost,args.dbuser,
                             args.dbpass,args.dbname,createdb=True)
-      # print "Refreshing remote data cache and populating tables..."
       print "\nDatabase created. Please set create_new_db to False."
       print "\nIt is strongly recommended that you now refresh the local resource cache."
       if raw_input("Would you like to refresh the cache now? (y/n):") == 'y':
@@ -755,13 +746,6 @@ __  __  __
         print '|'
       print ''
     pdbmap.visualize(entity,biounits,struct_label,data_label,anno_list,spectrum_range,colors)
-
-  ## stats ##
-  elif args.cmd == "stats":
-    if len(args.args) < 1:
-      msg = "usage: pdbmap.py -c conf_file stats <genotypes> <populations> <data_name>\n"
-      print msg; sys.exit(1)
-    print "Functionality not yet implemented."
 
   ## intersect ##
   elif args.cmd == "intersect":
