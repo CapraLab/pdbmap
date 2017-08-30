@@ -235,67 +235,6 @@ class PDBMap():
     	nrows = i.intersect(dname,slabel,dtype,args.buffer_size)
     return(nrows) # Return the number of intersections
 
-  def filter_data(self,dname,dfiles):
-    # Determine which variants were loaded into PDBMap
-    io     = PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname,dlabel=dname)
-    query  = "SELECT DISTINCT b.name FROM GenomicIntersection as a "
-    query += "INNER JOIN GenomicConsequence as b "
-    query += "ON a.gc_id=b.gc_id WHERE a.dlabel=%s"
-    res    = io.secure_query(query,[dname],cursorclass="Cursor")
-    tempf = "temp/%d.TEMP"%multidigit_rand(10)
-    nrows = 0
-    with open(tempf,'wb') as fout:
-      for r in res:
-        fout.write("%s\n"%r[0])
-        nrows += 1
-    # Filter original dataset to those variants in PDBMap and save locally
-    inputs = []
-    exts   = ['vcf','gz','bed','ped','map']
-    for dfile in dfiles:
-      output = os.path.basename(dfile).split('.')
-      output = '.'.join(word for word in output if word not in exts)
-      # Determine file type
-      gzflag = False
-      ext = dfile.split('.')[-1].lower()
-      fin = ['--',dfile]
-      if ext == 'gz':
-        fin[0] += 'gz'
-        ext = dfile.split('.')[-2].lower()
-      if ext == 'vcf':
-        fin[0] += 'vcf'
-      # Create local storage directory
-      if not os.path.exists('data/pdbmap/%s/vcf'%dname):
-        print "mkdir -p data/pdbmap/%s/vcf"%dname
-        os.system("mkdir -p data/pdbmap/%s/vcf"%dname)
-      # Use vcftools to filter VCF and output to VCF
-      if ext == 'vcf':
-        cmd = "vcftools %s --snps %s --recode --out data/pdbmap/%s/vcf/pdbmap_%s"%(
-                ' '.join(fin),tempf,dname,output)
-        print cmd
-        os.system(cmd)
-      # Use the variant effect predictor to produce a VCF containing provided variants
-      elif ext == 'bed':
-        cmd = [self.vep,'-i',tempf,'--format','id','--no_progress','--check_existing']
-        cmd.extend(['--database','--force_overwrite'])
-        registry = "%s/dbconn.conf"%os.path.dirname(self.vep)
-        if not os.path.exists(registry):
-          msg = "WARNING (PDBMapData) Not registry specified. Using Ensembl.\n"
-          sys.stderr.write(msg)
-          registry = None
-        if registry:
-          cmd.extend(['--registry',registry])
-        cmd.extend(['--no_stats','--vcf','-o','data/pdbmap/%s/vcf/pdbmap_%s'%(dname,output)])
-        print ' '.join(cmd)
-        status = sp.check_call(cmd,stdout=sp.PIPE,stderr=sp.PIPE)
-    # If split by chromosome, merge into a single file
-    if len(dfiles) > 1:
-      print "vcf-concat data/pdbmap/%s/vcf/pdbmap_*.vcf | gzip -c > data/pdbmap/%s/vcf/pdbmap_%s.vcf.gz"%(
-                dname,dname,dname)
-      os.system("vcf-concat data/pdbmap/%s/vcf/pdbmap_*.vcf | gzip -c > data/pdbmap/%s/vcf/pdbmap_%s.vcf.gz"%(
-                dname,dname,dname))
-    os.system("rm -f %s"%tempf) # Remove temp file
-    return nrows # Return the number of kept variants
-
   def visualize(self,entity,biounits=[],struct_label='pdb',
                 data_label='1kg',anno_list=['maf'],spectrum_range=[],colors=[]):
     """ Visualizes a PDBMap structure, model, or protein """
@@ -403,28 +342,15 @@ class PDBMap():
       get_pdb       = "cd %s; ./get_pdb.sh"%(script_path)
       os.system(get_pdb)
     if args.modbase2016_dir:
-      print "Refreshing local ModBase cache..."
+      print "Refreshing local ModBase 2016 cache..."
       script_path   = os.path.realpath(args.modbase2016_dir)
       get_modbase   = "cd %s; ./get_modbase_2016.sh"%(script_path)
       os.system(get_modbase)
     if args.modbase2013_dir:
-      print "Refreshing local ModBase cache..."
+      print "Refreshing local ModBase 2013 cache..."
       script_path   = os.path.realpath(args.modbase2013_dir)
       get_modbase   = "cd %s; ./get_modbase_2013.sh"%(script_path)
       os.system(get_modbase)
-    if args.pfam:
-      print "Refreshing local PFAM cache..."
-      if os.path.exists(args.pfam):
-        mtime = os.stat(args.pfam)[-2]
-      else:
-        mtime = None
-      script_path   = os.path.dirname(os.path.realpath(args.pfam))
-      get_pfam      = "cd %s; ./get_pfam.sh"%(script_path)
-      os.system(get_pfam)
-      if not mtime or mtime != os.stat(args.pfam)[-2]:
-        print "  Updating PFAM in PDBMap...",
-        rc = io.load_pfam(args.pfam)
-        print "%s rows added"%"{:,}".format(int(rc))
 
 ## Copied from biolearn
 def multidigit_rand(digits):
@@ -590,9 +516,15 @@ __  __  __
                     pdb_dir=args.pdb_dir,sprot=args.sprot)
     if len(args.args) < 1:
       msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> load_pdb pdb_file [pdb_file,...]\n"
-      msg += "   or: pdbmap.py -c conf_file --slabel=<slabel> all"
+      msg += "   or: pdbmap.py -c conf_file load_pdb all\n"
+      msg += "   or: pdbmap.py -c conf_file load_pdb update"
       print msg; sys.exit(0)
-    elif args.args[0] == 'all':
+    elif args.args[0] in ('all','pdb'):
+      update = True if args.args[0] == "update" else False
+      if args.slabel:
+        msg = "WARNING (PDBMap) PDB all/update does not support custom structure labels.\n"
+        sys.stderr.write(msg)
+        args.slabel = None
       args.slabel = args.slabel if args.slabel else "pdb"
       # All human Swiss-Prot-containing PDB structures in the local mirror
       all_pdb_ids   = PDBMapProtein._pdb2unp.keys()
@@ -615,14 +547,14 @@ __  __  __
         for i,pdb_file in enumerate(all_pdb_files):
           pdbid = os.path.basename(pdb_file).split('.')[0][-4:].upper()
           print "## Processing (%s) %s (%d/%d) ##"%(args.slabel,pdbid,i+(args.ppidx*psize)+1,n)
-          pdbmap.load_pdb(pdbid,pdb_file,label=args.slabel)
+          pdbmap.load_pdb(pdbid,pdb_file,label=args.slabel,update=update)
       else:
         msg = "WARNING(PDBMap) Uploading all %d PDB IDs.\n"%n
         sys.stderr.write(msg)
         for i,pdb_file in enumerate(all_pdb_files):
           pdbid = os.path.basename(pdb_file).split('.')[0][-4:].upper()
           print "## Processing (pdb) %s (%d/%d) ##"%(pdbid,i,n)
-          pdbmap.load_pdb(pdbid,pdb_file,label=args.slabel)
+          pdbmap.load_pdb(pdbid,pdb_file,label=args.slabel,update=update)
     elif len(args.args) == 1:
       # Process one PDB
       pdb_file = args.args[0].strip()
@@ -657,14 +589,14 @@ __  __  __
                     modbase2013_dir=args.modbase2013_dir,
                     modbase2013_summary=args.modbase2013_summary)
     if len(args.args)<1: 
-      msg  = "usage: pdbmap.py -c conf_file load_unp unpid [unpid,...]\n"
+      msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> load_unp unpid [unpid,...]\n"
       msg += "   or: pdbmap.py -c conf_file load_unp all\n"
       msg += "   or: pdbmap.py -c conf_file load_unp update"
       print msg; sys.exit(0)
     elif args.args[0] in ('all','update'):
       update = True if args.args[0] == "update" else False
       if args.slabel:
-        msg = "WARNING (PDBMap) UniProt load/update does not support custom structure labels.\n"
+        msg = "WARNING (PDBMap) UniProt all/update does not support custom structure labels.\n"
         sys.stderr.write(msg)
         args.slabel = None
       # All Human, Swiss-Prot proteins with EnsEMBL transcript cross-references
@@ -791,19 +723,6 @@ __  __  __
       print "## Processing (%s) %s ##"%(dname,dfile)
       nrows += pdbmap.load_data(dname,dfile,args.indexing,not args.novep,not args.noupload)
       print " # %d data rows uploaded."%nrows
-    #TESTING: Explicit calls allow for parallelization of load_data and filter
-    #       : over each chromosome/file in the dataset
-    # # Intersect with dataset with PDBMap (One-time operation)
-    # for dname in set([dname for dfile,dname in dfiles]):
-    #   print "## Intersecting %s with PDBMap ##"%dname
-    #   quick = True if nrows < QUICK_THRESH else False
-    #   print [" # (This may take a while) #"," # Using quick-intersect #"][int(quick)]
-    #   nrows = pdbmap.intersect_data(dname,quick=quick)
-    #   print " # %d intersection rows uploaded."%nrows
-    #   # Store a local, PDBMap-filtered copy of the dataset
-    #   print "## Creating a local copy of %s for PDBMap ##"%dname
-    #   print " # (This may also take a while) #"
-    #   nrows = pdbmap.filter_data(dname,[dfile for dfile,dname in dfiles])
 
   ## visualize ##
   elif args.cmd == "visualize":
@@ -872,21 +791,6 @@ __  __  __
     print [" # (This may take a while) #"," # Using quick-intersect #"][int(quick)]
     nrows = pdbmap.intersect_data(dname,slabel,quick=quick)
     print " # %d intersection rows uploaded."%nrows
-
-  ## filter ##
-  elif args.cmd == "filter":
-    pdbmap = PDBMap()
-    msg  = "WARNING (PDBMap) If loading data, filtering may be automatically applied.\n"
-    sys.stderr.write(msg)
-    if not args.dlabel: # Assign individual labels
-      dfiles = zip(args.args[0::2],args.args[1::2])
-    else: # Assign shared label
-      dfiles = zip(args.args,[args.dlabel for i in range(len(args.args))])
-    dname  = [dname for dfile,dname in dfiles][0]
-    dfiles = [dfile for dfile,dname in dfiles]
-    print "## Creating a local copy of %s for PDBMap ##"%dname
-    print " # (This may take a while) #"
-    nrows  = pdbmap.filter_data(dname,dfiles)
 
   ## no command specified ##
   else:
