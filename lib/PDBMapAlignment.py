@@ -50,6 +50,10 @@ class PDBMapAlignment():
         t_seq[i] = r[0]
 
     # If an io object was provided, first check for SIFTS alignment
+    # Define alignment parameters
+    gap_open   = -10
+    gap_extend = -0.5
+    matrix     = matlist.blosum62
     if io:
         q  = "SELECT resnum,uniprot_resnum,uniprot_acc FROM sifts WHERE pdbid=%s "
         q += "AND chain=%s AND uniprot_acc=%s ORDER BY resnum"
@@ -71,17 +75,17 @@ class PDBMapAlignment():
                                     and c_seq[cid]==t_seq[tid]]) / n,1.)
             aln_str = [(cid,c_seq[cid],tid,t_seq[tid]) for cid,tid in pdb2seq.iteritems() if
                                     0 < cid < len(c_seq) and 0 < tid < len(t_seq)]
-            aln_str    = "<sifts>"
-            score         = -1
-            if perc_identity >= 0.9:
+            aln_chain = ''.join([r[1] for r in aln_str])
+            aln_trans = ''.join([r[3] for r in aln_str])
+            aln_str   = "<sifts>\n%s\n%s"%(aln_chain,aln_trans)
+            aln_score = pairwise2.align.globalds(aln_chain.replace('-','X'),aln_trans.replace('-','X'),
+                                        matrix,gap_open,gap_extend,score_only=True)
+            if perc_identity >= 0.85:
                 # Successfully aligned with SIFTS. Do not continue processing.
-                return pdb2seq,seq2pdb,aln_str,score,perc_aligned,perc_identity
+                return pdb2seq,seq2pdb,aln_str,aln_score,perc_aligned,perc_identity
             else:
-                msg  = "    WARNING (PDBMapAlignment) SIFTS error (%0.f%% identity). Realigning %s to %s.\n"%(perc_identity*100,chain.id,transcript.transcript)
-                # msg  = "    WARNING (PDBMapAlignment) Error in SIFTS alignment.\n"
-                # msg += "    Chain %s (%s) aligned to %s.\n"%(chain.id,chain.unp,transcript.transcript)
-                # msg += "    Sequence identity between chain %s and %s is %.0f%%\n"%(chain.id,transcript.transcript,perc_identity*100)
-                # msg += "    Manually re-aligning sequences.\n"
+                msg  = "    WARNING (PDBMapAlignment) SIFTS error (%0.f%% identity). "%(perc_identity*100)
+                msg += "Realigning %s to %s.\n"%(chain.id,transcript.transcript)
                 sys.stderr.write(msg)
 
     # Determine start indices
@@ -99,38 +103,43 @@ class PDBMapAlignment():
     # Record the gaps
     c_gap = [i+c_start for i,r in enumerate(c_seq) if r == '-']
     c_seq = ''.join(c_seq) # Convert to string
-    c_seq = c_seq.replace('-','G') # Dummy code sequence gaps to GLY
+    c_seq = c_seq.replace('-','X') # Dummy code sequence gaps to X
     t_gap = [i+t_start for i,r in enumerate(t_seq) if r == '-']
     t_seq = ''.join(t_seq) # Convert to string
-    t_seq = t_seq.replace('-','G') # Dummy code sequence gaps to GLY
+    t_seq = t_seq.replace('-','X') # Dummy code sequence gaps to X
     # # Generate transcript/protein sequence
-    # Define alignment parameters
-    matrix     = matlist.blosum62
-    gap_open   = -10
-    gap_extend = -0.5
 
     # Perform pairwise alignment
-    alignments = pairwise2.align.globalds(c_seq,t_seq,matrix,gap_open,gap_extend)
-    alignment  = alignments[0] # best alignment
-    aln_chain, aln_trans, score, begin, end = alignment
+    alignment = pairwise2.align.globalds(c_seq,t_seq,matrix,
+                    gap_open,gap_extend,one_alignment_only=True)
+    aln_chain, aln_trans, aln_score, begin, end = alignment[0]
 
     # Create an alignment map from chain to transcript
-    c_ind     = [x for x in self._gap_shift(aln_chain,c_start,c_gap)]
-    t_ind     = [x for x in self._gap_shift(aln_trans,t_start,t_gap)]
+    c_ind = [x for x in self._gap_shift(aln_chain,c_start,c_gap)]
+    t_ind = [x for x in self._gap_shift(aln_trans,t_start,t_gap)]
+    aln_start = min([i for i in range(len(c_ind)) if c_ind[i] is not None])
+    aln_end   = max([i for i in range(len(c_ind)) if c_ind[i] is not None])
+    # Reduce to a chain-specific alignment (remove excess transcript sequence)
+    c_ind = c_ind[aln_start:aln_end+1]
+    t_ind = t_ind[aln_start:aln_end+1]
+    aln_chain = aln_chain[aln_start:aln_end+1]
+    aln_trans = aln_trans[aln_start:aln_end+1]
 
-    # # Create a single alignment string
-                            # if beg/end gap or original gap
+    # Create a single alignment string
+                        # if beg/end gap or original gap
     aln_chain = ''.join(['-' if not c_ind[i] or c_ind[i]+c_start in c_gap else s for i,s in enumerate(aln_chain)])
     aln_trans = ''.join(['-' if not t_ind[i] or t_ind[i]+t_start in t_gap else s for i,s in enumerate(aln_trans)])
     aln_str = "%s\n%s"%(aln_chain,aln_trans)
+    # Rescore alignment without excess transcript sequence
+    aln_score = pairwise2.align.globalds(aln_chain.replace('-','X'),aln_trans.replace('-','X'),
+                                        matrix,gap_open,gap_extend,score_only=True)
 
     # Determine final alignment from chain -> transcript/protein
     pdb2seq = dict((c_ind[i],t_ind[i]) for i in 
                   range(len(c_ind)) if c_ind[i] > 0 and t_ind[i]) # Some PDBs use negatives
     seq2pdb = dict((t_ind[i],c_ind[i]) for i in 
                   range(len(c_ind)) if c_ind[i] > 0 and t_ind[i]) # Do not include those residues
-    
-    ## Evaluate the alignment
+
     clen = len(aln_chain.replace('-',''))
     # How many chain residues were aligned? (not a gap)
     aligned = sum([1 for i in range(len(c_ind)) if aln_chain[i]!='-' and aln_trans[i]!='-'])
@@ -142,7 +151,7 @@ class PDBMapAlignment():
     # Percent of the original identical to transcript
     perc_identity = float(matched) / clen
 
-    return pdb2seq,seq2pdb,aln_str,score,perc_aligned,perc_identity
+    return pdb2seq,seq2pdb,aln_str,aln_score,perc_aligned,perc_identity
 
   def _gap_shift(self,seq,seq_start,gaps=[]):
     """ Support generator function for align """

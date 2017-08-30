@@ -64,7 +64,7 @@ class PDBMapTranscript():
         res.append(trans)
     # Only report an error if NO transcript matches were identified.
     if not res:
-      msg = "   WARNING (PDBMapTranscript) No valid transcripts identified for %s"%unpid
+      msg = "   WARNING (PDBMapTranscript) No valid transcripts identified for %s\n"%unpid
       sys.stderr.write(msg)
     return res
 
@@ -93,9 +93,7 @@ class PDBMapTranscript():
       seqid      = int(fields[3])
       rescode    = fields[4].upper()
       if rescode not in aa_code_map.values():
-        # msg = "  Non-standard amino acid replacement: %s[%d]->%s with %s\n"%(transid,seqid,rescode,'S')
-        # sys.stderr.write(msg)
-        rescode  = 'S' # replace non-standard amino acids with Serine
+        rescode  = 'X' # replace non-standard amino acids with X
       start      = int(fields[5])
       end        = int(fields[6])
       chrom      = fields[7]
@@ -104,8 +102,6 @@ class PDBMapTranscript():
                       'chr9','chr10','chr11','chr12','chr13','chr14','chr15',
                       'chr16','chr17','chr18','chr19','chr20','chr21','chr22',
                       'chrX','chrY','chrMT']:
-        msg = "  WARNING (transcript_to_genomic.pl) Ignoring non-standard chromosome %s\n"%chrom
-        sys.stderr.write(msg)
         return None
       strand     = int(fields[8])
       sequence[seqid] = (rescode,chrom,start,end,strand)
@@ -135,7 +131,8 @@ aa_code_map = {"ala" : "A",
         "thr" : "T",
         "trp" : "W",
         "tyr" : "Y",
-        "val" : "V"}
+        "val" : "V",
+        "unk" : "X"}
 
 # Main check
 if __name__== "__main__":

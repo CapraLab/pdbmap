@@ -71,14 +71,14 @@ class PDBMapModel(Structure):
 
     # Store the model summary information
     self.id      = model_summary['modelid']
-    self.tvsmod_method = model_summary['tvsmod_method']
-    if self.tvsmod_method != 'NA':
-      self.tvsmod_no35   = self._sfloat(model_summary['tvsmod_no35'])
-      self.tvsmod_rmsd   = self._sfloat(model_summary['tvsmod_rmsd'])
+    self.tsvmod_method = model_summary['tsvmod_method']
+    if self.tsvmod_method != 'NA':
+      self.tsvmod_no35   = self._sfloat(model_summary['tsvmod_no35'])
+      self.tsvmod_rmsd   = self._sfloat(model_summary['tsvmod_rmsd'])
     else:
-      self.tvsmod_no35 = 'NULL'
-      self.tvsmod_rmsd = 'NULL'
-    self.identity = self._sfloat(model_summary['seequence_identity'])
+      self.tsvmod_no35 = 'NULL'
+      self.tsvmod_rmsd = 'NULL'
+    self.identity = self._sfloat(model_summary['sequence_identity'])
     self.evalue   = self._sfloat(model_summary['evalue'])
     self.ga341    = self._sfloat(model_summary['ga341'])
     self.mpqs     = self._sfloat(model_summary['mpqs'])
@@ -167,9 +167,9 @@ class PDBMapModel(Structure):
   @classmethod
   def get_info(cls,modelid):
     """ Returns the info dictionary for this ModBase model """
-    if not PDBMapModel.modbase_dict:
+    if not PDBMapModel._modelid2info:
       raise Exception("PDBMapModel.load_modbase must be called before using this method.")
-    return PDBMapModel.modbase_dict.get(modelid,None)
+    return PDBMapModel._modelid2info.get(modelid,None)
 
   @classmethod
   def get_coord_file(cls,modelid):

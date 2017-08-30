@@ -314,8 +314,8 @@ class PDBMapIO(PDBIO):
     mquery  = 'INSERT IGNORE INTO Model '
     mquery += '(label,modelid,unp,method,no35,rmsd,mpqs,evalue,ga341,zdope,pdbid,chain,identity)'
     mquery += 'VALUES ('
-    mquery += '"%(label)s","%(id)s","%(unp)s","%(tvsmod_method)s",'
-    mquery += '%(tvsmod_no35)s,%(tvsmod_rmsd)s,%(mpqs)s,%(evalue)s,%(ga341)f,'
+    mquery += '"%(label)s","%(id)s","%(unp)s","%(tsvmod_method)s",'
+    mquery += '%(tsvmod_no35)s,%(tsvmod_rmsd)s,%(mpqs)s,%(evalue)s,%(ga341)f,'
     mquery += '%(zdope)s,"%(pdbid)s","%(chain)s",%(identity)f)'
     mfields = dict((key,m.__getattribute__(key)) for key in dir(m) 
                   if isinstance(key,collections.Hashable))

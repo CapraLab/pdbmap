@@ -30,6 +30,11 @@ my $s_start = $slice->start();
 my $s_end = $slice->end();
 my $translation = $transcript->translate();
 my $p_stable_id = $transcript->translation()->stable_id();
+my $biotype = $transcript->biotype();
+if ($biotype ne "protein_coding") {
+	print STDERR "$transcript_id is not protein coding.\n";
+	exit 1;
+}
 if (!defined $translation) {
 	print STDERR "No translation for $transcript_id at $s_name:$s_start-$s_end\n";
 	exit 1; # clearly indicate that no transcript was found

@@ -58,7 +58,7 @@ class PDBMap():
       PDBMapModel.load_modbase(modbase2016_dir,modbase2016_summary)
     if modbase2013_dir and modbase2013_summary:
       self.modbase = True
-      PDBMapModel.load_modbase(modbase2013_dir,modbase2013_summary,flag2013=True)
+      PDBMapModel.load_modbase(modbase2013_dir,modbase2013_summary)
     if vep:
       self.vep = vep
     if reduce:
@@ -66,10 +66,11 @@ class PDBMap():
     if probe:
       self.probe = probe
 
-  def load_unp(self,unp,label=None,use_pdb=True,use_modbase=True):
+  def load_unp(self,unp,label=None,use_pdb=True,use_modbase=True,update=False):
     """ Loads all known structures associated with UniProt ID """
     if self.pdb and use_pdb:
       pdb_label = label if label else 'pdb'
+      pdb_label = "%s_update"%pdb_label if update else pdb_label
       io = PDBMapIO(args.dbhost,args.dbuser,
                           args.dbpass,args.dbname,slabel=pdb_label)
       pdbids = list(set(PDBMapProtein.unp2pdb(unp)))
@@ -79,18 +80,20 @@ class PDBMap():
         sys.stdout.flush() # Force stdout flush after each PDB
     if self.modbase and use_modbase:
       mod_label = label if label else 'modbase'
+      mod_label = "%s_update"%mod_label if update else mod_label
       io = PDBMapIO(args.dbhost,args.dbuser,
                           args.dbpass,args.dbname,slabel=mod_label)
-      models = PDBMapModel.unp2modbase(unp)
+      modelids = PDBMapModel.unp2modbase(unp)
+      models   = [PDBMapModel.get_info(modelid) for modelid in modelids]
       for model in models:
-        print " # (%s) Processing ModBase %s #"%(mod_label,model['filename'])
+        print " # (%s) Processing ModBase %s #"%(mod_label,model['modelid'])
         self.load_model(model,label=mod_label,io=io)
         sys.stdout.flush() # Force stdout flush after each model
     if not pdbids and not models:
       msg = "  WARNING (PDBMap) No PDB structures or Modbase models found for %s\n"%unp
       sys.stderr.write(msg)
 
-  def load_pdb(self,pdbid,pdb_fname=None,label="",io=None):
+  def load_pdb(self,pdbid,pdb_fname=None,label="",io=None,update=False):
     """ Loads a given PDB into the PDBMap database """
     if not io:
       # Create a PDBMapIO object
@@ -98,8 +101,9 @@ class PDBMap():
                             args.dbpass,args.dbname,slabel=label)
     # Check if PDB is already in the database
     if io.structure_in_db(pdbid,label):
-      print "  VALID (PDBMap) %s already in database."%pdbid
-      return 0
+      if not update: # silence if updating
+        print "  VALID (PDBMap) %s already in database."%pdbid
+        return 0
     # Load the PDB structure
     if not pdb_fname:
       pdb_fname = "%s/structures/all/pdb/pdb%s.ent.gz"%(self.pdb_dir,pdbid.lower())
@@ -123,7 +127,7 @@ class PDBMap():
     sys.stderr.write(msg)
     return 0
 
-  def load_model(self,model_summary,label="",io=None):
+  def load_model(self,model_summary,label="",io=None,update=False):
     """ Loads a given ModBase model into the PDBMap database """
     
     if not io:
@@ -135,13 +139,15 @@ class PDBMap():
     modelid = model_summary['modelid'] # extract ModBase model ID
     model_fname = model_summary['filename']
     if io.model_in_db(modelid,label):
-      msg = "  VALID (PDBMap) %s (%s) already in database.\n"%(modelid,label)
-      print msg
-      return 0
+      if not update: # silence if updating
+        print "  VALID (PDBMap) %s (%s) already in database.\n"%(modelid,label)
+        return 0
 
     # Query UniProt ID if not provided
-    if not unp:
+    if 'unp' not in model_summary:
       unp = PDBMapProtein.ensp2unp(modelid.split('.')[0].split('_')[0])[0]
+    else:
+      unp = model_summary['unp']
 
     # Load the ModBase model
     if not model_fname:
@@ -651,24 +657,21 @@ __  __  __
                     modbase2013_dir=args.modbase2013_dir,
                     modbase2013_summary=args.modbase2013_summary)
     if len(args.args)<1: 
-      msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> load_unp unpid [unpid,...]\n"
-      msg += "   or: pdbmap.py -c conf_file --slabel=<slabel> load_unp all"
+      msg  = "usage: pdbmap.py -c conf_file load_unp unpid [unpid,...]\n"
+      msg += "   or: pdbmap.py -c conf_file load_unp all\n"
+      msg += "   or: pdbmap.py -c conf_file load_unp update"
       print msg; sys.exit(0)
-    elif args.args[0] == 'all':
-      # All human UniProt IDs
-      # all_unp = [unp for unp in PDBMapProtein.sprot \
-      #             if PDBMapProtein.unp2species[unp]=="HUMAN"]
-      # All human UniProt IDs with ENST mappings
+    elif args.args[0] in ('all','update'):
+      update = True if args.args[0] == "update" else False
+      if args.slabel:
+        msg = "WARNING (PDBMap) UniProt load/update does not support custom structure labels.\n"
+        sys.stderr.write(msg)
+        args.slabel = None
       # All Human, Swiss-Prot proteins with EnsEMBL transcript cross-references
       print "\nIdentifying all Swiss-Prot IDs with mapped Ensembl transcripts..."
       all_unp = [unp for unp in PDBMapProtein._unp2enst \
                   if unp in PDBMapProtein.sprot and \
                   PDBMapProtein.unp2species[unp]=="HUMAN"]
-      # Filter this set to those not already in the database
-      # print "Removing Swiss-Prot IDs already in %s..."%args.dbname
-      # io = PDBMapIO(args.dbhost,args.dbuser,args.dbpass,args.dbname)
-      # all_unp = [unp for unp in all_unp if \
-      #           not (io.unp_in_db(unp,'pdb') or io.unp_in_db(unp,'modbase'))]
       n = len(all_unp)
       print "Total Swiss-Prot IDs to process: %d. Beginning..."%n
       # If this is a parallel command with partition parameters
@@ -678,18 +681,18 @@ __  __  __
           all_unp = all_unp[args.ppidx*psize:]
         else:
           all_unp = all_unp[args.ppidx*psize:(args.ppidx+1)*psize]
-        msg = "WARNING(PDBMap) Subprocess uploading partition %d/%d of Swiss-Prot\n"%(args.ppidx+1,args.ppart)
+        msg = "WARNING (PDBMap) Subprocess uploading partition %d/%d of Swiss-Prot\n"%(args.ppidx+1,args.ppart)
         sys.stderr.write(msg)
         for i,unp in enumerate(all_unp):
           print "\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,unp,i+(args.ppidx*psize)+1,n)
-          pdbmap.load_unp(unp,label=args.slabel)
+          pdbmap.load_unp(unp,label=args.slabel,update=update)
       # This is a standard, full-set load_unp command
       else:
         msg = "WARNING (PDBMap) Uploading all %d Swiss-Prot UniProt IDs.\n"%n
         sys.stderr.write(msg)
         for i,unp in enumerate(all_unp):
           print "\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,unp,i,n)
-          pdbmap.load_unp(unp,label=args.slabel)
+          pdbmap.load_unp(unp,label=args.slabel,update=update)
     elif len(args.args) == 1:
       # Process one UniProt ID
       unp = args.args[0]

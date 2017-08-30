@@ -202,41 +202,44 @@ class PDBMapStructure(Structure):
     # Identify and align corresponding transcripts
     for chain in self.structure[0]:
       print "   # Getting transcripts for %s.%s"%(self.id,chain.id)
-      # # If a chain of the same protein has already been solved, use solution
-      # # BUT NOTE: must update Alignment->Chain backreference after deep copy
-      # if chain.unp in prot2chain:
-      #   chain.alignments = [copy.deepcopy(a) for a in prot2chain[chain.unp]]
-      #   # Update the back-reference on the copied Alignment to point to this chain
-      #   for a in chain.alignments:
-      #     a.chain = chain
-      # else:
       # Query all transcripts associated with the chain's UNP ID
       candidate_transcripts = PDBMapTranscript.query_from_unp(chain.unp)
-      print "Candidate transcripts for UniProt AC %s: %s"%(chain.unp,','.join(candidate_transcripts))
       if len(candidate_transcripts) < 1:
         error_msg += "No EnsEMBL transcript matches %s.%s (%s); "%(self.id,chain.id,chain.unp)
-        # raise Exception("ERROR (PDBMapStructure): %s\n"%error_msg)
       # Align chains candidate transcripts
       alignments = {}
       for trans in candidate_transcripts:
         alignment = PDBMapAlignment(chain,trans,io=io)
         # Exclude alignments with <85% identity, likely bad matches
         if alignment.perc_identity >= 0.85:
-          # Setup tuples for primary sort on length, secondary sort on transcript name (for tie-breaking consistency)
+          # Record all aligned transcripts for each gene with sequence identity >85%
           if alignment.transcript.gene not in alignments:
-            alignments[alignment.transcript.gene] = [(len(alignment.transcript.sequence),alignment.transcript.transcript,alignment)]
+            alignments[alignment.transcript.gene] = [alignment]
           else:
-            alignments[alignment.transcript.gene].append((len(alignment.transcript.sequence),alignment.transcript.transcript,alignment))
+            alignments[alignment.transcript.gene].append(alignment)
         else:
           # Note that at least one transcript was dropped due to low alignment quality
           error_msg += "%s (%s.%s (%s)) dropped due to low alignment quality (%.2f); "%(trans.transcript,self.id,chain.id,chain.unp,alignment.perc_identity)
-      # Store canonical transcript for each gene alignment as element of chain
+      #FIXME: Find the maximum sequence identity and drop any alignment < max
+      #FIXME: Find the maximum alignment score and drop any alignment < max
+      #FIXME: Keep all remaining transcripts. They are all valid.
+      # Store the best aligned transcripts for each gene
       chain.alignments = []
       # prot2chain[chain.unp] = []
       for gene in alignments:
-        alignments[gene].sort() # ascending by transcript length, then name
-        if len(alignments[gene]) > 0:
-          chain.alignments.append(alignments[gene][-1][-1]) # last alignment (longest) length
+        # Keep the best-aligned transcripts for each gene
+        # If more than one transcript is a legitimate match to the chain, then
+        # they should have the same percent identity and alignment score, because
+        # they should be identical to one another.
+        max_identity = max([a.perc_identity for a in alignments[gene]])
+        max_score    = max([a.score for a in alignments[gene]])
+        for a in alignments[gene]:
+          if a.perc_identity == max_identity and \
+              a.score == max_score:
+            chain.alignments.append(a)
+        # alignments[gene].sort()
+        # if len(alignments[gene]) > 0:
+          # chain.alignments.append(alignments[gene][-1][-1]) # last alignment (longest) length
       # prot2chain[chain.unp] = chain.alignments
       # Recover transcripts from alignments
       chain.transcripts = [a.transcript for a in chain.alignments]
