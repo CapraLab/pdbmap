@@ -119,29 +119,6 @@ class PDBMapData():
     # Reformat the variant-type value
     if type(record.INFO["VT"]) == type(tuple()):
       record.INFO["VT"] = ','.join(vt for vt in list(record.INFO["VT"]))
-    
-    # Ensure 1000 Genomes Fst fields are populated or None
-    popfst  = ['AMREASFST','AMRSASFST','AMREURFST','AMRAFRFST','EASSASFST']
-    popfst += ['EASEURFST','EASAFRFST','SASEURFST','SASAFRFST','EURAFRFST']
-    popfst += ['AMREASSASEURAFRFST'] # all-populations Fst
-    for pop in popfst:
-      if pop in record.INFO:
-        nhat,dhat,fst = record.INFO[pop]
-        pop = pop[:-3] # Remove the FST suffix
-        pop = pop if pop != 'AMREASSASEURAFR' else 'ALLPOP'
-        if nhat=='nan' or dhat=='nan':
-          print "nhat/dhat is string nan:",nhat
-        if np.isnan(nhat) or np.isnan(dhat):
-          print "nhat/dhat is numpy nan:",nhat,dhat
-        record.INFO["%s_Nhat"%pop] = nhat if not np.isnan(nhat) else None
-        record.INFO["%s_Dhat"%pop] = dhat if not np.isnan(dhat) else None
-        record.INFO["%s_Fst"%pop]  = fst  if not np.isnan(fst)  else None
-      else:
-        pop = pop[:-3] # Remove the FST suffix
-        pop = pop if pop != 'AMREASSASEURAFR' else 'ALLPOP'
-        record.INFO["%s_Nhat"%pop] = None
-        record.INFO["%s_Dhat"%pop] = None
-        record.INFO["%s_Fst"%pop]  = None
 
     # Allele frequency is sometimes reecorded as a tuple or list
     # Enforce biallelic assumption
@@ -462,10 +439,6 @@ class PDBMapData():
       # Filter variants without consequence annotations
       p1 = p
       p = sp.Popen(["grep","^#\|CSQ"],stdin=p1.stdout,stdout=sp.PIPE,bufsize=1)
-      if self.dname == '1kg3':
-        # Pipe output to vcf_fst for Fst calculations
-        p2 = p
-        p = sp.Popen(["bash","lib/vcf_fst.sh"],stdin=p2.stdout,stdout=sp.PIPE,bufsize=1)
       if outfile:
         fout = gzip.open(outfile,'wb') # Open cache for writing
       for line in iter(p.stdout.readline,b''):

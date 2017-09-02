@@ -13,7 +13,6 @@ SELECT
 /*CHAIN*/b.*,
 /*RESIDUE*/d.*,
 /*VARIANT*/g.*,
-/*POPFST*/k.*,
 /*CONSEQUENCE*/f.*,
 /*ALIGN*/h.*,j.*,
 /*TRANS*/i.*
@@ -25,13 +24,10 @@ ON b.label=c.label AND b.structid=c.pdbid
 LEFT JOIN Model as d
 ON b.label=d.label AND b.structid=d.modelid
 LEFT JOIN GenomicIntersection as e
-ON a.label=e.slabel AND a.structid=e.structid AND a.chain=e.chain AND a.seqid=e.seqid AND e.dlabel='1kg3'
-LEFT JOIN GenomicConsequence as f
+ON a.label=e.slabel AND a.structid=e.structid AND a.chain=e.chain AND a.seqid=e.seqid AND e.dlabel=DLABEL
 ON e.dlabel=f.label AND e.gc_id=f.gc_id
 LEFT JOIN GenomicData as g
 ON f.label=g.label AND f.chr=g.chr AND f.start=g.start AND f.end=g.end AND f.name=g.name
-LEFT JOIN PopulationFst as k
-ON g.label=k.label and g.chr=k.chr and g.start=k.start and g.end=k.end and g.name=k.name
 LEFT JOIN Alignment as h USE INDEX(PRIMARY)
 ON a.label=h.label AND a.structid=h.structid AND a.chain=h.chain AND a.seqid=h.chain_seqid AND f.transcript=h.transcript
 LEFT JOIN Transcript as i USE INDEX(PRIMARY)

@@ -30,9 +30,6 @@ SET a.gc_id=b.gc_id WHERE a.label=slabel;
 # GenomicConsequence -> GenomicData
 UPDATE GenomicConsequence a INNER JOIN GenomicData b ON a.label=b.label AND a.chr=b.chr AND a.start=b.start AND a.end=b.end AND a.name=b.name
 SET a.gd_id=b.gd_id WHERE a.label=dlabel;
-# PopulationFst -> GenomicData
-UPDATE PopulationFst a INNER JOIN GenomicData b ON a.label=b.label AND a.chr=b.chr AND a.start=b.start AND a.end=b.end
-SET a.gd_id=b.gd_id WHERE a.label=dlabel;
 # GenomicIntersection -> GenomicConsequence (ASSIGNED DURING INTERSECTION)
 # UPDATE GenomicIntersection a INNER JOIN GenomicConsequence b SET a.gc_id=b.gc_id WHERE label=label;
 # GenomicIntersection -> Residue
