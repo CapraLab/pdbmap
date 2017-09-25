@@ -138,8 +138,7 @@ class PDBMapModel(Structure):
   def get_alignments(self):
     if not self.alignments:
       self.get_transcripts()
-    else:
-      return self.alignments
+    return self.alignments
 
   @classmethod
   def get_models(cls):
@@ -189,6 +188,7 @@ class PDBMapModel(Structure):
     if not os.path.exists(summary_fname):
       msg = "ERROR: (PDBMapModel) Cannot load ModBase. %s does not exist."%summary_fname
       raise(Exception(msg))
+    # print "Opening Modbase File " + summary_fname
     fin = open(summary_fname,'rb')
     fin.readline() # burn the header
     reader = csv.reader(fin,delimiter='\t')

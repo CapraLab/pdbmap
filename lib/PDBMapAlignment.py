@@ -37,6 +37,13 @@ class PDBMapAlignment():
         sys.stderr.write(msg)
         raise
 
+  # Helped with diagnosis of biopython 1.69/1.7 problems
+  # def __str__(self):
+  #  temp = ""
+  #  for x in self.chain.get_residues():
+  #    temp = temp + str(x)
+  #  return temp
+
   def align(self,chain,transcript,io=None):
     """ Aligns one chain of a PDBMapStructure to a PDBMapTranscript """
     # Generate chain sequence (may contain gaps)

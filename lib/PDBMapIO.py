@@ -18,13 +18,18 @@ import subprocess as sp
 from Bio.PDB.PDBParser import PDBParser
 from Bio.PDB.PDBIO import PDBIO
 import Bio.PDB
+import tempfile
 import numpy as np
 from PDBMapModel import PDBMapModel
+from PDBMapSwiss import PDBMapSwiss
 from PDBMapProtein import PDBMapProtein
 from PDBMapStructure import PDBMapStructure
 import MySQLdb, MySQLdb.cursors
 from warnings import filterwarnings,resetwarnings
 from Bio.PDB.PDBExceptions import PDBConstructionWarning
+import logging
+logging.basicConfig(format='%(asctime)s %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
+    datefmt='%d-%m-%Y:%H:%M:%S',)
 
 class PDBMapIO(PDBIO):
   def __init__(self,dbhost=None,dbuser=None,dbpass=None,dbname=None,slabel="",dlabel="",createdb=False):
@@ -100,19 +105,38 @@ class PDBMapIO(PDBIO):
     self._close()
     return res
 
+  def swiss_in_db(self,modelid,label=-1):
+    # None is a valid argument to label
+    if label == -1:
+      label=self.slabel
+    self._connect()
+    query = "SELECT * FROM Swiss WHERE modelid=%s "
+    if label:
+      query += "AND label=%s "
+    query += "LIMIT 1"
+    if label:
+      self._c.execute(query,(modelid,label))
+    else:
+      self._c.execute(query,(modelid,))
+    res = True if self._c.fetchone() else False
+    self._close()
+    return res
+
   def unp_in_db(self,unpid,label=-1):
     # None is a valid argument to label
     if label == -1:
       label=self.slabel
     self._connect()
-    query = "SELECT * FROM Chain WHERE unp=%s "
+    query = "SELECT * FROM Chain WHERE (unp='%s' OR base_unp LIKE '%s-%%') "
     if label:
       query += "AND label=%s"
     query += "LIMIT 1"
+
+    base_unp = unpid.split('-')[0]
     if label:
-      self._c.execute(query,(unpid,label))
+      self._c.execute(query,(base_unp,base_unp,label))
     else:
-      self._c.execute(query,(unpid,))
+      self._c.execute(query,(base_unp,base_unp))
     res = True if self._c.fetchone() else False
     self._close()
     return res
@@ -240,7 +264,9 @@ class PDBMapIO(PDBIO):
       tquery += "VALUES "
       # Inner exception if empty list, outer exception if error during query
       if not len(s.get_transcripts(io=self)):
-        raise Exception("No transcripts for structure %s, proteins: %s"%(s.id,','.join([c.unp for m in s for c in m])))
+        msg = "No transcripts for structure %s, proteins: %s"%(s.id,','.join([c.unp for m in s for c in m]))
+        logging.getLogger(__name__).warn(msg)
+        raise Exception(msg)
       seen = set([])
       for t in s.get_transcripts(io=self):
         if t.transcript not in seen or seen.add(t.transcript):
@@ -328,6 +354,36 @@ class PDBMapIO(PDBIO):
     self._c.execute(mquery)
     self._close()
 
+  def upload_swiss(self):
+    """ Uploades the current swissmodel in PDBMapIO """
+    m = self.structure
+    if self.swiss_in_db(m.id,self.slabel):
+      msg =  "WARNING (PDBMapIO) Structure %s "%m.id
+      msg += "already in swiss database.\n"
+      sys.stderr.write(msg)
+      return(1)
+
+  # Prepare the Model summary information (if no errors occurred)
+    mquery  = 'INSERT IGNORE INTO Swiss '
+    mquery += '(label,modelid,unp,start,end,qmean,qmean_norm,template,coordinate_id,url)'
+    mquery += 'VALUES ('
+    mquery += '"%(label)s","%(id)s","%(unp)s",'
+    mquery += '%(start)d,%(end)d,'
+    mquery += '%(qmean)f,%(qmean_norm)f,"%(template)s",'
+    mquery += '"%(coordinate_id)s","%(url)s")'
+    mfields = dict((key,m.__getattribute__(key)) for key in dir(m) if isinstance(key,collections.Hashable))
+    mfields["label"] = self.slabel
+    mquery = mquery%mfields
+    # First, pass the underlying PDBMapStructure to upload_structure
+    # import pdb; pdb.set_trace()
+    self.upload_structure(model=True,sfields=mfields)
+    # Then execute the Model upload query
+    self._connect()
+    self._c.execute(mquery)
+    self._close()
+
+
+  # Prepare the Model summary information (if no errors occurred)
   def upload_genomic_data(self,dstream,dname):
     """ Uploads genomic data via a PDBMapData generator """
     filterwarnings('ignore', category = MySQLdb.Warning)
@@ -561,11 +617,16 @@ class PDBMapIO(PDBIO):
 
   def load_unp(self,unpid):
     """ Identifies all associated structures and models, then pulls those structures. """
-    query = PDBMapIO.unp_query
-    q = self.secure_query(query,qvars=('pdb',unpid),
+    # Queries all structures and models associated with a given UniProt ID
+    query = """SELECT DISTINCT structid FROM Chain WHERE label=%s AND (unp='%s' OR unp LIKE '%s-%%');"""
+    base_unp = unpid.split('-')[0]
+    q = self.secure_query(query,qvars=('pdb',base_unp,base_unp),
                                         cursorclass='Cursor')
     entities = [r[0] for r in q]
-    q = self.secure_query(query,qvars=('modbase',unpid),
+    q = self.secure_query(query,qvars=('modbase',base_unp,base_unp),
+                                        cursorclass='Cursor')
+    entities.extend([r[0] for r in q])
+    q = self.secure_query(query,qvars=('swiss',base_unp,base_unp),
                                         cursorclass='Cursor')
     entities.extend([r[0] for r in q])
     print "%s found in %d structures/models."%(unpid,len(entities))
@@ -579,15 +640,22 @@ class PDBMapIO(PDBIO):
     return res
 
   @classmethod
-  def dssp(cls,m,fname,dssp='dssp'):
+  def dssp(cls,m,fname,dssp_executable='dssp'):
     # Create temp file containing only ATOM rows
-    tmpf = "temp/%d.TEMP"%multidigit_rand(10)
+    try:
+      temp_fileobject = tempfile.NamedTemporaryFile(delete=False)
+      tmpf = temp_fileobject.name
+    except Exception as e:
+      raise Exception("Unable to create temporary file for dssp processing:\n%s"%str(e));
+    temp_fileobject.close();
+
     cmd  = "grep ^ATOM %s > %s"%(fname,tmpf)
     try:
       if fname.split('.')[-1] == 'gz':
         cmd = 'z'+cmd
       os.system(cmd)
-      cmd  = [dssp,tmpf]
+      cmd  = [dssp_executable,tmpf]
+      # A problem with this code is that stderr coming from dssp messes up log badly
       p = sp.Popen(cmd,stdout=sp.PIPE)
       resdict = {}
       start_flag = False
@@ -615,12 +683,14 @@ class PDBMapIO(PDBIO):
         resinfo['rsa']   = resinfo['acc'] / solv_acc[resinfo['aa']]
         resdict[(resinfo['chain'],resinfo['seqid'],resinfo['icode'])] = resinfo.copy()
     except Exception as e:
-      msg = "ERROR (PDBMapIO) Unable to parse output from DSSP: %s"%str(e)
+      msg = "ERROR (PDBMapIO) Unable to parse output from DSSP invocation: %s\nException:%s"%(str(cmd),str(e))
       raise Exception(msg)
     finally:        
       # Remove the temp ATOM file
-      cmd  = "rm -f %s"%tmpf
-      os.system(cmd)
+      try:
+        os.remove(tmpf)
+      except Exception as e:
+        raise Exception("Unable to delete dssp temporary input file %s\n:Exception:",str(tmpf),str(e))
     return resdict
 
   def detect_entity_type(self,entity):
@@ -710,7 +780,8 @@ class PDBMapIO(PDBIO):
     except:
       return False
 
-  def _connect(self,usedb=True,cursorclass=MySQLdb.cursors.DictCursor,retry=True):
+  def _connect(self,usedb=True,cursorclass=MySQLdb.cursors.DictCursor):
+    # Finally, open a cursor from the active connection
     # Search for existing connection with desired cursorclass
     self._con = None
     for con in self._cons:
@@ -724,43 +795,58 @@ class PDBMapIO(PDBIO):
           self._cons.remove(con)
     # If none was found, open a new connection with desired cursorclass
     if not self._con:
-      try:
-        if usedb:
-          if self.dbpass:
-            con = MySQLdb.connect(host=self.dbhost,
-                  user=self.dbuser,passwd=self.dbpass,
-                  db=self.dbname,cursorclass=cursorclass)
+      trycount = 0
+      nMaxRetries = 100000
+      while (True):
+        trycount += 1
+        try:
+          if usedb:
+            if self.dbpass:
+              con = MySQLdb.connect(host=self.dbhost,
+                    user=self.dbuser,passwd=self.dbpass,
+                    db=self.dbname,cursorclass=cursorclass)
+            else:
+              con = MySQLdb.connect(host=self.dbhost,
+                    user=self.dbuser,db=self.dbname,
+                    cursorclass = cursorclass)
           else:
-            cton = MySQLdb.connect(host=self.dbhost,
-                  user=self.dbuser,db=self.dbname,
-                  cursorclass = cursorclass)
-        else:
-          if self.dbpass:
-            con = MySQLdb.connect(host=self.dbhost,
-                  user=self.dbuser,passwd=self.dbpass,
-                  cursorclass = cursorclass)
+            if self.dbpass:
+              con = MySQLdb.connect(host=self.dbhost,
+                    user=self.dbuser,passwd=self.dbpass,
+                    cursorclass = cursorclass)
+            else:
+              con = MySQLdb.connect(host=self.dbhost,
+                  user=self.dbuser,cursorclass=cursorclass)
+          # Add to connection pool and set as active connection
+          # This point is "success" from MySQLdb.connect
+          self._cons.append(con)
+          self._con = con
+          # Success... Leave while loop
+          break
+        except MySQLdb.OperationalError as e:
+          if e[0] == 1040:          
+            msg = "Unable to connect to connect to mySQL: %s\n"%e
+            sys.stderr.write(msg)
+            # If nMaxRetries, terminate with exception
+            if (trycount == nMaxRetries):
+              msg = "Max retries of %d reached\n"%nMaxRetries
+              sys.stderr.write(msg)
+              raise
+            else:
+              waitTime = 30*(1+trycount % 5)
+              msg = "Try %d failed.  Waiting %d secs and retrying...\n"%(trycount,waitTime)
+              sys.stderr.write(msg)
+              time.sleep(waitTime) # Wait 30/60/90 etc seconds and retry (return to top of while loop)
+            # Loop back through while loop
           else:
-            con = MySQLdb.connect(host=self.dbhost,
-                user=self.dbuser,cursorclass=cursorclass)
-        # Add to connection pool and set as active connection
-        self._cons.append(con)
-        self._con = con
-      except MySQLdb.Error as e:
-        msg = "There was an error connecting to the database: %s\n"%e
-        sys.stderr.write(msg)
-        if retry:
-          msg = "Waiting 30s and retrying...\n"
-          sys.stderr.write(msg)
-          time.sleep(30) # Wait 30 seconds and retry
-          return self._connect(usedb,cursorclass,retry=False)
-        else:
-          msg  = "\nDatabase connection unsuccessful: %s\n"%e
-          msg += "Parameters:\n"
-          msg += " DBHOST = %s\n"%self.dbhost
-          msg += " DBNAME = %s\n"%self.dbname
-          msg += " DBUSER = %s\n\n"%self.dbuser
-          sys.stderr.write(msg)
-          raise
+            # If nMaxRetries, terminate with exception
+            msg  = "\nError database connection unsuccessful: %s after %d retries\n"%(e,trycount)
+            msg += "Parameters:\n"
+            msg += " DBHOST = %s\n"%self.dbhost
+            msg += " DBNAME = %s\n"%self.dbname
+            msg += " DBUSER = %s\n\n"%self.dbuser
+            sys.stderr.write(msg)
+            raise
     # Finally, open a cursor from the active connection
     self._c = self._con.cursor() # and open a new one
     return self._c
@@ -903,8 +989,6 @@ class PDBMapIO(PDBIO):
   # and sometimes the asymmetric unit is wanted. Retaining below:
   # AND (c.method LIKE '%%%%nmr%%%%' OR b.biounit>0 OR NOT ISNULL(d.modelid))
 
-  # Queries all structures and models associated with a given UniProt ID
-  unp_query = """SELECT DISTINCT structid FROM Chain WHERE label=%s AND unp=%s;"""
 
 aa_code_map = {"ala" : "A",
         "arg" : "R",

@@ -1,6 +1,7 @@
 from .PDBMapIO import PDBMapIO
 from .PDBMapParser import PDBMapParser
 from .PDBMapModel import PDBMapModel
+from .PDBMapSwiss import PDBMapSwiss
 from .PDBMapProtein import PDBMapProtein
 from .PDBMapStructure import PDBMapStructure
 from .PDBMapTranscript import PDBMapTranscript
