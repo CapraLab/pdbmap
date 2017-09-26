@@ -132,7 +132,7 @@ class PDBMapProtein():
 
   @classmethod
   def load_idmapping(cls,idmapping_fname):
-    baseMappingFileName = "HUMAN_9606_idmapping.dat.gz" 
+    baseMappingFileName = "HUMAN_9606_idmapping_sprot.dat.gz" 
     if not baseMappingFileName in idmapping_fname:
       logging.getLogger(__name__).critical("idmapping_fname %s does not include: %s"%(idmapping_fname,baseMappingFileName));
       sys.exit()
