@@ -257,8 +257,8 @@ class PDBMapStructure(Structure):
   def get_alignments(self):
     if not self.alignments:
       self.get_transcripts()
-    else:
-      return self.alignments  
+
+    return self.alignments  
 
   def permute(self,nperm=1000):
     """ Generator: permutes SNP assignments within the structure """

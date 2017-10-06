@@ -114,16 +114,33 @@ class PDBMapParser(PDBParser):
       raise Exception(msg)
     return s
 
-  def get_structure(self,pdbid,fname,biounit_fnames=[],quality=-1,io=None):
+  @classmethod
+  def getBiopythonStructureOrFail(cls,modelid,fname):
+    functionNameAsString = sys._getframe().f_code.co_name
+    ext = os.path.basename(fname).split('.')[-1]
     try:
-      if os.path.basename(fname).split('.')[-1] == 'gz':
+      if ext == 'gz':
         fin = gzip.open(fname,'rb')
-      else:
+      elif ext in ['txt','pdb','ent']:
         fin = open(fname,'rb')
+      else:
+        msg = "   ERROR (PDBMapParser) Unsupported file type: %s.\n"%fname
+        raise Exception(msg)
+    except Exception as e:
+      raise "In %s, could not open file %s"%(functioNameAsString,fname)
+    try:
       p = PDBParser()
       filterwarnings('ignore',category=PDBConstructionWarning)
-      s = p.get_structure(pdbid,fin)
+      s = p.get_structure(modelid,fin)
       resetwarnings()
+      fin.close()
+    except Exception as e:
+      msg = "   ERROR (%s) Error while parsing %s from %s: %s"%(functionNameAsString,modelid,fname,str(e).replace('\n',' '))
+    return s
+
+  def get_structure(self,pdbid,fname,biounit_fnames=[],quality=-1,io=None):
+    s = PDBMapParser.getBiopythonStructureOrFail(pdbid,fname)
+    try:
       s = PDBMapStructure(s,quality,pdb2pose={})
       fin.close()
     except Exception as e:
@@ -288,7 +305,7 @@ class PDBMapParser(PDBParser):
     m = s[0]
     # Calculate relative solvent accessibility for this model
     ssrsa = {}
-    resinfo = PDBMapIO.dssp(m,fname,dssp='dssp')
+    resinfo = PDBMapIO.dssp(m,fname,dssp_executable='dssp')
     for c in m:
       for r in c:
         if (c.id,r.seqid,r.icode) not in resinfo:
@@ -307,18 +324,12 @@ class PDBMapParser(PDBParser):
     # Process the biological assemblies for this structure
     for biounit_fname in biounit_fnames:
       try:
+        biounit = PDBMapParser.getBiopythonStructureOrFail(pdbid,fname)
         if os.path.basename(biounit_fname).split('.')[-1] == 'gz':
-          fin   = gzip.open(biounit_fname,'rb')
           bioid = int(os.path.basename(biounit_fname).split('.')[-2][3:])
         else:
-          fin   = open(biounit_fname,'rb')
           bioid = int(os.path.basename(biounit_fname).split('.')[-1][3:])
-        p = PDBParser()
-        filterwarnings('ignore',category=PDBConstructionWarning)
-        biounit = p.get_structure(pdbid,fin)
-        resetwarnings()
         biounit = PDBMapStructure(biounit,pdb2pose={}) # must pass empty dictionary: python bug
-        fin.close()
       except Exception as e:
         msg = "   ERROR (PDBMapIO) Error while parsing %s biounit %d: %s"%(pdbid,bioid,str(e).replace('\n',' '))
         raise Exception(msg)
@@ -341,33 +352,14 @@ class PDBMapParser(PDBParser):
         s.add(m)
     return s
 
-  def get_model(self,model_summary,fname,unp=None):
+  @classmethod
+  def process_structure_dssp_unp2hgnc(cls, m, model_summary,fname,unp=None):
     unp = unp if unp else model_summary['unp']
-    modelid  = model_summary['modelid'] # Extract the ModBase model ID
-    try:
-      ext = os.path.basename(fname).split('.')[-1]
-      if ext == 'gz':
-        fin = gzip.open(fname,'rb')
-      elif ext in ['txt','pdb','ent']:
-        fin = open(fname,'rb')
-      else:
-        msg = "   ERROR (PDBMapParser) Unsupported file type: %s.\n"%ext
-        raise Exception(msg)
-      p = PDBParser()
-      filterwarnings('ignore',category=PDBConstructionWarning)
-      s = p.get_structure(modelid,fin)
-      resetwarnings()
-      fin.close()
-      m = PDBMapModel(s,model_summary)
-    except Exception as e:
-      msg = "   ERROR (PDBMapIO) Error while parsing %s: %s"%(modelid,str(e).replace('\n',' '))
-      raise Exception(msg)
-    
     s = PDBMapParser.process_structure(m)
     m = s[0]
     s.unp = unp
     m.unp = unp
-    resinfo = PDBMapIO.dssp(m,fname,dssp='dssp')
+    resinfo = PDBMapIO.dssp(m,fname,dssp_executable='dssp')
     n = 0
     for c in m:
       c.unp  = unp

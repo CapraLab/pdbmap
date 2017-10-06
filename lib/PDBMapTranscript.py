@@ -16,6 +16,8 @@
 import sys,os,csv,commands
 from PDBMapProtein import PDBMapProtein
 
+import logging
+
 class PDBMapTranscript():
 	
   # Transcript query cache, keyed on transcript IDs
@@ -102,6 +104,7 @@ class PDBMapTranscript():
                       'chr9','chr10','chr11','chr12','chr13','chr14','chr15',
                       'chr16','chr17','chr18','chr19','chr20','chr21','chr22',
                       'chrX','chrY','chrMT']:
+        logging.getLogger(__name__).warn("Ignoring non-standard chromosome %s returned from \'%s\' command output"%(chrom,cmd))
         return None
       strand     = int(fields[8])
       sequence[seqid] = (rescode,chrom,start,end,strand)
@@ -109,7 +112,7 @@ class PDBMapTranscript():
     trans = PDBMapTranscript(transcript,protein,gene,sequence)
     PDBMapTranscript.cache_transcript(transid,trans)
     return trans
-
+ 
 aa_code_map = {"ala" : "A",
         "arg" : "R",
         "asn" : "N",

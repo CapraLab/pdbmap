@@ -19,6 +19,7 @@
 
 # See main check for cmd line parsing
 import argparse,ConfigParser
+import traceback
 import sys,os,csv,time,pdb,glob,gzip,shutil
 import subprocess as sp
 from multiprocessing import cpu_count
@@ -29,18 +30,23 @@ from warnings import filterwarnings,resetwarnings
 from Bio.PDB.PDBExceptions import PDBConstructionWarning
 from lib import PDBMapIO,PDBMapParser,PDBMapStructure,PDBMapProtein
 from lib import PDBMapAlignment,PDBMapData,PDBMapTranscript
-from lib import PDBMapIntersect,PDBMapModel
+from lib import PDBMapIntersect,PDBMapModel, PDBMapSwiss
 from lib.PDBMapVisualize import PDBMapVisualize
 from lib import amino_acids
-
-# Row count threshold for quick-intersection
-QUICK_THRESH = 20000
+import logging
+from logging.handlers import RotatingFileHandler
+from logging import handlers
+logging.basicConfig(format='%(asctime)s %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
+    datefmt='%d-%m-%Y:%H:%M:%S',)
 
 class PDBMap():
   def __init__(self,idmapping=None,sec2prim=None,sprot=None,
                 pdb_dir=None,modbase2016_dir=None,modbase2016_summary=None,
                 modbase2013_dir=None,modbase2013_summary=None,
+                swiss_dir=None,swiss_summary=None,
                 vep=None,vep_cache=None,reduce=None,probe=None):
+    self.pdb     = False
+    self.modbase = False
     self.pdb     = False
     self.modbase = False
     # Initialize
@@ -53,6 +59,9 @@ class PDBMap():
     if pdb_dir:
       self.pdb = True
       self.pdb_dir = pdb_dir
+    if swiss_dir and swiss_summary:
+      self.swiss = True
+      PDBMapSwiss.load_swiss_INDEX_JSON(swiss_dir,swiss_summary)
     if modbase2016_dir and modbase2016_summary:
       self.modbase = True
       PDBMapModel.load_modbase(modbase2016_dir,modbase2016_summary)
@@ -128,7 +137,52 @@ class PDBMap():
     sys.stderr.write(msg)
     return 0
 
-  def load_model(self,model_summary,label="",io=None,update=False):
+  def load_swiss_to_MySQL(self,modelid,label="",io=None):
+    if not io:
+      # Create a PDBMapIO object
+      io = PDBMapIO(args.dbhost,args.dbuser,
+                            args.dbpass,args.dbname,slabel=label)
+
+    # Load the dictionary of information about the modelid
+    model_summary = PDBMapSwiss.get_info(modelid)
+
+    # Check if model is already in the database
+    model_fname = PDBMapSwiss.get_coord_file(modelid);
+    if io.swiss_in_db(modelid,label):
+      msg = "  VALID (SWISS) %s (%s) already in database.\n"%(modelid,label)
+      print msg
+      return 0
+    print "Will attempt to add new swiss %s.  Fetching: %s"%(modelid,model_fname)
+    if not os.path.exists(model_fname):
+      model_fname += '.gz' # check for compressed copy
+    if not os.path.exists(model_fname):
+      msg = "  ERROR (load_swiss_to_MySQL) %s not in local Swiss mirror.\nExpected file %s\n"%(modelid,model_fname)
+      sys.stderr.write(msg)
+      return 1
+
+    try:
+      # import pdb; pdb.set_trace()
+      s = PDBMapParser.getBiopythonStructureOrFail(modelid,model_fname)
+      m = PDBMapSwiss(s,model_summary)
+      s = PDBMapParser.process_structure_dssp_unp2hgnc(m,model_summary,model_fname,m.unp)
+
+      io.set_structure(m)
+      io.upload_swiss()
+    except Exception as e:
+      exc_type, exc_value, exc_traceback = sys.exc_info()
+      emsg = str(e)
+      print emsg
+      msg = "  ERROR (pdbmap.py: load_swiss_to_MySQL(%s):\n%s"%(modelid,emsg)
+      sys.stderr.write(msg)
+      traceback.print_tb(exc_traceback, limit=2, file=sys.stderr)
+      return 1
+    msg = "  VALID (pdbmap.py: load_swiss_to_MySQL(%s)\n"%modelid
+    sys.stderr.write(msg)
+    return 0
+
+
+
+  def load_model(self,model_summary,label="",io=None):
     """ Loads a given ModBase model into the PDBMap database """
     
     if not io:
@@ -363,6 +417,15 @@ __  __  __
                    |   """
   print header
 
+  root  = logging.getLogger()
+  root.setLevel(logging.INFO)
+
+  fh = RotatingFileHandler("pdbmap.log", maxBytes=(1048576*5), backupCount=7)
+  formatter = logging.Formatter('%(asctime)s %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s')
+  fh.setFormatter(formatter)
+  fh.setLevel(logging.WARNING)
+  root.addHandler(fh)
+
   # Setup the Config File Parser
   conf_parser = argparse.ArgumentParser(add_help=False)
   conf_parser.add_argument("-c", "--conf_file",
@@ -378,6 +441,8 @@ __  __  __
     "modbase2016_summary" : None,
     "modbase2013_dir"     : None,
     "modbase2013_summary" : None,
+    "swiss_dir"     : None,
+    "swiss_summary" : None,
     "create_new_db"   : False,
     "force" : False,
     "pdbid" : "",
@@ -424,6 +489,10 @@ __  __  __
               help="Database name")
   parser.add_argument("--pdb_dir", 
               help="Directory containing PDB structures")
+  parser.add_argument("--swiss_dir",
+              help="Directory containing Swissmodel models")
+  parser.add_argument("--swiss_summary",
+              help="Swiss Model summary JSON file")
   parser.add_argument("--modbase2016_dir",
               help="Directory containing ModBase 2016 models")
   parser.add_argument("--modbase2016_summary",
@@ -547,6 +616,7 @@ __  __  __
         sys.stderr.write(msg)
         for i,pdb_file in enumerate(all_pdb_files):
           pdbid = os.path.basename(pdb_file).split('.')[0][-4:].upper()
+      
           print "## Processing (pdb) %s (%d/%d) ##"%(pdbid,i,n)
           pdbmap.load_pdb(pdbid,pdb_file,label=args.slabel,update=update)
     elif len(args.args) == 1:
@@ -555,6 +625,7 @@ __  __  __
       if not os.path.exists(pdb_file):
         # Not a file, its a PDB ID
         args.pdbid = pdb_file
+        # ppProtein._pdb2unp.keys()
         pdb_file   = None
       elif not args.pdbid:
         args.pdbid = os.path.basename(pdb_file).split('.')[0][-4:].upper()
@@ -630,6 +701,45 @@ __  __  __
       for i,unp in enumerate(args.args):
         print "\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,unp,i,n)
         pdbmap.load_unp(unp,label=args.slabel)
+
+  ## load_model ##
+  elif args.cmd == "load_swiss":
+    pdbmap = PDBMap(idmapping=args.idmapping,sec2prim=args.sec2prim,
+                    sprot=args.sprot,
+                    swiss_dir=args.swiss_dir,
+                    swiss_summary=args.swiss_summary)
+    if len(args.args)<1: 
+      msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> load_swiss swiss_summary summary model[,model,...]\n"
+      msg += "   or: pdbmap.py -c conf_file --slabel=<slabel> load_swiss swiss_summary modeldir/*\n"
+      msg += "   or: pdbmap.py -c conf_file --slabel=<slabel> load_swiss all"
+      print msg; sys.exit(1)
+    if args.args[0] in ['all','*','.']:
+      args.slabel = args.slabel if args.slabel else "swiss"
+      models = PDBMapSwiss.get_swiss_modelids() # get all  the swiss model unique IDs
+      n = len(models)
+      # If this is a parallel command with partition parameters
+      if args.ppart != None and args.ppidx != None:
+        psize = n / args.ppart # floor
+        if (args.ppart-1) == args.ppidx:
+          models = models[args.ppidx*psize:]
+        else:
+          models = models[args.ppidx*psize:(args.ppidx+1)*psize]
+        msg = "WARNING(PDBMap) Subprocess uploading partition %d/%d of Swiss Model\n"%(args.ppidx+1,args.ppart)
+        sys.stderr.write(msg)
+        for i,modelid in enumerate(models):
+          print "## Processing (%s) %s (%d/%d) ##"%(args.slabel,swissUniqueIdentifier,i+(args.ppidx*psize)+1,n)
+          pdbmap.load_swiss_to_MySQL(modelid,label=args.slabel,io=None)
+      else:
+        msg = "WARNING (PDBMap) Uploading all %d Swiss Model  models.\n"%n
+        sys.stderr.write(msg)
+        for i,modelid in enumerate(models):
+          print "\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,modelid,i,n)
+          pdbmap.load_swiss_to_MySQL(modelid,label=args.slabel,io=None)
+
+
+    else:
+      print "Code for individual swiss models must be done later"
+      sys.exit()
 
   ## load_model ##
   elif args.cmd == "load_model":
