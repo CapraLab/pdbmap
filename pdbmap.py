@@ -40,7 +40,7 @@ class PDBMap():
   def __init__(self,idmapping=None,sec2prim=None,sprot=None,
                 pdb_dir=None,modbase2016_dir=None,modbase2016_summary=None,
                 modbase2013_dir=None,modbase2013_summary=None,
-                vep=None,reduce=None,probe=None):
+                vep=None,vep_cache=None,reduce=None,probe=None):
     self.pdb     = False
     self.modbase = False
     # Initialize
@@ -60,7 +60,8 @@ class PDBMap():
       self.modbase = True
       PDBMapModel.load_modbase(modbase2013_dir,modbase2013_summary)
     if vep:
-      self.vep = vep
+      self.vep       = vep
+      self.vep_cache = vep_cache
     if reduce:
       self.reduce = reduce
     if probe:
@@ -176,7 +177,7 @@ class PDBMap():
   def load_data(self,dname,dfile,indexing=None,usevep=True,upload=True):
     """ Loads a data file into the PDBMap database """
     if usevep:
-      d = PDBMapData(vep=self.vep,dname=dname)
+      d = PDBMapData(vep=self.vep,vep_cache=self.vep_cache,dname=dname)
     else:
       d = PDBMapData(dname=dname)
     if not os.path.exists(dfile):
@@ -447,6 +448,8 @@ __  __  __
               help="Swiss-Prot file location")
   parser.add_argument("--vep", 
               help="Variant Effect Predictor location")
+  parser.add_argument("--vep_cache",
+              help="Directory containing the VEP cache")
   parser.add_argument("--slabel", 
               help="Structural label for this session")
   parser.add_argument("--dlabel", 
@@ -703,7 +706,7 @@ __  __  __
       msg  = "usage: pdbmap.py -c conf_file [--novep] load_data <data_file> <data_name> [data_file data_name] ...\n"
       msg += "alt:   pdbmap.py -c conf_file [--novep] --dlabel=<data_name> load_data <data_file> [data_file] ...\n"
       print msg; sys.exit(1)
-    pdbmap = PDBMap(vep=args.vep)
+    pdbmap = PDBMap(vep=args.vep,vep_cache=args.vep_cache)
     # Process many data file(s) (set(s))
     if not args.dlabel: # Assign individual labels
       dfiles = zip(args.args[0::2],args.args[1::2])
@@ -753,8 +756,6 @@ __  __  __
       msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> --dlabel=<data_name> intersect [quick]\n"
       print msg; sys.exit(1)
     pdbmap = PDBMap()
-    # msg  = "WARNING (PDBMap) If loading data, intersections may be automatically applied.\n"
-    # sys.stderr.write(msg)
     dname  = args.dlabel
     if dname == 'all':
       dname = None

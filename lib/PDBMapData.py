@@ -25,18 +25,18 @@ from lib import bed # PyVCF emulator for BED files
 
 class PDBMapData():
   
-  def __init__(self,vep="",dname=''):
+  def __init__(self,vep="",vep_cache='',dname=''):
     self.vep   = vep
+    self.cache = vep_cache
     self.dname = dname
     if self.vep and not os.path.exists(self.vep):
       msg = "ERROR (PDBMapData) VEP location invalid: %s"%vep
       raise Exception(msg)
     if self.vep:
       # Check for a dbconn file
-      cache    = "/dors/capra_lab/data/vep/"
-      # cache    = os.path.expanduser(cache) # replace ~ with explicit home directory
+      cache    = vep_cache
       if not os.path.exists(cache):
-        msg = "WARNING (PDBMapData) No cache exists. Using network connection.\n"
+        msg = "WARNING (PDBMapData) No VEP cache found at %s.\n"%cache
         sys.stderr.write(msg)
         cache = None
       # Construct the VEP command
@@ -55,7 +55,6 @@ class PDBMapData():
       self.vep_cmd.extend(['--check_existing','--symbol','--protein','--uniprot','--domains'])
       # Annotate transcript with canonical bool and biotype
       self.vep_cmd.extend(['--canonical','--biotype','--pubmed'])
-      ## We are now allowing Synonymous SNPs to be mapped ##
       # Retain only coding-region variants
       self.vep_cmd.extend(['--coding_only'])
       # Specify output format
@@ -65,7 +64,6 @@ class PDBMapData():
       self.vep_cmd.extend(['-o','stdout'])
 
   def record_parser(self,record,info_headers,csq_headers):
-
     # Ensure that an end is specified, default to start+1
     if "END" not in record.INFO:
       record.INFO["END"] = int(record.POS) + 1
