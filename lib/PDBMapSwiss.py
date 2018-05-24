@@ -14,23 +14,34 @@
 import argparse
 # import json
 
-import sys,os
+import sys,os,re
 import pandas
 from Bio.PDB.Structure import Structure
 from lib.PDBMapProtein import PDBMapProtein
 from lib.PDBMapTranscript import PDBMapTranscript
 from lib.PDBMapAlignment import PDBMapAlignment
+from collections import defaultdict
 
 import logging
 logging.basicConfig(Level='INFO')
 
 class PDBMapSwiss(Structure):
-  
-  # SwissModel Summary Dictionary
-  # Maps Uniprot IDs to SwissModel Swisss
+  # SwissModels are represented in RAM by small dictionaries that are reached individually by modelid
+  # or as lists from a Uniprot AC (unp)
+
+  # This class contains only static functions, with the initial call of load_swiss_INDEX_JSON function
+  # being a kind of global constructor to enable all the other functions
+
+  # Maps Uniprot IDs to list of SwissModel modelIDs
+  _unp2modelids = defaultdict(lambda: [])
+  # Map the SwissModel modelIDs to small dictionaries that contain the 
+  # key descriptors for each model.
   _modelid2info = {}
+
   # These are the column headings/json field names - for the INDEX_JSON file
-  _JSON_fields  = ["uniprot_ac","template","from","to","provider","url","qmean","qmean_norm","coordinate_id"]
+  # We initally parse the small dictionaries with these key names, but then re-arrange the key names
+  # to match ModBase nomenclature
+  _JSON_fields  = ["uniprot_ac","template","from","to","provider","url","qmean","qmean_norm","coordinate_id","iso_id"]
   swiss_dir = None
 
   '''
@@ -105,7 +116,7 @@ Fields in modbase that may become more relevant
     for chain in self.structure[0]:
       # Query all transcripts associated with the chain's UNP ID
       # from the Ensembl mySQL database records
-      print "Analyzing unp id", self.unp
+      # print "Analyzing unp id", self.unp
       candidate_transcripts = PDBMapTranscript.query_from_unp(self.unp)
       # But only keep the Ensemble transcripts matching this model's reference ENSP, if specified
       # IF the uniporit ID has a DASH (only!) THEN make sure to ONLY keep
@@ -154,16 +165,35 @@ Fields in modbase that may become more relevant
     return list(PDBMapSwiss._modelid2info)  
 
   @classmethod
-  def unp2swiss(cls,unp):
-    """ Maps UniProt protein IDs to SwissModel models """
-    # Get all matching Ensembl protein IDs
-    ensps = PDBMapProtein.unp2ensp(unp)
-    models = []
-    for ensp in ensps:
-      # Get all matching SwissModel models
-      models.extend(PDBMapSwiss.ensp2swiss(ensp))
-    models = [model for model in models if model]
+  def ensp2swiss(cls,ensp):
+    """ NOT IMPLEMENTED: Maps Ensembl protein IDs to swiss models """
+    unps4ensps = PDBMapProtein.ensp2unp(ensp)
+    import pdb; pdb.set_trace()
+    # return PDBMapSwiss._modelid2info.get(PDBMapProtein.,None)
+    models = PDBMapSwiss.swiss_dict.get(ensp,[])
     return models
+
+  @classmethod
+  def unp2modelids(cls,unp,IsoformOnly = False):
+    """ Return all SwissModel ID strings for a Uniprot AC (unp) """
+    modelids = []
+    if (IsoformOnly):
+      for modelid in PDBMapSwiss._unp2modelids[unp]:
+        modelids.append(modelid)
+    else:
+      for modelid in PDBMapSwiss._unp2modelids[unp.split('-')[0]]:
+        modelids.append(modelid)
+    return modelids
+      
+  @classmethod
+  def unp2swiss(cls,unp,IsoformOnly = False):
+    """ Return all SwissModel dictionaries for a Uniprot AC (unp) """
+    """ Maps a UniProt protein ID to list of SwissModel models """
+    swiss = []
+    # import pdb; pdb.set_trace()
+    for modelid in PDBMapSwiss.unp2modelids(unp,IsoformOnly):
+      swiss.append(PDBMapSwiss.get_info(modelid))
+    return swiss 
 
   @classmethod
   def get_info(cls,modelid):
@@ -198,6 +228,26 @@ Fields in modbase that may become more relevant
     ) 
 
   @classmethod
+  def load_REMARK3_metrics(cls,modelid):
+    """ Parse the REMARK section of a SwissModel .pdb file to get a variety of quality metrics (eg qmn4, sid etc) """
+    metrics = {}
+    fname = PDBMapSwiss.get_coord_file(modelid)
+    with open(fname,'r') as f:
+      for line in f:
+        if line.startswith('ATOM  '): # Then we're done parsing the pdb file.  ATOM comes after all REMARK lines of interest
+          break;
+        if line.startswith('REMARK   3') and len(line) > 20: # Then it's likely a swiss-specific model REMARK
+          splits = re.split(' +',line[:20].rstrip())
+          if len(splits) == 3:
+            key = splits[2].lower() # Examples: enging, gmqe, qmn4, sid
+            value = line[20:].rstrip()
+            # 'template' conflicts with the JSON meta file entry of same name, and carries less info
+            if (key != 'template'):
+              metrics[key] = value
+    return metrics
+
+
+  @classmethod
   def get_unp(cls,modelid):
     """ Returns the coordinate file location for the SwissModel model ID """
     if not PDBMapSwiss._modelid2info:
@@ -212,35 +262,38 @@ Fields in modbase that may become more relevant
   @classmethod
   def load_swiss_INDEX_JSON(cls,swiss_dir,summary_fname):
     """ Adds a SwissModel summary file to the lookup dictionary """
-    print "Parameter swiss_dir = " + swiss_dir
-    print "Parameter summary_fname = " + summary_fname
+    # print "Parameter swiss_dir = " + swiss_dir
+    # print "Parameter summary_fname = " + summary_fname
     swiss_dir = swiss_dir.rstrip('/')
     if not PDBMapSwiss.swiss_dir:
       PDBMapSwiss.swiss_dir = swiss_dir
 
     if not os.path.exists(summary_fname):
       msg = "ERROR: (PDBMapSwiss) Cannot load SwissModel. %s does not exist."%summary_fname
-      print msg
+      logging.exception(msg)
       raise(Exception(msg))
-    print "Opening SwissModel Summary File (JSON format):" + summary_fname
+    logging.getLogger().info("Opening SwissModel Summary File (JSON format):" + summary_fname)
     try:
       df = pandas.read_json(summary_fname) # ,orient='records')
     except ValueError:
-      print "Failure to read JSON file %s\nProblem is likely ill-formatted data in the JSON file.  Read error carefully:"%summary_fname
+      msg = "Failure to read JSON file %s\nProblem is likely ill-formatted data in the JSON file.  Read error carefully:"%summary_fname
+      logging.exception(msg)
       raise
     except:
-      print "Failure attempting read of JSON SwissModel Summary File  Additional details follow:"
+      msg =  "Failure attempting read of JSON SwissModel Summary File  Additional details follow:"
+      logging.exception(msg)
       raise
 
-    print "%d rows read from %s successfully."%(len(df),summary_fname)
+    logging.getLogger().info("%d rows read from %s successfully."%(len(df),summary_fname))
     total_count = 0
     for index,row in df.iterrows():
       total_count += 1
       try:
-        d = dict([(dname,row[dname]) for dname in PDBMapSwiss._JSON_fields])
+        d = dict([(dname,row[dname]) for dname in PDBMapSwiss._JSON_fields if pandas.notnull(row[dname])])
       except:
-        print "Unable to map expected fields on JSON file row %d"%total_count
-        print "Read %s for this row:\n"%row
+        msg = "Unable to map expected fields on JSON file row %d"%total_count
+        msg += "\nRead %s for this row:\n"%row
+        logging.exception(msg)
         raise
 
       # import pdb; pdb.set_trace()
@@ -251,19 +304,35 @@ Fields in modbase that may become more relevant
       del d['from']
       del d['to']
 
-
       # Convert column 'uniprot_ac' to 'unp' for modbase compatability
-      d['unp'] = d['uniprot_ac']
+      # First, if there is an isoform identifier which does not match the base iso-less identifier
+      # Then be sure to use the new isoform identifier.
+      if ('iso_id' in d and
+          ('-' not in d['uniprot_ac']) and 
+          ('-' in d['iso_id']) and
+          (d['uniprot_ac'] != d['iso_id'])):
+        d['unp'] = d['iso_id']
+      else:
+        d['unp'] = d['uniprot_ac']
+
       del d['uniprot_ac']
+      if 'iso_id' in d:
+        del d['iso_id']
+
       modelid = PDBMapSwiss.concatenate_modelid(d['unp'],d['start'],d['end'],d['template'])
 
       d['modelid'] = modelid
 
       # We have a lot of duplicates - don't worry about that for now (Chris Moth 2017-09-11
       # if (modelid in PDBMapSwiss._modelid2info):
-        # print "CAUTION: %s aleady in swiss dictionary\n"%modelid
+      # print "CAUTION: %s aleady in swiss dictionary\n"%modelid
       # Add this unique modelid to the growing large dictionary      
       PDBMapSwiss._modelid2info[d['modelid']] = d
+      PDBMapSwiss._unp2modelids[d['unp']].append(d['modelid'])
+      # If this unp is an isoform, then also add it to the generic (base) unp dictionary
+      if (d['unp'].find('-') != -1):
+        PDBMapSwiss._unp2modelids[d['unp'].split('-')[0]].append(d['modelid'])
+
     logging.getLogger(__name__).info( "%d Swiss models added to in-memory dictionary"%len(PDBMapSwiss._modelid2info))
 
 # Main check
