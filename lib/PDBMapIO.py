@@ -25,6 +25,10 @@ from PDBMapSwiss import PDBMapSwiss
 from PDBMapProtein import PDBMapProtein
 from PDBMapStructure import PDBMapStructure
 import MySQLdb, MySQLdb.cursors
+# Support for caching sql queries
+import hashlib
+import cPickle as pickle
+
 from warnings import filterwarnings,resetwarnings
 from Bio.PDB.PDBExceptions import PDBConstructionWarning
 import logging
@@ -51,6 +55,7 @@ class PDBMapIO(PDBIO):
   def __del__(self):
     # Guarantee all database connections are closed
     for con in self._cons:
+      logging.getLogger(__name__).info("Calling con.close() to close SQL connection")
       con.close()
 
 
@@ -127,16 +132,16 @@ class PDBMapIO(PDBIO):
     if label == -1:
       label=self.slabel
     self._connect()
-    query = "SELECT * FROM Chain WHERE (unp='%s' OR base_unp LIKE '%s-%%') "
+    query = "SELECT * FROM Chain WHERE (unp=%s OR unp LIKE %s) "
     if label:
       query += "AND label=%s"
     query += "LIMIT 1"
 
     base_unp = unpid.split('-')[0]
     if label:
-      self._c.execute(query,(base_unp,base_unp,label))
+      self._c.execute(query,(base_unp,base_unp+"-%%",label))
     else:
-      self._c.execute(query,(base_unp,base_unp))
+      self._c.execute(query,(base_unp,base_unp+"-%%"))
     res = True if self._c.fetchone() else False
     self._close()
     return res
@@ -340,8 +345,8 @@ class PDBMapIO(PDBIO):
     mquery  = 'INSERT IGNORE INTO Model '
     mquery += '(label,modelid,unp,method,no35,rmsd,mpqs,evalue,ga341,zdope,pdbid,chain,identity)'
     mquery += 'VALUES ('
-    mquery += '"%(label)s","%(id)s","%(unp)s","%(tsvmod_method)s",'
-    mquery += '%(tsvmod_no35)s,%(tsvmod_rmsd)s,%(mpqs)s,%(evalue)s,%(ga341)f,'
+    mquery += '"%(label)s","%(id)s","%(unp)s","%(tvsmod_method)s",'
+    mquery += '%(tvsmod_no35)s,%(tvsmod_rmsd)s,%(mpqs)s,%(evalue)s,%(ga341)f,'
     mquery += '%(zdope)s,"%(pdbid)s","%(chain)s",%(identity)f)'
     mfields = dict((key,m.__getattribute__(key)) for key in dir(m) 
                   if isinstance(key,collections.Hashable))
@@ -354,7 +359,27 @@ class PDBMapIO(PDBIO):
     self._c.execute(mquery)
     self._close()
 
-  def upload_swiss(self):
+  def delete_all_swiss(self):
+    self._connect()
+    deleteCommands = [
+      "DELETE FROM GenomicIntersection WHERE slabel='swiss'",
+      "DELETE FROM Alignment WHERE label='swiss'",
+      "DELETE FROM AlignmentScore WHERE label='swiss'",
+      "DELETE FROM Transcript WHERE label='swiss'",
+      "DELETE FROM Residue WHERE label='swiss'",
+      "DELETE FROM Chain WHERE label='swiss'",
+      "DELETE FROM Swiss"]
+
+    for mquery in deleteCommands:
+      logging.getLogger(__name__).info(mquery)
+      try:
+        self._c.execute(mquery)
+      except (MySQLdb.Error, MySQLdb.Warning) as e:
+        logging.getLogger(__name__).critical(e)
+        sys.exit(1)
+    self._close()
+
+  def upload_swiss(self,remark3_metrics):
     """ Uploades the current swissmodel in PDBMapIO """
     m = self.structure
     if self.swiss_in_db(m.id,self.slabel):
@@ -365,17 +390,20 @@ class PDBMapIO(PDBIO):
 
   # Prepare the Model summary information (if no errors occurred)
     mquery  = 'INSERT IGNORE INTO Swiss '
-    mquery += '(label,modelid,unp,start,end,qmean,qmean_norm,template,coordinate_id,url)'
+    mquery += '(label,modelid,unp,start,end,qmean,qmean_norm,template,coordinate_id,url,pdbid,chain,identity,ostat,mthd)'
     mquery += 'VALUES ('
     mquery += '"%(label)s","%(id)s","%(unp)s",'
     mquery += '%(start)d,%(end)d,'
     mquery += '%(qmean)f,%(qmean_norm)f,"%(template)s",'
-    mquery += '"%(coordinate_id)s","%(url)s")'
+    mquery += '"%(coordinate_id)s","%(url)s",'
+    mquery += '"%(pdbid)s","%(chain)s",%(identity)f,"%(ostat)s","%(mthd)s")'
     mfields = dict((key,m.__getattribute__(key)) for key in dir(m) if isinstance(key,collections.Hashable))
     mfields["label"] = self.slabel
+    # import pdb; pdb.set_trace()
+    mfields.update(remark3_metrics)
+    mfields["identity"] = float(remark3_metrics["sid"])
     mquery = mquery%mfields
     # First, pass the underlying PDBMapStructure to upload_structure
-    # import pdb; pdb.set_trace()
     self.upload_structure(model=True,sfields=mfields)
     # Then execute the Model upload query
     self._connect()
@@ -391,7 +419,7 @@ class PDBMapIO(PDBIO):
     for i,record in enumerate(dstream):
       if not i%1000:
         sys.stdout.write("\rRecords uploaded: %5d"%i)
-      # Upload all non-consequence information to GenomicData
+      # Upload all but the consequences and optional Fst information to GenomicData
       record.INFO['LABEL'] = dname
       query  = "INSERT IGNORE INTO GenomicData "
       query += "(label,chr,start,end,name,variation,vtype,svtype,ref_allele,alt_allele,"
@@ -595,13 +623,15 @@ class PDBMapIO(PDBIO):
     q = self.secure_query(query,qvars=('swiss',base_unp,base_unp),
                                         cursorclass='Cursor')
     entities.extend([r[0] for r in q])
-    print "%s found in %d structures/models."%(unpid,len(entities))
+    logging.getLogger(__name__).info("%s found in %d structures/models."%(unpid,len(entities)))
     res = []
     for entity in entities:
       entity_type = self.detect_entity_type(entity)
       if entity_type == 'structure':
         res.append((entity_type,entity))
       elif entity_type == 'model':
+        res.append((entity_type,entity))
+      elif entity_type == 'swiss':
         res.append((entity_type,entity))
     return res
 
@@ -663,6 +693,8 @@ class PDBMapIO(PDBIO):
     """ Given an entity ID, attempts to detect the entity type """
     if self.model_in_db(entity,label=None):
       return "model"
+    elif self.swiss_in_db(entity,label=None):
+      return "swiss"
     elif self.structure_in_db(entity,label=None):
       return "structure"
     elif PDBMapProtein.isunp(entity):
@@ -757,6 +789,7 @@ class PDBMapIO(PDBIO):
           self._con = con
         else:
           # Remove dead connection
+          logging.getLogger(__name__).info("Calling con.close() to close SQL connection")
           con.close()
           self._cons.remove(con)
     # If none was found, open a new connection with desired cursorclass
@@ -765,6 +798,7 @@ class PDBMapIO(PDBIO):
       nMaxRetries = 100000
       while (True):
         trycount += 1
+        logging.getLogger(__name__).info("Attempting connect to %s"%self.dbhost)
         try:
           if usedb:
             if self.dbpass:
@@ -785,6 +819,7 @@ class PDBMapIO(PDBIO):
                   user=self.dbuser,cursorclass=cursorclass)
           # Add to connection pool and set as active connection
           # This point is "success" from MySQLdb.connect
+          logging.getLogger(__name__).info("Successful connect to %s"%self.dbhost)
           self._cons.append(con)
           self._con = con
           # Success... Leave while loop
@@ -792,16 +827,17 @@ class PDBMapIO(PDBIO):
         except MySQLdb.OperationalError as e:
           if e[0] == 1040:          
             msg = "Unable to connect to connect to mySQL: %s\n"%e
+            logging.getLogger(__name__).warn(msg)
             sys.stderr.write(msg)
             # If nMaxRetries, terminate with exception
             if (trycount == nMaxRetries):
               msg = "Max retries of %d reached\n"%nMaxRetries
-              sys.stderr.write(msg)
+              logging.exception(msg)
               raise
             else:
               waitTime = 30*(1+trycount % 5)
               msg = "Try %d failed.  Waiting %d secs and retrying...\n"%(trycount,waitTime)
-              sys.stderr.write(msg)
+              logging.getLogger(__name__).warn(msg)
               time.sleep(waitTime) # Wait 30/60/90 etc seconds and retry (return to top of while loop)
             # Loop back through while loop
           else:
@@ -811,18 +847,26 @@ class PDBMapIO(PDBIO):
             msg += " DBHOST = %s\n"%self.dbhost
             msg += " DBNAME = %s\n"%self.dbname
             msg += " DBUSER = %s\n\n"%self.dbuser
-            sys.stderr.write(msg)
+            logging.exception(msg)
             raise
     # Finally, open a cursor from the active connection
     self._c = self._con.cursor() # and open a new one
     return self._c
 
   def _close(self):
+    logging.getLogger(__name__).info("Closing SQL connection")
     self._c.close() # Close only the cursor
     return
 
   def secure_query(self,query,qvars=None,cursorclass='SSDictCursor'):
     """ Executes queries using safe practices """
+    logmsg = "With cursorclass %s, performing SQL query:\n"%str(cursorclass)
+    if qvars:
+      logmsg += query%qvars
+    else:
+      logmsg += query
+    logging.getLogger(__name__).info(logmsg)
+
     if cursorclass == 'SSDictCursor':
       self._connect(cursorclass=MySQLdb.cursors.SSDictCursor)
     elif cursorclass == 'SSCursor':
@@ -843,12 +887,79 @@ class PDBMapIO(PDBIO):
       msg += " Provided args: %s"%str(qvars)
       if "_last_executed" in dir(self._c):
         msg += "\n Executed Query: \n%s"%self._c._last_executed
+      logging.getLogger(__name__).exception(msg)
       raise Exception(msg)
     finally:
       # msg = "Executed Query: \n%s\n"%self._c._last_executed
       # print msg
       resetwarnings()
       self._close()
+
+
+  def secure_cached_query(self,cache_dir,query,qvars=None,cursorclass='SSDictCursor'):
+    """ Executes queries using safe practices, and loads/stores results in a cache_directory """
+    logmsg = "With cursorclass %s, performing SQL query:\n"%str(cursorclass)
+    query_hash = cursorclass 
+    if qvars:
+      query_hash += hashlib.sha256(query%qvars).hexdigest()
+      logmsg += query%qvars
+    else:
+      query_hash += hashlib.sha256(query).hexdigest()
+      logmsg += query
+    
+    query_hash_filename = os.path.join(cache_dir,query_hash)
+    logmsg += "\nquery_hash = %s"%query_hash_filename
+    logging.getLogger(__name__).info(logmsg)
+    if os.path.exists(query_hash_filename):
+      logging.getLogger(__name__).info("returning query results from cache")
+      with open(query_hash_filename,'rb') as cache_file_handle:
+        rows = pickle.load(cache_file_handle)
+        for row in rows:
+          yield row
+    else: 
+      logging.getLogger(__name__).info("Cache not found.  Executing new query")
+      if cursorclass == 'SSDictCursor':
+        self._connect(cursorclass=MySQLdb.cursors.SSDictCursor)
+      elif cursorclass == 'SSCursor':
+        self._connect(cursorclass=MySQLdb.cursors.SSCursor)
+      elif cursorclass == 'Cursor':
+        self._connect(cursorclass=MySQLdb.cursors.Cursor)
+      else:
+        self._connect()
+      filterwarnings('ignore', category = MySQLdb.Warning)
+      rows = []
+      try:
+        if qvars: self._c.execute(query,qvars)
+        else:     self._c.execute(query)
+        for row in self._c:
+          rows.append(row)
+      except Exception as e:
+        msg  = "ERROR (PDBMapIO) Secure query failed; Exception: %s; "%str(e)
+        msg += " Provided query: %s"%query
+        msg += " Provided args: %s"%str(qvars)
+        if "_last_executed" in dir(self._c):
+          msg += "\n Executed Query: \n%s"%self._c._last_executed
+        logging.getLogger(__name__).exception(msg)
+        raise Exception(msg)
+      finally:
+        # msg = "Executed Query: \n%s\n"%self._c._last_executed
+        # print msg
+        resetwarnings()
+        self._close()
+      
+      with tempfile.NamedTemporaryFile(dir=cache_dir) as cache_file_handle:
+        pickle.dump(rows,cache_file_handle)
+        try: # Atomic rename can fail due to multi-process contention.  don't halt for that!
+          os.link(cache_file_handle.name,query_hash_filename)
+        except:
+          logging.getLogger(__name__).warn("Unable to rename %s to %s"%(cache_file_handle.name,query_hash_filename))
+        else:
+          umask = os.umask(0)
+          os.umask(umask)
+          os.chmod(query_hash_filename, 0o666 & ~umask)
+          logging.getLogger(__name__).info("Query results saved to %s"%query_hash_filename)
+      for row in rows:
+        yield row
 
   def secure_command(self,query,qvars=None):
     """ Executes commands using safe practices """
@@ -859,6 +970,7 @@ class PDBMapIO(PDBIO):
       else:     self._c.execute(query)
       self._con.commit()
       rc = self._c.rowcount
+
     except Exception as e:
       self._con.rollback()
       msg  = "ERROR (PDBMapIO) Secure command failed; Exception: %s; "%str(e)
