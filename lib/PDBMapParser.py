@@ -142,7 +142,8 @@ class PDBMapParser(PDBParser):
     s = PDBMapParser.getBiopythonStructureOrFail(pdbid,fname)
     try:
       s = PDBMapStructure(s,quality,pdb2pose={})
-      fin.close()
+      # 2018-04-23 It cannot make sense to close a fle handle that is not local to us
+      # fin.close()
     except Exception as e:
       msg = "ERROR (PDBMapIO) Error while parsing %s: %s"%(pdbid,str(e).replace('\n',' '))
       raise Exception(msg)
