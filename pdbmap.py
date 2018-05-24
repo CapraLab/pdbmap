@@ -97,7 +97,7 @@ class PDBMap():
       models   = [PDBMapModel.get_info(modelid) for modelid in modelids]
       for model in models:
         print " # (%s) Processing ModBase %s #"%(mod_label,model['modelid'])
-        self.load_model(model,label=mod_label,io=io)
+        self.load_model(model,label=mod_label,io=io,update=update)
         sys.stdout.flush() # Force stdout flush after each model
     if not pdbids and not models:
       msg = "  WARNING (PDBMap) No PDB structures or Modbase models found for %s\n"%unp
@@ -115,11 +115,12 @@ class PDBMap():
         print "  VALID (PDBMap) %s already in database."%pdbid
         return 0
     # Load the PDB structure
+    # import pdb; pdb.set_trace()
     if not pdb_fname:
       pdb_fname = "%s/structures/all/pdb/pdb%s.ent.gz"%(self.pdb_dir,pdbid.lower())
       print "  # Fetching %s"%pdbid
       if not os.path.exists(pdb_fname):
-        msg = "  ERROR (PDBMap) Cannot fetch %s. Not in PDB mirror.\n"%pdbid
+        msg = "  ERROR (PDBMap) Cannot fetch %s. %s Not in PDB mirror.\n"%(pdbid,pdb_fname)
         sys.stderr.write(msg)
         return 1
     # Locate all biological assemblies
@@ -160,14 +161,15 @@ class PDBMap():
       sys.stderr.write(msg)
       return 1
 
+    remark3_metrics = PDBMapSwiss.load_REMARK3_metrics(modelid)
+    
     try:
-      # import pdb; pdb.set_trace()
       s = PDBMapParser.getBiopythonStructureOrFail(modelid,model_fname)
       m = PDBMapSwiss(s,model_summary)
       s = PDBMapParser.process_structure_dssp_unp2hgnc(m,model_summary,model_fname,m.unp)
 
       io.set_structure(m)
-      io.upload_swiss()
+      io.upload_swiss(remark3_metrics)
     except Exception as e:
       exc_type, exc_value, exc_traceback = sys.exc_info()
       emsg = str(e)
@@ -182,7 +184,7 @@ class PDBMap():
 
 
 
-  def load_model(self,model_summary,label="",io=None):
+  def load_model(self,model_summary,label="",io=None,update=False):
     """ Loads a given ModBase model into the PDBMap database """
     
     if not io:
@@ -476,7 +478,7 @@ __  __  __
   parser.add_argument("-v", "--version", action="version", 
               version="PDBMap version 1.8")
   parser.add_argument("cmd",nargs='?', 
-              help="PDBMap subroutine: refresh, load_pdb, load_unp, load_data, intersect, visualize")
+              help="PDBMap subroutine: refresh, load_pdb, load_unp, load_data, load_swiss, delete_swiss, intersect, visualize")
   parser.add_argument("args",nargs=argparse.REMAINDER, 
               help="Arguments to cmd")
   parser.add_argument("--dbhost", 
@@ -598,6 +600,7 @@ __  __  __
       msg = "WARNING (PDBMap) Uploading %d Human Swiss-Prot PDB structures.\n"%len(all_pdb_files)
       sys.stderr.write(msg)
       n = len(all_pdb_files)
+      # import pdb; pdb.set_trace()
       # If this is a parallel command with partition parameters
       if args.ppart != None and args.ppidx != None:
         psize = n / args.ppart # floor
@@ -703,6 +706,10 @@ __  __  __
         pdbmap.load_unp(unp,label=args.slabel)
 
   ## load_model ##
+  elif args.cmd == "delete_swiss":
+    io = PDBMapIO(args.dbhost,args.dbuser,
+                            args.dbpass,args.dbname,slabel='swiss')
+    io.delete_all_swiss()
   elif args.cmd == "load_swiss":
     pdbmap = PDBMap(idmapping=args.idmapping,sec2prim=args.sec2prim,
                     sprot=args.sprot,
