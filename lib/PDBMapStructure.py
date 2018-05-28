@@ -16,6 +16,7 @@
 
 # See main check for cmd line parsing
 import sys,os,csv,copy,time,random,tempfile
+import logging
 import subprocess as sp
 import numpy as np
 from Bio.PDB.Structure import Structure
@@ -28,6 +29,8 @@ from lib.PDBMapAlignment import PDBMapAlignment
 from warnings import filterwarnings,resetwarnings
 from Bio.PDB.PDBExceptions import PDBConstructionWarning
 
+logger = logging.getLogger(__name__)
+
 # Import helper for PyRosetta
 def import_rosetta():
   if not import_rosetta.imported:
@@ -38,7 +41,7 @@ def import_rosetta():
       rosetta.init()
       import_rosetta.imported = True
     except:
-      sys.stderr.write("PyRosetta not found. Rosetta utilities are unavailable.\n")
+      logger.critical("PyRosetta not found. Rosetta utilities are unavailable.\n")
 import_rosetta.imported = False
 
 from multiprocessing import Pool,cpu_count
@@ -91,7 +94,7 @@ class PDBMapStructure(Structure):
       # Align to reference sequence if one is provided
       self.refseq = refseq
       if self.refseq:
-        print "Aligning %s to reference sequence"%self.id
+        logger.info("Aligning %s to reference sequence"%self.id)
         self.align2refseq(self.id,refseq)
 
   def __str__(self):
@@ -159,7 +162,7 @@ class PDBMapStructure(Structure):
     for c in self.get_chains():
       if c.id not in refseq:
         msg = "\nWARNING: No reference sequence provided for chain %s alignment.\n"%c.id
-        sys.stderr.write(msg)
+        logger.warn(msg)
         continue
       refdict = dict((i+1,(r,"NA",0,0,0)) for i,r in enumerate(refseq[c.id]))
       c.transcript = PDBMapTranscript("ref","ref","ref",refdict)
@@ -201,11 +204,13 @@ class PDBMapStructure(Structure):
       return self.transcripts
     # Identify and align corresponding transcripts
     for chain in self.structure[0]:
-      print "   # Getting transcripts for %s.%s"%(self.id,chain.id)
-      # Query all transcripts associated with the chain's UNP ID
+      logger.info( "# Getting transcripts for %s.%s"%(self.id,chain.id))
+      # Query all transcripts associated with the chain's UNP ID (as listed in DBREF UNP)
       candidate_transcripts = PDBMapTranscript.query_from_unp(chain.unp)
       if len(candidate_transcripts) < 1:
-        error_msg += "No EnsEMBL transcript matches %s.%s (%s); "%(self.id,chain.id,chain.unp)
+        temp = "No EnsEMBL transcript matches the DBREF UNP entry in %s.%s (%s); "%(self.id,chain.id,chain.unp)
+        logger.warning(temp)
+        error_msg += temp
       # Align chains candidate transcripts
       alignments = {}
       for trans in candidate_transcripts:
@@ -219,7 +224,9 @@ class PDBMapStructure(Structure):
             alignments[alignment.transcript.gene].append(alignment)
         else:
           # Note that at least one transcript was dropped due to low alignment quality
-          error_msg += "%s (%s.%s (%s)) dropped due to low alignment quality (%.2f); "%(trans.transcript,self.id,chain.id,chain.unp,alignment.perc_identity)
+          temp = "%s (%s.%s (%s)) dropped due to low alignment quality (%.2f); "%(trans.transcript,self.id,chain.id,chain.unp,alignment.perc_identity)
+          logger.warning(temp)
+          error_msg += temp
       #FIXME: Find the maximum sequence identity and drop any alignment < max
       #FIXME: Find the maximum alignment score and drop any alignment < max
       #FIXME: Keep all remaining transcripts. They are all valid.
@@ -316,7 +323,7 @@ class PDBMapStructure(Structure):
       io.set_structure(self.structure)
       io.save(tf.name)
     cmd  = ['lib/clean_pdb.py',tf.name,'ignorechain','nopdbout']
-    print "\n%s"%' '.join(cmd)
+    logger.info("Shell to: %s"%' '.join(cmd))
     proc = sp.Popen(cmd,stdout=sp.PIPE)
     s = p.get_structure(self.get_id(),proc.stdout)
     p = lib.PDBMapIO.PDBMapParser()
@@ -331,33 +338,33 @@ class PDBMapStructure(Structure):
     c,m = mut
     c = c if c else ' '
     a1,r,a2 = m[0],int(m[1:-1]),m[-1]
-    print "\nSimulating mutation: %s%s%s"%(a1,r,a2)
+    logger.info( "\nSimulating mutation: %s%s%s"%(a1,r,a2) )
     # Adjust for alignment between reference and structure
     if "alignment" in dir(self.structure[0][c]):
-      print "Reference position %d is aligned with PDB position..."%r,
+      logger.info( "Reference position %d is aligned with PDB position..."%r)
       if r in self.structure[0][c].alignment.seq2pdb:
         r = self.structure[0][c].alignment.seq2pdb[r]
       else:
         if strict: raise Exception("PDB cannot map position %d"%r)
-        else: print 'NA'; return None
-      print r
+        else: logger.info( 'NA'); return None
+      logger.info( r )
     # Adjust for alignment between structure and pose
-    print "The reference allele is %s"%a1
-    print "The observed  allele is %s"%self.structure[0][c][r].rescode
-    print "The alternate allele is %s\n"%a2
+    logger.info( "The reference allele is %s"%a1 )
+    logger.info( "The observed  allele is %s"%self.structure[0][c][r].rescode )
+    logger.info( "The alternate allele is %s\n"%a2 )
     # Check that the reference amino acid matches observed amino acid
     if not self.structure[0][c][r].rescode == a1:
       if strict: raise Exception("Reference allele does not match.")
       else: return None
-    print "Structure position %d is aligned with pose position..."%r,
+    logger.info( "Structure position %d is aligned with pose position..."%r)
     if r in self._pdb2pose[0][c]:
       r = self._pdb2pose[0][c][r]
     else:
       if strict: raise Exception("Pose cannot map position %d"%r)
-      else: print 'NA'; return None
-    print r
+      else: logger.info( 'NA'); return None
+    logger.info( r )
     try:
-      print "Inserting the alternate allele...\n"
+      logger.info( "Inserting the alternate allele..." )
       pose = mutants.mutate_residue(pose,r,a2,pack_radius=10)
     except:
       if strict: raise
@@ -367,25 +374,25 @@ class PDBMapStructure(Structure):
   def pmutate(self,muts,maxprocs=cpu_count(),strict=True):
     """ Handles parallelization of point mutations """
     if len(muts) < 2:
-      print "\n## Only one mutation to model. No workers spawned. ##\n"
+      logger.info( "## Only one mutation to model. No workers spawned. ##" )
       return [self.mutate(muts[0],strict=strict)]
     else:
-      print "\n## Modeling mutations in serial. No workers spawned. ##\n"
+      logger.info( "## Modeling mutations in serial. No workers spawned. ##")
       return [self.mutate(m,strict=strict) for m in muts]
-    # print "Spawning a pool of %d mutate workers"%(min(len(muts),maxprocs))
+    # logger.info( "Spawning a pool of %d mutate workers"%(min(len(muts),maxprocs))
     # pool = Pool(processes=min(len(muts),maxprocs))
     # return pool.map(unwrap_self_mutate,zip([self]*len(muts),muts,[strict]*len(muts)))
 
   def prelax(self,iters=1,maxprocs=cpu_count()):
     """ Handles parallelization of relaxation """
     if iters < 2:
-      print "\n## Only one iteration of FastRelax. No workers spawned. ##\n"
+      logger.info( "## Only one iteration of FastRelax. No workers spawned. ##" )
       sr    = self.relax()
       sc    = sr.score()
       rmsd  = sr.rmsd(self)
       farep = sr.fa_rep()
       return sr,sc,np.nan,np.nan,rmsd,np.nan,np.nan,farep
-    print "\n## Spawning a pool of %d relax workers ##\n"%(min(iters,maxprocs))
+    logger.info("## Spawning a pool of %d relax workers ##\n"%(min(iters,maxprocs)))
     pool     = Pool(processes=min(iters,maxprocs))
     ensemble = pool.map(unwrap_self_relax,zip([self]*iters))
     scores = [e.score()    for e in ensemble]
@@ -466,7 +473,7 @@ def multidigit_rand(digits):
 
 # Main check
 if __name__== "__main__":
-  sys.stderr.write("Class definition. Should not be called from command line.")
+  logger.critical("Class definition. Should not be called from command line.")
   sys.exit(1)
 
 # This class was a pain in the ass to write. Thank you to:

@@ -17,6 +17,7 @@ import sys,os,csv,commands
 from PDBMapProtein import PDBMapProtein
 
 import logging
+logger = logging.getLogger(__name__)
 
 class PDBMapTranscript():
 	
@@ -53,11 +54,12 @@ class PDBMapTranscript():
       msg  = "  WARNING (UniProt) %s is a secondary UniProt AC. "%unpid
       unpid = PDBMapProtein._sec2prim[unpid]
       msg += "Using primary AC: %s\n"%unpid
-      sys.stderr.write(msg)
+      logger.warning(msg)
     transids = PDBMapProtein.unp2enst(unpid)
     if len(transids) < 1:
-      msg = "\n  WARNING (query_from_unp) No transcripts match %s\n"%unpid
-      sys.stderr.write(msg)
+      # import pdb; pdb.set_trace()
+      msg = "WARNING (query_from_unp) No transcripts match %s\n"%unpid
+      logger.warning(msg)
     # Query all transcript candidates and return
     res = []
     for transid in transids:
@@ -66,8 +68,8 @@ class PDBMapTranscript():
         res.append(trans)
     # Only report an error if NO transcript matches were identified.
     if not res:
-      msg = "   WARNING (PDBMapTranscript) No valid transcripts identified for %s\n"%unpid
-      sys.stderr.write(msg)
+      msg = "No valid transcripts identified for %s\n"%unpid
+      logger.warning(msg)
     return res
 
   @classmethod
@@ -81,6 +83,7 @@ class PDBMapTranscript():
     cmd = "perl lib/transcript_to_genomic.pl %s"%transid
     status, output = commands.getstatusoutput(cmd)
     if status > 0:
+      logger.warn("Exit Code of %d from perl lib/transcript_to_genomic.pl %s stdout:\n%s"%(status,transid,output))
       # msg = "   WARNING (transcript_to_genomic.pl) %s: %s\n"%(transid,output)
       # sys.stderr.write(msg)
       PDBMapTranscript.cache_transcript(transid,None)
@@ -104,7 +107,7 @@ class PDBMapTranscript():
                       'chr9','chr10','chr11','chr12','chr13','chr14','chr15',
                       'chr16','chr17','chr18','chr19','chr20','chr21','chr22',
                       'chrX','chrY','chrMT']:
-        logging.getLogger(__name__).warn("Ignoring non-standard chromosome %s returned from \'%s\' command output"%(chrom,cmd))
+        logger.warn("Ignoring non-standard chromosome %s returned from \'%s\' command output"%(chrom,cmd))
         return None
       strand     = int(fields[8])
       sequence[seqid] = (rescode,chrom,start,end,strand)
@@ -139,5 +142,5 @@ aa_code_map = {"ala" : "A",
 
 # Main check
 if __name__== "__main__":
-  sys.stderr.write("Class definition. Should not be called from command line.\n")
+  logger.critical("Class definition. Should not be called from command line.")
   sys.exit(1)
