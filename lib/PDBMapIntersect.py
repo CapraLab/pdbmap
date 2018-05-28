@@ -17,8 +17,10 @@
 
 # See main check for cmd line parsing
 from lib import PDBMapIO
-import sys,os,csv,random
+import sys,os,csv,random,tempfile
 import subprocess as sp
+import logging
+logging.basicConfig(Level='INFO')
 
 class PDBMapIntersect():
   def __init__(self,pdbmapio):
@@ -61,8 +63,8 @@ class PDBMapIntersect():
     # dtype options: Genomic, [Protein, Structural]
     
     # Define the two temp filenames
-    temp1  = "temp/%d.TEMP"%multidigit_rand(10)
-    temp2  = "temp/%d.TEMP"%multidigit_rand(10)
+    temp1  = '' # "temp/%d.TEMP"%multidigit_rand(10)
+    temp2  = '' # "temp/%d.TEMP"%multidigit_rand(10)
     try: # Ensure proper file cleanup
       # Query and write data ranges to temp file
       if dtype == 'Genomic':
@@ -80,7 +82,8 @@ class PDBMapIntersect():
       else:
         msg = "ERROR (PDBMapIntersect) %s intersection is not a valid option."
         raise Exception(msg%dtype)
-      with open(temp1,'wb') as fout:
+      with tempfile.NamedTemporaryFile(delete=False) as fout:
+        temp1 = fout.name
         writer = csv.writer(fout,delimiter='\t')
         if dlabel:
           data = self.io.secure_query(query,(dlabel,),cursorclass='SSCursor')
@@ -97,7 +100,8 @@ class PDBMapIntersect():
       query += "ON a.label=b.label AND a.transcript=b.transcript AND a.seqid=b.trans_seqid "
       if slabel:
         query += "WHERE b.label=%s "
-      with open(temp2,'wb') as fout:
+      with tempfile.NamedTemporaryFile(delete=False) as fout:
+        temp2 = fout.name
         writer = csv.writer(fout,delimiter='\t')
         if slabel:
           structures = self.io.secure_query(query,(slabel,),cursorclass='SSCursor')
@@ -121,6 +125,8 @@ class PDBMapIntersect():
       nrows = self.io.upload_intersection(parse_intersection(parser),
                       buffer_size=buffer_size)
 
+      os.remove(temp1)
+      os.remove(temp2)
       # Remove temp files only if no exception
       #sp.check_call(["rm","-f",temp1])
       #sp.check_call(["rm","-f",temp2])
@@ -129,6 +135,7 @@ class PDBMapIntersect():
       msg  = "ERROR (PDBMapIntersect) Exception during "
       msg += "%s Intersection of %s and %s: %s"%(dtype,dlabel,slabel,str(e))
       sys.stderr.write(msg+'\n')
+      logging.getLogger(__name__).critical(msg)
       raise
       # raise Exception(msg)
     finally:
