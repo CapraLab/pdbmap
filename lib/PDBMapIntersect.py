@@ -20,7 +20,7 @@ from lib import PDBMapIO
 import sys,os,csv,random,tempfile
 import subprocess as sp
 import logging
-logging.basicConfig(Level='INFO')
+logger = logging.getLogger(__name__)
 
 class PDBMapIntersect():
   def __init__(self,pdbmapio):
@@ -41,16 +41,19 @@ class PDBMapIntersect():
       msg = "ERROR (PDBMapIntersect) %s intersection is not a valid option."
       raise Exception(msg%dtype)
     query  = "INSERT IGNORE INTO GenomicIntersection "
-    query += "SELECT a.label,c.label,c.structid,c.chain,c.chain_seqid,a.gc_id,NULL,a.gd_id,c.res_id "
+    query += "SELECT a.label,act.label,act.structid,act.chain,actr.chain_res_num,a.gc_id,NULL,a.gd_id,NULL" # ,c.res_id "
     query += "FROM GenomicConsequence as a "
     query += "INNER JOIN Transcript as b "
     query += "ON (a.transcript='' OR a.transcript=b.transcript) AND a.chr=b.chr "
     query += "AND a.start >= b.start AND a.end <= b.end "
-    query += "INNER JOIN Alignment as c "
-    query += "ON b.transcript=c.transcript AND b.seqid=c.trans_seqid "
+    # query += "INNER JOIN Alignment as c "
+    # query += "ON b.transcript=c.transcript AND b.seqid=c.trans_seqid "
+    query += "INNER JOIN AlignChainTranscript as act "
+    query += "ON b.transcript=act.transcript "
+    query += "LEFT OUTER JOIN AlignChainTranscriptResidue as actr ON act.al_id = actr.al_id "
     query += "WHERE a.label=%s "
     if slabel:
-      query += "AND b.label=%s AND c.label=%s"
+      query += "AND b.label=%s AND act.label=%s"
     if slabel:
       self.io.secure_command(query,(dlabel,slabel,slabel))
     else:
@@ -94,12 +97,22 @@ class PDBMapIntersect():
           writer.writerow(row)
 
       # Query and write PDBMap ranges to temp file, adjusted for UCSC indexing
-      query  = "SELECT chr,start-1,end-1,structid,chain,chain_seqid,a.transcript,a.label FROM "
+      query  = "SELECT chr,start-1,end-1,structid,chain,chain_res_num,a.transcript,a.label FROM "
       query += "Transcript as a "
-      query += "INNER JOIN Alignment as b "
-      query += "ON a.label=b.label AND a.transcript=b.transcript AND a.seqid=b.trans_seqid "
+      # query += "INNER JOIN Alignment as b "
+      # query += "ON a.label=b.label AND a.transcript=b.transcript AND a.seqid=b.trans_seqid "
+      query += "INNER JOIN AlignChainTranscript as act "
+      query += "ON a.transcript=act.transcript "
+      # This is an INNER JOIN because we only want one record per transcript sequence record
+      query += "INNER JOIN AlignChainTranscriptResidue as actr ON act.al_id = actr.al_id and actr.trans_seqid = a.seqid "
       if slabel:
-        query += "WHERE b.label=%s "
+        query += "WHERE act.label=%s "
+# Bring this back if we have to interest specific structures
+# """AND act.structid IN (
+# 'ENSP00000256737.3_1',
+# 'ENSP00000386264_1',
+# 'ENSP00000386609_4')"""
+
       with tempfile.NamedTemporaryFile(delete=False) as fout:
         temp2 = fout.name
         writer = csv.writer(fout,delimiter='\t')
@@ -135,7 +148,7 @@ class PDBMapIntersect():
       msg  = "ERROR (PDBMapIntersect) Exception during "
       msg += "%s Intersection of %s and %s: %s"%(dtype,dlabel,slabel,str(e))
       sys.stderr.write(msg+'\n')
-      logging.getLogger(__name__).critical(msg)
+      logger.critical(msg)
       raise
       # raise Exception(msg)
     finally:

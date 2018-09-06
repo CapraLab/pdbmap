@@ -34,6 +34,7 @@ from Bio.PDB.PDBExceptions import PDBConstructionWarning
 import logging
 logging.basicConfig(format='%(asctime)s %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
     datefmt='%d-%m-%Y:%H:%M:%S',)
+logger = logging.getLogger(__name__)
 
 class PDBMapIO(PDBIO):
   def __init__(self,dbhost=None,dbuser=None,dbpass=None,dbname=None,slabel="",dlabel="",createdb=False):
@@ -55,7 +56,7 @@ class PDBMapIO(PDBIO):
   def __del__(self):
     # Guarantee all database connections are closed
     for con in self._cons:
-      logging.getLogger(__name__).info("Calling con.close() to close SQL connection")
+      logger.info("Calling con.close() to close SQL connection")
       con.close()
 
 
@@ -263,15 +264,16 @@ class PDBMapIO(PDBIO):
         queries.append(rquery[:-1])
 
     # Upload the transcripts
+    # Inner exception if empty list, outer exception if error during query
+    if not len(s.get_transcripts(io=self)):
+      msg = "No transcripts for structure %s, proteins: %s"%(s.id,','.join([c.unp for m in s for c in m]))
+      logger.critical(msg)
+      return (0)
+
     try:
       tquery  = "INSERT IGNORE INTO Transcript "
       tquery += "(label,transcript,protein,gene,seqid,rescode,chr,start,end,strand) "
       tquery += "VALUES "
-      # Inner exception if empty list, outer exception if error during query
-      if not len(s.get_transcripts(io=self)):
-        msg = "No transcripts for structure %s, proteins: %s"%(s.id,','.join([c.unp for m in s for c in m]))
-        logging.getLogger(__name__).warn(msg)
-        raise Exception(msg)
       seen = set([])
       for t in s.get_transcripts(io=self):
         if t.transcript not in seen or seen.add(t.transcript):
@@ -287,34 +289,8 @@ class PDBMapIO(PDBIO):
             tquery += '"%s",%d,%d,%d),'%(chr,start,end,strand)
       queries.append(tquery[:-1])
     except Exception as e:
-      msg = "ERROR (PDBMapIO) Failed to get transcripts for %s: %s"%(s.id,str(e).rstrip('\n'))
+      msg = "ERROR (PDBMapIO) Failed to INSERT transcripts for %s: %s"%(s.id,str(e).rstrip('\n'))
       raise Exception(msg)
-
-    # Upload the alignments
-    aquery  = "INSERT IGNORE INTO Alignment "
-    aquery += "(label,structid,chain,chain_seqid,transcript,trans_seqid) "
-    aquery += "VALUES "
-    for a in s.get_alignments():
-      for c_seqid,t_seqid in a.pdb2seq.iteritems():
-        # If length exceeds 10 thousand characters, start a new query
-        if len(aquery) > 10000:
-          queries.append(aquery[:-1])
-          aquery  = "INSERT IGNORE INTO Alignment "
-          aquery += "(label,structid,chain,chain_seqid,transcript,trans_seqid) "
-          aquery += "VALUES "
-        aquery += '("%s","%s","%s",%d,'%(self.slabel,s.id,a.chain.id,c_seqid)
-        aquery += '"%s",%d),'%(a.transcript.transcript,t_seqid)
-    queries.append(aquery[:-1])
-
-    # Upload the alignment scores
-    asquery = "INSERT IGNORE INTO AlignmentScore "
-    asquery += "(label,structid,chain,transcript,score,perc_aligned,perc_identity,alignment) "
-    asquery += "VALUES "
-    for a in s.get_alignments():
-      asquery += '("%s","%s","%s","%s",%f,%f,%f,"%s"),'% \
-                  (self.slabel,s.id,a.chain.id,a.transcript.transcript,
-                   a.score,a.perc_aligned,a.perc_identity,a.aln_str)
-    queries.append(asquery[:-1])
 
     # Execute all queries at once to ensure everything completed.
     try:
@@ -330,7 +306,89 @@ class PDBMapIO(PDBIO):
       raise
     finally:
       self._close()
+
+    # Upload the alignments
+    # These should be done alignment by alignment as there is a master:detail relationship here to maintain
+    for a in s.get_alignments():
+      aquery  = "INSERT IGNORE INTO AlignChainTranscript "
+      aquery += "(label,structid,chain,transcript,score,perc_aligned,perc_identity,alignment) " # chain_seqid,transcript,trans_seqid) "
+      aquery += 'VALUES ("%s","%s","%s","%s",%f,%f,%f,"%s")'%(self.slabel,s.id,a.chain.id,a.transcript.transcript,a.score,a.perc_aligned,a.perc_identity,a.aln_str)
+
+      last_al_id = 0
+      # Execute all queries at once to ensure everything completed.
+      try:
+        self._connect()
+        self._c.execute(aquery)
+        last_al_id = self._c.lastrowid
+        # self._con.commit() # Don't commit quite yet!
+      except:
+        msg  = "ERROR (PDBMapIO) Query failed for %s: "%s.id
+        msg += "%s\n"%self._c._last_executed
+        sys.stderr.write(msg)
+        self._con.rollback()
+        raise
+
+      if last_al_id == 0: # This is a drag - but if the INSERT was IGNORED we have to get the last_al_id the hard way
+        self._c.execute("SELECT al_id FROM AlignChainTranscript where label = %s and structid = %s and chain = %s and transcript = %s",
+                                 (self.slabel,s.id,a.chain.id,a.transcript.transcript))
+        for (temp_al_id) in cursor:
+          last_al_id = temp_al_id
+          break;
+
+      assert (last_al_id != 0),"al_id referential problems in AlignChainTranscript"
+
+      # We'll close after writing all the rewidue mappings below
+      # finally:
+      #  self._close()
+
+      queries = []
+      INSERT_VALUES = "INSERT IGNORE INTO AlignChainTranscriptResidue (chain_res_num, chain_res_icode, trans_seqid, al_id) VALUES "
+      aquery  =       INSERT_VALUES
+
+      for c_seqid,t_seqid in a.pdb2seq.iteritems():
+        # If length exceeds 10 thousand characters, start a new query
+        if len(aquery) > 10000:
+          queries.append(aquery[:-1])
+          aquery  = INSERT_VALUES
+        aquery += '(%d,"%s",%d,%d),'%(c_seqid[1],c_seqid[2],t_seqid,last_al_id)
+
+        queries.append(aquery[:-1])
+
+      # Execute all queries at once to ensure everything completed.
+      try:
+        for q in queries[::-1]:
+          self._c.execute(q)
+        self._con.commit()
+      except:
+        msg  = "ERROR (PDBMapIO) Query failed for %s: "%s.id
+        msg += "%s\n"%self._c._last_executed
+        sys.stderr.write(msg)
+        self._con.rollback()
+        raise
+      finally:
+        self._close()
+    # End for a in get_alignments()
     return(0)
+
+  def delete_all_modbase (self):
+    self._connect()
+    deleteCommands = [
+      "DELETE FROM GenomicIntersection WHERE slabel='modbase'",
+      "DELETE FROM Alignment WHERE label='modbase'",
+      "DELETE FROM AlignmentScore WHERE label='modbase'",
+      "DELETE FROM Transcript WHERE label='modbase'",
+      "DELETE FROM Residue WHERE label='modbase'",
+      "DELETE FROM Chain WHERE label='modbase'",
+      "DELETE FROM Model"]
+
+    for mquery in deleteCommands:
+      logger.info(mquery)
+      try:
+        self._c.execute(mquery)
+      except (MySQLdb.Error, MySQLdb.Warning) as e:
+        logger.critical(e)
+        sys.exit(1)
+    self._close()
 
   def upload_model(self):
     """ Uploades the current model in PDBMapIO """
@@ -345,8 +403,8 @@ class PDBMapIO(PDBIO):
     mquery  = 'INSERT IGNORE INTO Model '
     mquery += '(label,modelid,unp,method,no35,rmsd,mpqs,evalue,ga341,zdope,pdbid,chain,identity)'
     mquery += 'VALUES ('
-    mquery += '"%(label)s","%(id)s","%(unp)s","%(tvsmod_method)s",'
-    mquery += '%(tvsmod_no35)s,%(tvsmod_rmsd)s,%(mpqs)s,%(evalue)s,%(ga341)f,'
+    mquery += '"%(label)s","%(id)s","%(unp)s","%(tsvmod_method)s",'
+    mquery += '%(tsvmod_no35)s,%(tsvmod_rmsd)s,%(mpqs)s,%(evalue)s,%(ga341)f,'
     mquery += '%(zdope)s,"%(pdbid)s","%(chain)s",%(identity)f)'
     mfields = dict((key,m.__getattribute__(key)) for key in dir(m) 
                   if isinstance(key,collections.Hashable))
@@ -371,11 +429,11 @@ class PDBMapIO(PDBIO):
       "DELETE FROM Swiss"]
 
     for mquery in deleteCommands:
-      logging.getLogger(__name__).info(mquery)
+      logger.info(mquery)
       try:
         self._c.execute(mquery)
       except (MySQLdb.Error, MySQLdb.Warning) as e:
-        logging.getLogger(__name__).critical(e)
+        logger.critical(e)
         sys.exit(1)
     self._close()
 
@@ -399,7 +457,6 @@ class PDBMapIO(PDBIO):
     mquery += '"%(pdbid)s","%(chain)s",%(identity)f,"%(ostat)s","%(mthd)s")'
     mfields = dict((key,m.__getattribute__(key)) for key in dir(m) if isinstance(key,collections.Hashable))
     mfields["label"] = self.slabel
-    # import pdb; pdb.set_trace()
     mfields.update(remark3_metrics)
     mfields["identity"] = float(remark3_metrics["sid"])
     mquery = mquery%mfields
@@ -623,7 +680,7 @@ class PDBMapIO(PDBIO):
     q = self.secure_query(query,qvars=('swiss',base_unp,base_unp),
                                         cursorclass='Cursor')
     entities.extend([r[0] for r in q])
-    logging.getLogger(__name__).info("%s found in %d structures/models."%(unpid,len(entities)))
+    logger.info("%s found in %d structures/models."%(unpid,len(entities)))
     res = []
     for entity in entities:
       entity_type = self.detect_entity_type(entity)
@@ -789,7 +846,7 @@ class PDBMapIO(PDBIO):
           self._con = con
         else:
           # Remove dead connection
-          logging.getLogger(__name__).info("Calling con.close() to close SQL connection")
+          logger.info("Calling con.close() to close SQL connection")
           con.close()
           self._cons.remove(con)
     # If none was found, open a new connection with desired cursorclass
@@ -798,7 +855,7 @@ class PDBMapIO(PDBIO):
       nMaxRetries = 100000
       while (True):
         trycount += 1
-        logging.getLogger(__name__).info("Attempting connect to %s"%self.dbhost)
+        logger.info("Connecting to %s with %s"%(self.dbhost,cursorclass.__name__))
         try:
           if usedb:
             if self.dbpass:
@@ -819,7 +876,7 @@ class PDBMapIO(PDBIO):
                   user=self.dbuser,cursorclass=cursorclass)
           # Add to connection pool and set as active connection
           # This point is "success" from MySQLdb.connect
-          logging.getLogger(__name__).info("Successful connect to %s"%self.dbhost)
+          # logger.info("Successful connect to %s"%self.dbhost)
           self._cons.append(con)
           self._con = con
           # Success... Leave while loop
@@ -827,17 +884,17 @@ class PDBMapIO(PDBIO):
         except MySQLdb.OperationalError as e:
           if e[0] == 1040:          
             msg = "Unable to connect to connect to mySQL: %s\n"%e
-            logging.getLogger(__name__).warn(msg)
+            logger.exception(msg)
             sys.stderr.write(msg)
             # If nMaxRetries, terminate with exception
             if (trycount == nMaxRetries):
               msg = "Max retries of %d reached\n"%nMaxRetries
               logging.exception(msg)
-              raise
+              raise Exception(msg)
             else:
               waitTime = 30*(1+trycount % 5)
               msg = "Try %d failed.  Waiting %d secs and retrying...\n"%(trycount,waitTime)
-              logging.getLogger(__name__).warn(msg)
+              logger.exception(msg)
               time.sleep(waitTime) # Wait 30/60/90 etc seconds and retry (return to top of while loop)
             # Loop back through while loop
           else:
@@ -854,7 +911,7 @@ class PDBMapIO(PDBIO):
     return self._c
 
   def _close(self):
-    logging.getLogger(__name__).info("Closing SQL connection")
+    # logger.info("Closing SQL connection")
     self._c.close() # Close only the cursor
     return
 
@@ -865,7 +922,7 @@ class PDBMapIO(PDBIO):
       logmsg += query%qvars
     else:
       logmsg += query
-    logging.getLogger(__name__).info(logmsg)
+    logger.info(logmsg)
 
     if cursorclass == 'SSDictCursor':
       self._connect(cursorclass=MySQLdb.cursors.SSDictCursor)
@@ -887,7 +944,7 @@ class PDBMapIO(PDBIO):
       msg += " Provided args: %s"%str(qvars)
       if "_last_executed" in dir(self._c):
         msg += "\n Executed Query: \n%s"%self._c._last_executed
-      logging.getLogger(__name__).exception(msg)
+      logger.exception(msg)
       raise Exception(msg)
     finally:
       # msg = "Executed Query: \n%s\n"%self._c._last_executed
@@ -909,15 +966,15 @@ class PDBMapIO(PDBIO):
     
     query_hash_filename = os.path.join(cache_dir,query_hash)
     logmsg += "\nquery_hash = %s"%query_hash_filename
-    logging.getLogger(__name__).info(logmsg)
+    logger.info(logmsg)
     if os.path.exists(query_hash_filename):
-      logging.getLogger(__name__).info("returning query results from cache")
+      logger.info("returning query results from cache")
       with open(query_hash_filename,'rb') as cache_file_handle:
         rows = pickle.load(cache_file_handle)
         for row in rows:
           yield row
     else: 
-      logging.getLogger(__name__).info("Cache not found.  Executing new query")
+      logger.info("Cache not found.  Executing new query")
       if cursorclass == 'SSDictCursor':
         self._connect(cursorclass=MySQLdb.cursors.SSDictCursor)
       elif cursorclass == 'SSCursor':
@@ -939,7 +996,7 @@ class PDBMapIO(PDBIO):
         msg += " Provided args: %s"%str(qvars)
         if "_last_executed" in dir(self._c):
           msg += "\n Executed Query: \n%s"%self._c._last_executed
-        logging.getLogger(__name__).exception(msg)
+        logger.exception(msg)
         raise Exception(msg)
       finally:
         # msg = "Executed Query: \n%s\n"%self._c._last_executed
@@ -952,12 +1009,12 @@ class PDBMapIO(PDBIO):
         try: # Atomic rename can fail due to multi-process contention.  don't halt for that!
           os.link(cache_file_handle.name,query_hash_filename)
         except:
-          logging.getLogger(__name__).warn("Unable to rename %s to %s"%(cache_file_handle.name,query_hash_filename))
+          logger.warn("Unable to rename %s to %s"%(cache_file_handle.name,query_hash_filename))
         else:
           umask = os.umask(0)
           os.umask(umask)
           os.chmod(query_hash_filename, 0o666 & ~umask)
-          logging.getLogger(__name__).info("Query results saved to %s"%query_hash_filename)
+          logger.info("Query results saved to %s"%query_hash_filename)
       for row in rows:
         yield row
 
@@ -989,8 +1046,7 @@ class PDBMapIO(PDBIO):
                 'lib/create_schema_Chain.sql',
                 'lib/create_schema_Residue.sql',
                 'lib/create_schema_Transcript.sql',
-                'lib/create_schema_Alignment.sql',
-                'lib/create_schema_AlignmentScore.sql',
+                'lib/create_schema_AlignChainTranscript.sql',
                 'lib/create_schema_GenomicData.sql',
                 'lib/create_schema_GenomicConsequence.sql',
                 'lib/create_schema_GenomicIntersection.sql',
