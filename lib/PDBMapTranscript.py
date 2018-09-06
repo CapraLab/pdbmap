@@ -57,7 +57,6 @@ class PDBMapTranscript():
       logger.warning(msg)
     transids = PDBMapProtein.unp2enst(unpid)
     if len(transids) < 1:
-      # import pdb; pdb.set_trace()
       msg = "WARNING (query_from_unp) No transcripts match %s\n"%unpid
       logger.warning(msg)
     # Query all transcript candidates and return
@@ -81,6 +80,7 @@ class PDBMapTranscript():
       return trans
     # Query the Ensembl API for the transcript
     cmd = "perl lib/transcript_to_genomic.pl %s"%transid
+    logger.info("Executing: %s"%cmd)
     status, output = commands.getstatusoutput(cmd)
     if status > 0:
       logger.warn("Exit Code of %d from perl lib/transcript_to_genomic.pl %s stdout:\n%s"%(status,transid,output))
@@ -89,11 +89,23 @@ class PDBMapTranscript():
       PDBMapTranscript.cache_transcript(transid,None)
       return None
     sequence = {} # store sequence keyed on seqid
+    protein = None # IF this is not replaced, then skip out below
     for line in output.split('\n'):
       if line.startswith('#'): continue
       fields = line.split('\t')
+      if len(fields) < 1: # Let's not be upset with a blank line
+        continue
+      if len(fields) < 9: # Let's report on lines that don't make sense
+        logger.warn("Incomplete line returned from transcript_to_genomic.pl:\n%s"%line)
+        continue
       transcript = fields[0]
-      protein    = PDBMapProtein.ensp2unp(fields[1])[0]
+      unp_list    = PDBMapProtein.ensp2unp(fields[1])
+
+      if len(unp_list) < 1:
+        logger.error("No unps were found for transcipt_to_genomic.pl's protein: [%s]"%fields[1])
+        continue
+
+      protein = unp_list[0]
       gene       = fields[2]
       seqid      = int(fields[3])
       rescode    = fields[4].upper()
@@ -112,6 +124,10 @@ class PDBMapTranscript():
       strand     = int(fields[8])
       sequence[seqid] = (rescode,chrom,start,end,strand)
     # Return a new PDBMapTranscript object
+    if not protein:
+      logger.warn("unp protein was not identified for this transcript perl")
+      return None
+
     trans = PDBMapTranscript(transcript,protein,gene,sequence)
     PDBMapTranscript.cache_transcript(transid,trans)
     return trans
