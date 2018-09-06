@@ -15,8 +15,11 @@
 
 # See main check for cmd line parsing
 import sys,os,csv
+from collections import OrderedDict
+import logging
 from Bio import pairwise2
 from Bio.SubsMat import MatrixInfo as matlist
+logger = logging.getLogger(__name__)
 
 class PDBMapAlignment():
 
@@ -45,8 +48,95 @@ class PDBMapAlignment():
   #  return temp
 
   def align(self,chain,transcript,io=None):
-    """ Aligns one chain of a PDBMapStructure to a PDBMapTranscript """
+    """ Aligns one chain of a PDBMapStructure to a PDBMapTranscript 
+        This version handles insertion codes and returns full dictionaries rather than lists
+    """
     # Generate chain sequence (may contain gaps)
+    # Recal r.id is Biopython tuple of (heteroflag, residue number, Insert Code)
+    unsorted_c_seq = {r.id: r.rescode for r in chain}
+    # Should ensure that the final c_seq is ordered
+    c_seq = OrderedDict(sorted(unsorted_c_seq.items(), key=lambda t: t[0]))
+
+    # Get the last res#+insert code from this dict
+    # These are BIOpython residue 3-tuples and the final [0] is the tuple key (not residue value)
+
+    first_c_seq = c_seq.items()[0][0]
+    last_c_seq = c_seq.items()[-1][0]
+    # To follow Mike's earlier code, we need to add dashes 2 positions beyond the end, and 2 positions below the first  Then, resort again
+    for residue_number in range(last_c_seq[1]):
+      res_id_tuple = (' ',residue_number,' ')
+      if res_id_tuple not in c_seq:
+        c_seq[res_id_tuple] = '-'
+
+    # Finally add two extra dashes per Mike's earlier code
+    c_seq[(' ',last_c_seq[1]+1,' ')] = '-'
+    c_seq[(' ',last_c_seq[1]+2,' ')] = '-'
+
+    # Resort a final time
+    unsorted_c_seq = c_seq
+    c_seq = OrderedDict(sorted(unsorted_c_seq.items(), key=lambda t: t[0]))
+
+
+    # Generate transcript/protein sequence
+    # Transcripts are always numbered from 1, and have no 
+    # odd-ball inserts or deletes.
+    t_seq = ['-']*(1+max(transcript.sequence.keys()))
+    for i,res in transcript.sequence.iteritems():
+        t_seq[i] = res[0]
+
+    # We first try a "trivial" alignment.  This should work in all cases of
+    # swiss and modbase models
+
+    trivialAlignmentPossible = True
+    for c_resid,c_rescode in c_seq.iteritems():
+      if (c_rescode != '-'):
+        if (c_resid[2] != ' '):
+          logger.warn("chain residue %s has insert code.  Complex alignment required"%(str(c_resid)))
+          trivialAlignmentPossible = False
+          break
+
+        if (c_resid[1] < 0) or (c_resid[1] >= len(t_seq)):
+          trivialAlignmentPossible = False
+          logger.warn("chain residue %s lies outside of transcript sequence which has last residue %d"%(str(c_resid),len(t_seq)))
+          break
+ 
+        # Trivial alignment is intolerant of any variation between chian and transcript
+        if t_seq[c_resid[1]] != c_rescode:
+          trivialAlignmentPossible = False
+          logger.warn("chain residue %s has diferent AA  Transcript=%s  Chain=%s"%(str(c_resid),t_seq[c_resid[1]],c_rescode))
+          break
+
+    # If trivial, then no inserts, and every member of the 3D chain maps directly
+    # to the transcript residue of same numbering.  So, return the trival result
+    # import pdb; pdb.set_trace()
+    if trivialAlignmentPossible:
+      pdb2seq       = OrderedDict((r.id,r.id[1]) for r in chain) 
+      logger.info("Simple alignment of %d residues %s to %s"%(len(pdb2seq),str(pdb2seq.items()[0]),str(pdb2seq.items()[-1])))
+      # Provide the reverse lookup which will be 
+      seq2pdb       = OrderedDict((trans_seq, chain_seq) for chain_seq, trans_seq in pdb2seq.iteritems())
+
+      temp_aln_str = ''.join([t_seq[trans_seq] for trans_seq in seq2pdb])
+      aln_str = temp_aln_str + "\n" + temp_aln_str
+      aln_score = sum([matlist.blosum62[(t_seq[trans_seq],t_seq[trans_seq])] for trans_seq in seq2pdb])
+
+      perc_aligned = 99.0
+      perc_identity = 1.0
+    else:
+      pdb2seq_deprecated,seq2pdb_deprecated,aln_str,aln_score,perc_aligned,perc_identity = self.align_deprecated(chain,transcript)
+      # The deprecated aligner does not know about insertion codes so we have to patch that in
+      # s blank codes for now - these insertion codes are quite rare
+      pdb2seq = OrderedDict(((' ',pdb_res,' '),pdb2seq_deprecated[pdb_res]) for pdb_res in sorted(pdb2seq_deprecated))
+      logger.info("Complex alignment of %d residues %s to %s"%(len(pdb2seq),str(pdb2seq.items()[0]),str(pdb2seq.items()[-1])))
+      seq2pdb       = OrderedDict((trans_seq, chain_seq) for chain_seq, trans_seq in pdb2seq.iteritems())
+    
+    return pdb2seq,seq2pdb,aln_str,aln_score,perc_aligned,perc_identity
+
+
+
+  def align_deprecated(self,chain,transcript,io=None):
+    """ Aligns one chain of a PDBMapStructure to a PDBMapTranscript 
+    This deprecated version loses residues with insertion codes
+    """
     c_end = max([r.seqid for r in chain.get_residues()])
     c_seq = ['-' for i in range(c_end+2)]
     for r in chain.get_residues():
@@ -86,7 +176,7 @@ class PDBMapAlignment():
             aln_trans = ''.join([r[3] for r in aln_str])
             aln_str   = "<sifts>\n%s\n%s"%(aln_chain,aln_trans)
             aln_score = pairwise2.align.globalds(aln_chain.replace('-','X'),aln_trans.replace('-','X'),
-                                        matrix,gap_open,gap_extend,score_only=True)
+                                        matrix,gap_open,gap_extend,score_only=True,penalize_end_gaps=False)
             if perc_identity >= 0.85:
                 # Successfully aligned with SIFTS. Do not continue processing.
                 return pdb2seq,seq2pdb,aln_str,aln_score,perc_aligned,perc_identity
@@ -118,7 +208,7 @@ class PDBMapAlignment():
 
     # Perform pairwise alignment
     alignment = pairwise2.align.globalds(c_seq,t_seq,matrix,
-                    gap_open,gap_extend,one_alignment_only=True)
+                    gap_open,gap_extend,one_alignment_only=True,penalize_end_gaps=False)
     aln_chain, aln_trans, aln_score, begin, end = alignment[0]
 
     # Create an alignment map from chain to transcript
@@ -139,7 +229,7 @@ class PDBMapAlignment():
     aln_str = "%s\n%s"%(aln_chain,aln_trans)
     # Rescore alignment without excess transcript sequence
     aln_score = pairwise2.align.globalds(aln_chain.replace('-','X'),aln_trans.replace('-','X'),
-                                        matrix,gap_open,gap_extend,score_only=True)
+                                        matrix,gap_open,gap_extend,score_only=True,penalize_end_gaps=False)
 
     # Determine final alignment from chain -> transcript/protein
     pdb2seq = dict((c_ind[i],t_ind[i]) for i in 
