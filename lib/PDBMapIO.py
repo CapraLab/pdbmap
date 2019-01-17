@@ -1041,7 +1041,8 @@ class PDBMapIO(PDBIO):
   def check_schema(self):
     self._connect(usedb=False)
     format_dict = {'dbuser':self.dbuser,'dbhost':self.dbhost}
-    queries = [ 'lib/create_schema_Structure.sql',
+    queries = [ 'lib/create_scheme_Idmapping.sql',
+                'lib/create_schema_Structure.sql',
                 'lib/create_schema_Model.sql',
                 'lib/create_schema_Chain.sql',
                 'lib/create_schema_Residue.sql',
