@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 # Parses a directory of SIFTS XML files
 # and uploads data to mysql database
 
@@ -7,7 +7,7 @@ from collections import defaultdict
 import sys,os,glob,re
 
 # Parse config file for database parameters
-import argparse,ConfigParser
+import argparse,configparser
 conf_parser = argparse.ArgumentParser(add_help=False)
 conf_parser.add_argument("-c","--conf_file",
   help="Specify database config file",metavar="FILE")
@@ -20,7 +20,7 @@ defaults = {
   "xmldir" : None
 }
 if args.conf_file:
-  config = ConfigParser.SafeConfigParser()
+  config = configparser.ConfigParser()
   config.read([args.conf_file])
   defaults.update(dict(config.items("Genome_PDB_Mapper")))
 conf_file = args.conf_file
@@ -34,7 +34,7 @@ args.conf_file = conf_file
 
 # Check that all parameters were specified
 if not all(vars(args)):
-  print "Must provide database information and XML directory."
+  print("Must provide database information and XML directory.")
   sys.exit()
 
 # Connect to the databsae
@@ -42,13 +42,14 @@ import MySQLdb
 con = MySQLdb.connect(host=args.dbhost,user=args.dbuser,
                       passwd=args.dbpass,db=args.dbname)
 # Increase maximum packet size for this connection
-c = con.cursor()
-c.execute("SET GLOBAL max_allowed_packet=512000000")
-c.close()
+# Oops - not allowed under Redhat 7 new server!
+# c = con.cursor()
+# c.execute("SET GLOBAL max_allowed_packet=512000000")
+# c.close()
 
 # Parse the split XML files
 for xmlfile in glob.glob("%s/*.xml.gz"%args.xmldir.rstrip('/')):
-  print "Parsing %s..."%xmlfile,
+  print("Parsing %s..."%xmlfile, end=' ')
   parser = etree.XMLParser(remove_blank_text=True)
   tree   = etree.parse(xmlfile,parser)
   root   = tree.getroot()
@@ -128,10 +129,10 @@ for xmlfile in glob.glob("%s/*.xml.gz"%args.xmldir.rstrip('/')):
   try:
     c.executemany(sql,rlist)
     con.commit()
-    print "Uploaded!"
+    print("Uploaded!")
   except:
     con.rollback()
-    print "Failed to upload rows."
-    print c._last_executed
+    print("Failed to upload rows.")
+    print(c._last_executed)
     raise
   c.close()

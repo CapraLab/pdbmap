@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 #
 # Project        : PDBMap
 # Filename       : PDBMap.py
@@ -18,7 +18,7 @@
 #=============================================================================#
 
 # See main check for cmd line parsing
-import argparse,ConfigParser
+import argparse,configparser
 import traceback
 import sys,os,csv,time,pdb,glob,gzip,shutil
 import subprocess as sp
@@ -38,6 +38,8 @@ from logging.handlers import RotatingFileHandler
 from logging import handlers
 logging.basicConfig(format='%(asctime)s %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
     datefmt='%d-%m-%Y:%H:%M:%S',)
+
+LOGGER = logging.getLogger()
 
 class PDBMap():
   def __init__(self,idmapping=None,sec2prim=None,sprot=None,
@@ -85,7 +87,7 @@ class PDBMap():
                           args.dbpass,args.dbname,slabel=pdb_label)
       pdbids = list(set(PDBMapProtein.unp2pdb(unp)))
       for pdbid in pdbids:
-        print " # Processing (%s) PDB %s # "%(pdb_label,pdbid)
+        print(" # Processing (%s) PDB %s # "%(pdb_label,pdbid))
         self.load_pdb(pdbid,label=pdb_label,io=io)
         sys.stdout.flush() # Force stdout flush after each PDB
     if self.modbase and use_modbase:
@@ -96,12 +98,12 @@ class PDBMap():
       modelids = PDBMapModel.unp2modbase(unp)
       models   = [PDBMapModel.get_info(modelid) for modelid in modelids]
       for model in models:
-        print " # (%s) Processing ModBase %s #"%(mod_label,model['modelid'])
+        print(" # (%s) Processing ModBase %s #"%(mod_label,model['modelid']))
         self.load_model(model,label=mod_label,io=io,update=update)
         sys.stdout.flush() # Force stdout flush after each model
     if not pdbids and not models:
       msg = "  WARNING (PDBMap) No PDB structures or Modbase models found for %s\n"%unp
-      sys.stderr.write(msg)
+      LOGGER.warning(msg)
 
   def load_pdb(self,pdbid,pdb_fname=None,label="",io=None,update=False):
     """ Loads a given PDB into the PDBMap database """
@@ -112,19 +114,19 @@ class PDBMap():
     # Check if PDB is already in the database
     if io.structure_in_db(pdbid,label):
       if not update: # silence if updating
-        print "  VALID (PDBMap) %s already in database."%pdbid
+        print("  VALID (PDBMap) %s already in database."%pdbid)
         return 0
     # Load the PDB structure
     # import pdb; pdb.set_trace()
     if not pdb_fname:
-      pdb_fname = "%s/structures/all/pdb/pdb%s.ent.gz"%(self.pdb_dir,pdbid.lower())
-      print "  # Fetching %s"%pdbid
+      pdb_fname = "%s/structures/pdb%s.ent.gz"%(self.pdb_dir,pdbid.lower())
+      print("  # Fetching %s"%pdbid)
       if not os.path.exists(pdb_fname):
         msg = "  ERROR (PDBMap) Cannot fetch %s. %s Not in PDB mirror.\n"%(pdbid,pdb_fname)
-        sys.stderr.write(msg)
+        LOGGER.error(msg)
         return 1
     # Locate all biological assemblies
-    biounit_fnames = glob.glob("%s/biounit/coordinates/all/%s.pdb*.gz"%(self.pdb_dir,pdbid.lower()))
+    biounit_fnames = glob.glob("%s/biounits/%s.pdb*.gz"%(self.pdb_dir,pdbid.lower()))
     try: # Load the structure
       p  = PDBMapParser()
       s  = p.get_structure(pdbid,pdb_fname,biounit_fnames=biounit_fnames,io=io)
@@ -132,10 +134,10 @@ class PDBMap():
       io.upload_structure()
     except Exception as e:
       msg = "  ERROR (PDBMap) %s: %s\n\n"%(pdbid,str(e))
-      sys.stderr.write(msg)
+      LOGGER.exception(msg)
       return 1
     msg = "  VALID (PDBMap) %s complete.\n"%pdbid
-    sys.stderr.write(msg)
+    LOGGER.info(msg)
     return 0
 
   def load_swiss_to_MySQL(self,modelid,label="",io=None):
@@ -151,14 +153,14 @@ class PDBMap():
     model_fname = PDBMapSwiss.get_coord_file(modelid);
     if io.swiss_in_db(modelid,label):
       msg = "  VALID (SWISS) %s (%s) already in database.\n"%(modelid,label)
-      print msg
+      print(msg)
       return 0
-    print "Will attempt to add new swiss %s.  Fetching: %s"%(modelid,model_fname)
+    print("Will attempt to add new swiss %s.  Fetching: %s"%(modelid,model_fname))
     if not os.path.exists(model_fname):
       model_fname += '.gz' # check for compressed copy
     if not os.path.exists(model_fname):
       msg = "  ERROR (load_swiss_to_MySQL) %s not in local Swiss mirror.\nExpected file %s\n"%(modelid,model_fname)
-      sys.stderr.write(msg)
+      LOGGER.error(msg)
       return 1
 
     remark3_metrics = PDBMapSwiss.load_REMARK3_metrics(modelid)
@@ -173,13 +175,13 @@ class PDBMap():
     except Exception as e:
       exc_type, exc_value, exc_traceback = sys.exc_info()
       emsg = str(e)
-      print emsg
+      print(emsg)
       msg = "  ERROR (pdbmap.py: load_swiss_to_MySQL(%s):\n%s"%(modelid,emsg)
-      sys.stderr.write(msg)
+      LOGGER.error(msg)
       traceback.print_tb(exc_traceback, limit=2, file=sys.stderr)
       return 1
     msg = "  VALID (pdbmap.py: load_swiss_to_MySQL(%s)\n"%modelid
-    sys.stderr.write(msg)
+    LOGGER.info(msg)
     return 0
 
 
@@ -197,7 +199,7 @@ class PDBMap():
     model_fname = model_summary['filename']
     if io.model_in_db(modelid,label):
       if not update: # silence if updating
-        print "  VALID (PDBMap) %s (%s) already in database.\n"%(modelid,label)
+        print("  VALID (PDBMap) %s (%s) already in database.\n"%(modelid,label))
         return 0
 
     # Query UniProt ID if not provided
@@ -209,25 +211,25 @@ class PDBMap():
     # Load the ModBase model
     if not model_fname:
       model_fname = PDBMapModel.get_coord_file(modelid.upper())
-      print "  # Fetching %s"%modelid
+      print("  # Fetching %s"%modelid)
       if not os.path.exists(model_fname):
         model_fname += '.gz' # check for compressed copy
       if not os.path.exists(model_fname):
         msg = "  ERROR (load_model) %s not in ModBase mirror.\n"%modelid
-        sys.stderr.write(msg)
+        LOGGER.error(msg)
         return 1
     try:
       p = PDBMapParser()
-      print "   # Loading %s (%s) from %s..."%(modelid,unp,model_fname.split('/')[-1])
+      print("   # Loading %s (%s) from %s..."%(modelid,unp,model_fname.split('/')[-1]))
       m = p.get_model(model_summary,model_fname,unp=unp)
       io.set_structure(m)
       io.upload_model()
     except Exception as e:
       msg = "  ERROR (load_model) %s: %s\n"%(modelid,str(e))
-      sys.stderr.write(msg)
+      LOGGER.error(msg)
       return 1
     msg = "  VALID (load_model) %s complete.\n"%modelid
-    sys.stderr.write(msg)
+    LOGGER.info(msg)
     return 0
 
   def load_data(self,dname,dfile,indexing=None,usevep=True,upload=True):
@@ -249,28 +251,28 @@ class PDBMap():
     # Process and accordingly
     if ext == 'vcf':
       if upload:
-        print "\nUploading VCF to supplemental database..."
+        print("\nUploading VCF to supplemental database...")
         nrows = d.load_vcffile(dfile,io,args.buffer_size)
-        print "%d VCF records uploaded to supplemental database before processing"%nrows
+        print("%d VCF records uploaded to supplemental database before processing"%nrows)
       generator = d.load_vcf(dfile,usevep)
     elif ext in ["bed","txt","csv"]:
       if usevep:
-        print "\nNote: You have provided a %s file and requested VEP analysis."%ext
-        print "      There are three acceptable values for the 'name' column."
-        print "       1. REF/ALT - SNP alleles will be used as input to VEP"
-        print "       2. rsID    - SNP names will be used as input to VEP."
-        print "       3. HGVS    - SNPs HGVS will be used as input to VEP"
-        print "      We highly recommend option 1 when possible. Option 2 may"
-        print "       exclude rare or otherwise unlabeled SNPs.\n"
+        print("\nNote: You have provided a %s file and requested VEP analysis."%ext)
+        print("      There are three acceptable values for the 'name' column.")
+        print("       1. REF/ALT - SNP alleles will be used as input to VEP")
+        print("       2. rsID    - SNP names will be used as input to VEP.")
+        print("       3. HGVS    - SNPs HGVS will be used as input to VEP")
+        print("      We highly recommend option 1 when possible. Option 2 may")
+        print("       exclude rare or otherwise unlabeled SNPs.\n")
       # Determine the column delimiter by file type
       delim = '\t'
       if ext != "bed":
         delim = ' ' if ext=='txt' else ','
       if not indexing:
         indexing = 'ucsc' if ext == 'bed' else 'pdbmap'
-      print "Using %s indexing for %s."%(indexing,dfile)
+      print("Using %s indexing for %s."%(indexing,dfile))
       dfile,id_type = d.load_bedfile(dfile,io,delim,indexing,usevep)
-      print "Creating BED generator..."
+      print("Creating BED generator...")
       generator = d.load_bed(dfile,id_type,usevep,indexing)
     elif ext in ["ped","map"] :
       generator = d.load_pedmap(dfile)
@@ -316,7 +318,7 @@ class PDBMap():
       synonymous_flag = True
       idx = ['.synonymous' in a for i,a in enumerate(anno_list)].index(True)
       anno_list[idx] = anno_list[idx].replace('.synonymous','')
-      print "\n%s will be plotted for synonymous variants."%anno_list[idx]
+      print("\n%s will be plotted for synonymous variants."%anno_list[idx])
     if 'popdaf' in anno_list:
       idx = anno_list.index('popdaf')
       anno_list  = anno_list[0:idx]+anno_list[idx+1:]
@@ -348,12 +350,12 @@ class PDBMap():
       elif entity_type == 'all':
         v.visualize_all(anno_list,eps,mins,spectrum_range,colors=colors,syn=synonymous_flag)
       elif entity_type:
-        print "%s matched with UniProt ID: %s"%(entity.upper(),entity_type)
+        print("%s matched with UniProt ID: %s"%(entity.upper(),entity_type))
         entity = entity_type # An HGNC ID was detected and converted to UNP ID
         v.visualize_unp(entity,anno_list,eps,mins,spectrum_range,colors=colors,syn=synonymous_flag)
       else:
         msg = "Sorry, but the specified entity is not in the PDBMap database.\n"
-        sys.stderr.write(msg)
+        LOGGER.error(msg)
         return 1
     except Exception as e:
       msg = "ERROR (PDBMap) Visualization failed: %s"%str(e)
@@ -361,12 +363,12 @@ class PDBMap():
 
   def summarize(self):
     """ Returns summary statistics for the PDBMap database """
-    print "Basic summary statistics for PDBMap. Not implemented."
+    print("Basic summary statistics for PDBMap. Not implemented.")
 
   def refresh_cache(self,args,io,force=False):
     """ Refreshes all mirrored data """
     if args.sifts:
-      print "Refreshing local SIFTS cache..."
+      print("Refreshing local SIFTS cache...",end=' ')
       if os.path.exists(args.sifts):
         # Record the most recent modification time for the SIFTS directory
         mtime = os.stat(args.sifts)[-2]
@@ -377,33 +379,33 @@ class PDBMap():
       os.system(get_sifts)
       # Upload if any modifications were made to the SIFTS directory
       if not mtime or mtime != os.stat(args.sifts)[-2]:
-        print "  Updating SIFTS in PDBMap...",
+        print("  Updating SIFTS in PDBMap...", )
         sys.stdout.flush() # flush buffer before long query
         rc = io.load_sifts(args.sifts,args.conf_file)
-        print rc
-        print "%s rows added"%"{:,}".format(int(rc))
+        print(rc)
+        print("%s rows added"%"{:,}".format(int(rc)))
     if args.sprot:
-      print "Refreshing local SwissProt cache..."
+      print("Refreshing local SwissProt cache...")
       script_path   = os.path.dirname(os.path.realpath(args.sprot))
       get_sprot     = "cd %s; ./get_swissprot.sh"%(script_path)
       os.system(get_sprot)
     if args.idmapping:
-      print "Refreshing local UniProt ID Mapping cache..."
+      print("Refreshing local UniProt ID Mapping cache...")
       script_path   = os.path.dirname(os.path.realpath(args.idmapping))
       get_idmapping = "cd %s; ./get_idmapping.sh"%(script_path)
       os.system(get_idmapping)
     if args.pdb_dir:
-      print "Refreshing local PDB cache..."
+      print("Refreshing local PDB cache...")
       script_path   = os.path.realpath(args.pdb_dir)
       get_pdb       = "cd %s; ./get_pdb.sh"%(script_path)
       os.system(get_pdb)
     if args.modbase2016_dir:
-      print "Refreshing local ModBase 2016 cache..."
+      print("Refreshing local ModBase 2016 cache...")
       script_path   = os.path.realpath(args.modbase2016_dir)
       get_modbase   = "cd %s; ./get_modbase_2016.sh"%(script_path)
       os.system(get_modbase)
     if args.modbase2013_dir:
-      print "Refreshing local ModBase 2013 cache..."
+      print("Refreshing local ModBase 2013 cache...")
       script_path   = os.path.realpath(args.modbase2013_dir)
       get_modbase   = "cd %s; ./get_modbase_2013.sh"%(script_path)
       os.system(get_modbase)
@@ -417,7 +419,7 @@ __  __  __
 |__)|  \|__)|\/| _  _  
 |   |__/|__)|  |(_||_) 
                    |   """
-  print header
+  print(header)
 
   root  = logging.getLogger()
   root.setLevel(logging.INFO)
@@ -427,6 +429,7 @@ __  __  __
   fh.setFormatter(formatter)
   fh.setLevel(logging.WARNING)
   root.addHandler(fh)
+  LOGGER = root
 
   # Setup the Config File Parser
   conf_parser = argparse.ArgumentParser(add_help=False)
@@ -466,7 +469,7 @@ __  __  __
     "ppidx"  : None
     }
   if args.conf_file:
-    config = ConfigParser.SafeConfigParser()
+    config = configparser.SafeConfigParser()
     config.read([args.conf_file])
     defaults.update(dict(config.items("Genome_PDB_Mapper")))
   conf_file = args.conf_file
@@ -548,17 +551,17 @@ __  __  __
   args.cores = int(args.cores)
 
   if args.create_new_db and not args.force:
-    print "You have opted to create a new database: %s."%args.dbname
-    if raw_input("Are you sure you want to do this? (y/n):") != 'y':
-      print "Aborting..."
+    print("You have opted to create a new database: %s."%args.dbname)
+    if input("Are you sure you want to do this? (y/n):") != 'y':
+      print("Aborting...")
     else:
-      print "Creating database tables..."
+      print("Creating database tables...")
       io = PDBMapIO(args.dbhost,args.dbuser,
                             args.dbpass,args.dbname,createdb=True)
-      print "\nDatabase created. Please set create_new_db to False."
-      print "\nIt is strongly recommended that you now refresh the local resource cache."
-      if raw_input("Would you like to refresh the cache now? (y/n):") == 'y':
-        print "Refreshing local cache..."
+      print("\nDatabase created. Please set create_new_db to False.")
+      print("\nIt is strongly recommended that you now refresh the local resource cache.")
+      if input("Would you like to refresh the cache now? (y/n):") == 'y':
+        print("Refreshing local cache...")
         args.cmd = "refresh" # continue on to cache refresh
       else:
         sys.exit(0)
@@ -569,10 +572,10 @@ __  __  __
                             args.dbpass,args.dbname)
     try:
       PDBMap().refresh_cache(args,io)
-      print "\nRefresh complete. Exiting..."
+      print("\nRefresh complete. Exiting...")
       sys.exit(0)
     except:
-      print "\nAn unknown error occurred. Terminating..."
+      print("\nAn unknown error occurred. Terminating...")
       sys.exit(1)
 
   ## load_pdb ##
@@ -583,22 +586,22 @@ __  __  __
       msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> load_pdb pdb_file [pdb_file,...]\n"
       msg += "   or: pdbmap.py -c conf_file load_pdb all\n"
       msg += "   or: pdbmap.py -c conf_file load_pdb update"
-      print msg; sys.exit(0)
+      print(msg); sys.exit(0)
     elif args.args[0] in ('all','pdb'):
       update = True if args.args[0] == "update" else False
       if args.slabel:
         msg = "WARNING (PDBMap) PDB all/update does not support custom structure labels.\n"
-        sys.stderr.write(msg)
+        LOGGER.warning(msg)
         args.slabel = None
       args.slabel = args.slabel if args.slabel else "pdb"
       # All human Swiss-Prot-containing PDB structures in the local mirror
-      all_pdb_ids   = PDBMapProtein._pdb2unp.keys()
-      fname         = "%s/structures/all/pdb/pdb%s.ent.gz"
+      all_pdb_ids   = list(PDBMapProtein._pdb2unp.keys())
+      fname         = "%s/structures/pdb%s.ent.gz"
       all_pdb_files = [fname%(args.pdb_dir,pdbid.lower()) for pdbid in all_pdb_ids]
       # Remove any PDB files not contained in the local PDB mirror
       all_pdb_files = [f for f in all_pdb_files if os.path.exists(f)]
       msg = "WARNING (PDBMap) Uploading %d Human Swiss-Prot PDB structures.\n"%len(all_pdb_files)
-      sys.stderr.write(msg)
+      LOGGER.warning(msg)
       n = len(all_pdb_files)
       # import pdb; pdb.set_trace()
       # If this is a parallel command with partition parameters
@@ -609,18 +612,18 @@ __  __  __
         else:
           all_pdb_files = all_pdb_files[args.ppidx*psize:(args.ppidx+1)*psize]
         msg = "WARNING(PDBMap) Subprocess uploading partition %d/%d of PDB\n"%(args.ppidx+1,args.ppart)
-        sys.stderr.write(msg)
+        LOGGER.warning(msg)
         for i,pdb_file in enumerate(all_pdb_files):
           pdbid = os.path.basename(pdb_file).split('.')[0][-4:].upper()
-          print "## Processing (%s) %s (%d/%d) ##"%(args.slabel,pdbid,i+(args.ppidx*psize)+1,n)
+          print("## Processing (%s) %s (%d/%d) ##"%(args.slabel,pdbid,i+(args.ppidx*psize)+1,n))
           pdbmap.load_pdb(pdbid,pdb_file,label=args.slabel,update=update)
       else:
         msg = "WARNING(PDBMap) Uploading all %d PDB IDs.\n"%n
-        sys.stderr.write(msg)
+        LOGGER.warning(msg)
         for i,pdb_file in enumerate(all_pdb_files):
           pdbid = os.path.basename(pdb_file).split('.')[0][-4:].upper()
       
-          print "## Processing (pdb) %s (%d/%d) ##"%(pdbid,i,n)
+          print("## Processing (pdb) %s (%d/%d) ##"%(pdbid,i,n))
           pdbmap.load_pdb(pdbid,pdb_file,label=args.slabel,update=update)
     elif len(args.args) == 1:
       # Process one PDB
@@ -634,7 +637,7 @@ __  __  __
         args.pdbid = os.path.basename(pdb_file).split('.')[0][-4:].upper()
       if not args.slabel:
         args.slabel = "manual"
-      print "## Processing (%s) %s ##"%(args.slabel,args.pdbid)
+      print("## Processing (%s) %s ##"%(args.slabel,args.pdbid))
       pdbmap.load_pdb(args.pdbid,pdb_file,label=args.slabel)
     else:
       # Process many PDB IDs
@@ -645,7 +648,7 @@ __  __  __
           pdb_file = None # Not a file, its a PDB ID
         if not args.slabel:
           args.slabel = "manual"
-        print "## Processing (%s) %s (%d/%d) ##"%(args.slabel,pdbid,i,n)
+        print("## Processing (%s) %s (%d/%d) ##"%(args.slabel,pdbid,i,n))
         pdbmap.load_pdb(pdbid,pdb_file,label=args.slabel)
 
   ## load_unp ##
@@ -660,20 +663,20 @@ __  __  __
       msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> load_unp unpid [unpid,...]\n"
       msg += "   or: pdbmap.py -c conf_file load_unp all\n"
       msg += "   or: pdbmap.py -c conf_file load_unp update"
-      print msg; sys.exit(0)
+      print(msg); sys.exit(0)
     elif args.args[0] in ('all','update'):
       update = True if args.args[0] == "update" else False
       if args.slabel:
         msg = "WARNING (PDBMap) UniProt all/update does not support custom structure labels.\n"
-        sys.stderr.write(msg)
+        LOGGER.warning(msg)
         args.slabel = None
       # All Human, Swiss-Prot proteins with EnsEMBL transcript cross-references
-      print "\nIdentifying all Swiss-Prot IDs with mapped Ensembl transcripts..."
+      print("\nIdentifying all Swiss-Prot IDs with mapped Ensembl transcripts...")
       all_unp = [unp for unp in PDBMapProtein._unp2enst \
                   if unp in PDBMapProtein.sprot and \
                   PDBMapProtein.unp2species[unp]=="HUMAN"]
       n = len(all_unp)
-      print "Total Swiss-Prot IDs to process: %d. Beginning..."%n
+      print("Total Swiss-Prot IDs to process: %d. Beginning..."%n)
       # If this is a parallel command with partition parameters
       if args.ppart != None and args.ppidx != None:
         psize = n / args.ppart # floor
@@ -682,27 +685,27 @@ __  __  __
         else:
           all_unp = all_unp[args.ppidx*psize:(args.ppidx+1)*psize]
         msg = "WARNING (PDBMap) Subprocess uploading partition %d/%d of Swiss-Prot\n"%(args.ppidx+1,args.ppart)
-        sys.stderr.write(msg)
+        LOGGER.warning(msg)
         for i,unp in enumerate(all_unp):
-          print "\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,unp,i+(args.ppidx*psize)+1,n)
+          print("\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,unp,i+(args.ppidx*psize)+1,n))
           pdbmap.load_unp(unp,label=args.slabel,update=update)
       # This is a standard, full-set load_unp command
       else:
         msg = "WARNING (PDBMap) Uploading all %d Swiss-Prot UniProt IDs.\n"%n
-        sys.stderr.write(msg)
+        LOGGER.warning(msg)
         for i,unp in enumerate(all_unp):
-          print "\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,unp,i,n)
+          print("\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,unp,i,n))
           pdbmap.load_unp(unp,label=args.slabel,update=update)
     elif len(args.args) == 1:
       # Process one UniProt ID
       unp = args.args[0]
-      print "\n## Processing (%s) %s ##"%(args.slabel,unp)
+      print("\n## Processing (%s) %s ##"%(args.slabel,unp))
       pdbmap.load_unp(unp,label=args.slabel)
     else:
       # Process many UniProt IDs
       n = len(args.args)
       for i,unp in enumerate(args.args):
-        print "\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,unp,i,n)
+        print("\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,unp,i,n))
         pdbmap.load_unp(unp,label=args.slabel)
 
   ## load_model ##
@@ -719,7 +722,7 @@ __  __  __
       msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> load_swiss swiss_summary summary model[,model,...]\n"
       msg += "   or: pdbmap.py -c conf_file --slabel=<slabel> load_swiss swiss_summary modeldir/*\n"
       msg += "   or: pdbmap.py -c conf_file --slabel=<slabel> load_swiss all"
-      print msg; sys.exit(1)
+      print(msg); sys.exit(1)
     if args.args[0] in ['all','*','.']:
       args.slabel = args.slabel if args.slabel else "swiss"
       models = PDBMapSwiss.get_swiss_modelids() # get all  the swiss model unique IDs
@@ -732,20 +735,20 @@ __  __  __
         else:
           models = models[args.ppidx*psize:(args.ppidx+1)*psize]
         msg = "WARNING(PDBMap) Subprocess uploading partition %d/%d of Swiss Model\n"%(args.ppidx+1,args.ppart)
-        sys.stderr.write(msg)
+        LOGGER.warning(msg)
         for i,modelid in enumerate(models):
-          print "## Processing (%s) %s (%d/%d) ##"%(args.slabel,swissUniqueIdentifier,i+(args.ppidx*psize)+1,n)
+          print("## Processing (%s) %s (%d/%d) ##"%(args.slabel,swissUniqueIdentifier,i+(args.ppidx*psize)+1,n))
           pdbmap.load_swiss_to_MySQL(modelid,label=args.slabel,io=None)
       else:
         msg = "WARNING (PDBMap) Uploading all %d Swiss Model  models.\n"%n
-        sys.stderr.write(msg)
+        LOGGER.warning(msg)
         for i,modelid in enumerate(models):
-          print "\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,modelid,i,n)
+          print("\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,modelid,i,n))
           pdbmap.load_swiss_to_MySQL(modelid,label=args.slabel,io=None)
 
 
     else:
-      print "Code for individual swiss models must be done later"
+      print("Code for individual swiss models must be done later")
       sys.exit()
 
   ## load_model ##
@@ -760,7 +763,7 @@ __  __  __
       msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> load_model model_summary model[,model,...]\n"
       msg += "   or: pdbmap.py -c conf_file --slabel=<slabel> load_model model_summary modeldir/*\n"
       msg += "   or: pdbmap.py -c conf_file --slabel=<slabel> load_model all"
-      print msg; sys.exit(1)
+      print(msg); sys.exit(1)
     if args.args[0] in ['all','*','.']:
       args.slabel = args.slabel if args.slabel else "modbase"
       models = PDBMapModel.get_models() # get all 2013 and 2016 ModBase models
@@ -773,15 +776,15 @@ __  __  __
         else:
           models = models[args.ppidx*psize:(args.ppidx+1)*psize]
         msg = "WARNING(PDBMap) Subprocess uploading partition %d/%d of ModBase\n"%(args.ppidx+1,args.ppart)
-        sys.stderr.write(msg)
+        LOGGER.warning(msg)
         for i,row in enumerate(models):
-          print "## Processing (%s) %s (%d/%d) ##"%(args.slabel,row['modelid'],i+(args.ppidx*psize)+1,n)
+          print("## Processing (%s) %s (%d/%d) ##"%(args.slabel,row['modelid'],i+(args.ppidx*psize)+1,n))
           pdbmap.load_model(row,label=args.slabel,io=None)
       else:
         msg = "WARNING (PDBMap) Uploading all %d ModBase 2013 and 2016 models.\n"%n
-        sys.stderr.write(msg)
+        LOGGER.warning(msg)
         for i,row in enumerate(models):
-          print "\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,row['modelid'],i,n)
+          print("\n## Processing (%s) %s (%d/%d) ##"%(args.slabel,row['modelid'],i,n))
           pdbmap.load_model(row,label=args.slabel,io=None)
     # Parse user-supplied homology models
     else:
@@ -797,7 +800,7 @@ __  __  __
         model_summary = [args.args[0]]
         models        = args.args[1:]
       for ms in model_summary:
-        with open(ms,'rb') as fin:
+        with open(ms,'r') as fin:
           fin.readline() # burn the header
           reader = csv.reader(fin,delimiter='\t')
           n = len(models)
@@ -811,8 +814,8 @@ __  __  __
             if len(row)!=len(PDBMapModel._info_fields)-2:
               row.insert(1,None)
               row.insert(1,None)
-            row = dict(zip(PDBMapModel._info_fields,row))
-            print "## Processing (%s) %s (%d/%d) ##"%(args.slabel,row['modelid'],i,n)
+            row = dict(list(zip(PDBMapModel._info_fields,row)))
+            print("## Processing (%s) %s (%d/%d) ##"%(args.slabel,row['modelid'],i,n))
             # Convert the model summary row to a dictionary
             # Load the ModBase model
             pdbmap.load_model(row,label=args.slabel,io=None)
@@ -822,24 +825,24 @@ __  __  __
     if len(args.args) < 1:
       msg  = "usage: pdbmap.py -c conf_file [--novep] load_data <data_file> <data_name> [data_file data_name] ...\n"
       msg += "alt:   pdbmap.py -c conf_file [--novep] --dlabel=<data_name> load_data <data_file> [data_file] ...\n"
-      print msg; sys.exit(1)
+      print(msg); sys.exit(1)
     pdbmap = PDBMap(vep=args.vep,vep_cache=args.vep_cache)
     # Process many data file(s) (set(s))
     if not args.dlabel: # Assign individual labels
-      dfiles = zip(args.args[0::2],args.args[1::2])
+      dfiles = list(zip(args.args[0::2],args.args[1::2]))
     else: # Assign shared label
-      dfiles = zip(args.args,[args.dlabel for i in range(len(args.args))])
+      dfiles = list(zip(args.args,[args.dlabel for i in range(len(args.args))]))
     nrows = 0
     for dfile,dname in dfiles:
-      print "## Processing (%s) %s ##"%(dname,dfile)
+      print("## Processing (%s) %s ##"%(dname,dfile))
       nrows += pdbmap.load_data(dname,dfile,args.indexing,not args.novep,not args.noupload)
-      print " # %d data rows uploaded."%nrows
+      print(" # %d data rows uploaded."%nrows)
 
   ## visualize ##
   elif args.cmd == "visualize":
     if len(args.args) < 3:
       msg = "usage: pdbmap.py -c conf_file visualize <entity> <data_name> <feature[,...]> <biounit[,...]> [minval:maxval,...] [color1,color2,...;...]\n"
-      print msg; sys.exit(1)
+      print(msg); sys.exit(1)
     pdbmap = PDBMap(idmapping=args.idmapping)
     entity = args.args[0]
     struct_label   = 'pdb' if not args.slabel else args.slabel
@@ -855,23 +858,23 @@ __  __  __
     colors = []
     if len(args.args) > 5:
       colors = [tuple([x for x in p.split(':')]) for p in args.args[5].split(',')]
-    print "## Visualizing (%s) %s[%s]+%s.%s"%(struct_label,
-          entity,','.join(biounits),data_label,','.join(anno_list)),
+    print("## Visualizing (%s) %s[%s]+%s.%s"%(struct_label,
+          entity,','.join(biounits),data_label,','.join(anno_list)), end=' ')
     if not colors:
-      print ','.join(["(%0.2f..%0.2f)"%r for r in spectrum_range])
+      print(','.join(["(%0.2f..%0.2f)"%r for r in spectrum_range]))
     else:
       for i,r in enumerate(spectrum_range):
         for j,c in enumerate(range(int(r[0]),int(r[1])+1)):
-          print "%0.2f: %s;"%(c,colors[i][j]),
-        print '|'
-      print ''
+          print("%0.2f: %s;"%(c,colors[i][j]), end=' ')
+        print('|')
+      print('')
     pdbmap.visualize(entity,biounits,struct_label,data_label,anno_list,spectrum_range,colors)
 
   ## intersect ##
   elif args.cmd == "intersect":
     if not (args.slabel and args.dlabel):
       msg  = "usage: pdbmap.py -c conf_file --slabel=<slabel> --dlabel=<data_name> intersect [quick]\n"
-      print msg; sys.exit(1)
+      print(msg); sys.exit(1)
     pdbmap = PDBMap()
     dname  = args.dlabel
     if dname == 'all':
@@ -882,21 +885,21 @@ __  __  __
     quick  = True if len(args.args)>0 and args.args[0].lower() in ['1','true','yes','quick','fast'] else False
     # nrows = QUICK_THRESH+1 if len(args.args) < 3 else int(args.args[2])
     if dname and slabel:
-      print "## Intersecting %s with %s ##"%(dname,slabel)
+      print("## Intersecting %s with %s ##"%(dname,slabel))
     elif dname:
-      print "## Intersecting %s with all structures/models ##"%dname
+      print("## Intersecting %s with all structures/models ##"%dname)
     elif slabel:
-      print "## Intersecting all genetic datasets with %s ##"%slabel
+      print("## Intersecting all genetic datasets with %s ##"%slabel)
     else:
-      print "## Intersecting all genetic datasets with all structures/models ##"
+      print("## Intersecting all genetic datasets with all structures/models ##")
     # quick = True if nrows < QUICK_THRESH else False
-    print [" # (This may take a while) #"," # Using quick-intersect #"][int(quick)]
+    print([" # (This may take a while) #"," # Using quick-intersect #"][int(quick)])
     nrows = pdbmap.intersect_data(dname,slabel,quick=quick)
-    print " # %d intersection rows uploaded."%nrows
+    print(" # %d intersection rows uploaded."%nrows)
 
   ## no command specified ##
   else:
     msg = "PDBMap must be called with a command. Use -h for help.\n"
-    sys.stderr.write(msg)
+    LOGGER.error(msg)
 
-  print ''
+  print('')

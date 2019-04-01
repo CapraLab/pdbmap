@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 #
 # Project        : PDBMap
 # Filename       : PDBMapParser.py
@@ -14,6 +14,8 @@
 
 # See main check for cmd line parsing
 import sys,os,csv,collections,gzip,time,random
+import logging
+
 import subprocess as sp
 from Bio.PDB.PDBParser import PDBParser
 from Bio.PDB.PDBIO import PDBIO
@@ -26,6 +28,8 @@ from lib.PDBMapIO import PDBMapIO,aa_code_map
 import MySQLdb, MySQLdb.cursors
 from warnings import filterwarnings,resetwarnings
 from Bio.PDB.PDBExceptions import PDBConstructionWarning
+
+LOGGER = logging.getLogger(__name__)
 
 class PDBMapParser(PDBParser):
   def __init__(self,PERMISSIVE=True,get_header=True,
@@ -120,9 +124,9 @@ class PDBMapParser(PDBParser):
     ext = os.path.basename(fname).split('.')[-1]
     try:
       if ext == 'gz':
-        fin = gzip.open(fname,'rb')
+        fin = gzip.open(fname,'rt')
       elif ext in ['txt','pdb','ent']:
-        fin = open(fname,'rb')
+        fin = open(fname,'rt')
       else:
         msg = "   ERROR (PDBMapParser) Unsupported file type: %s.\n"%fname
         raise Exception(msg)
@@ -140,6 +144,7 @@ class PDBMapParser(PDBParser):
 
   def get_structure(self,pdbid,fname,biounit_fnames=[],quality=-1,io=None):
     s = PDBMapParser.getBiopythonStructureOrFail(pdbid,fname)
+    # import pdb; pdb.set_trace()
     try:
       s = PDBMapStructure(s,quality,pdb2pose={})
       # 2018-04-23 It cannot make sense to close a fle handle that is not local to us
@@ -177,9 +182,9 @@ class PDBMapParser(PDBParser):
     # Load the contents of the PDB file
     ext = os.path.basename(fname).split('.')[-1]
     if ext == 'gz':
-      fin = [l for l in gzip.open(fname,'rb')]
+      fin = [l for l in gzip.open(fname,'rt')]
     else:
-      fin = [l for l in open(fname,'rb')]
+      fin = [l for l in open(fname,'rt')]
 
     # Extract the SEQADV information and annotate any conflict residues
     for r in s.get_residues():
@@ -288,17 +293,18 @@ class PDBMapParser(PDBParser):
                       'species':species,'hybrid':hybrid,'drop_resis':[r for r in drop_resis]}
 
     # Sanitize free text fields
-    s.header["name"]     = str(s.header["name"]    ).translate(None,"'\"")
-    s.header["author"]   = str(s.header["author"]  ).translate(None,"'\"")
-    s.header["keywords"] = str(s.header["keywords"]).translate(None,"'\"")
-    s.header["compound"] = str(s.header["compound"]).translate(None,"'\"")
-    s.header["journal"]  = str(s.header["journal"] ).translate(None,"'\"")
-    s.header["structure_method"]    = str(s.header["structure_method"]).translate(None,"'\"")
-    s.header["structure_reference"] = str(s.header["structure_reference"]).translate(None,"'\"")
+    junk_stripper = str.maketrans('','',"'\"")
+    s.header["name"]     = str(s.header["name"]    ).translate(junk_stripper)
+    s.header["author"]   = str(s.header["author"]  ).translate(junk_stripper)
+    s.header["keywords"] = str(s.header["keywords"]).translate(junk_stripper)
+    s.header["compound"] = str(s.header["compound"]).translate(junk_stripper)
+    s.header["journal"]  = str(s.header["journal"] ).translate(junk_stripper)
+    s.header["structure_method"]    = str(s.header["structure_method"]).translate(junk_stripper)
+    s.header["structure_reference"] = str(s.header["structure_reference"]).translate(junk_stripper)
 
     try:
       # Preprocess the asymmetric and biological units for this protein
-      print "   # Processing the asymmetric unit"
+      print("   # Processing the asymmetric unit")
       s = PDBMapParser.process_structure(s) # *must* occur before biounits
     except Exception as e:
       # If the structure is invalid (non-human, empty, errors, etc) pass along exception
@@ -333,12 +339,13 @@ class PDBMapParser(PDBParser):
         biounit = PDBMapStructure(biounit,pdb2pose={}) # must pass empty dictionary: python bug
       except Exception as e:
         msg = "   ERROR (PDBMapIO) Error while parsing %s biounit %d: %s"%(pdbid,bioid,str(e).replace('\n',' '))
+        LOGGER.exception(msg)
         raise Exception(msg)
-      print "   # Processing biounit %d"%bioid
+      print("   # Processing biounit %d"%bioid)
       biounit = PDBMapParser.process_structure(biounit,biounit=bioid,dbref=dbref)
       if not biounit:
         msg = "   ERROR (PDBMapIO) Biological assembly %s.%d contains no human protein chains.\n"%(pdbid,bioid)
-        sys.stderr.write(msg)
+        LOGGER.exception(msg)
         continue
       # Add the models for this biological assembly to the PDBMapStructure
       for m in biounit:

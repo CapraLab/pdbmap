@@ -1,5 +1,4 @@
-#!/usr/bin/env python2.7
-#
+#!/usr/bin/env python
 # Project        : PDBMap
 # Filename       : PDBMapSwiss.py
 # Author         : Chris Moth
@@ -168,7 +167,6 @@ Fields in modbase that may become more relevant
   def ensp2swiss(cls,ensp):
     """ NOT IMPLEMENTED: Maps Ensembl protein IDs to swiss models """
     unps4ensps = PDBMapProtein.ensp2unp(ensp)
-    import pdb; pdb.set_trace()
     # return PDBMapSwiss._modelid2info.get(PDBMapProtein.,None)
     models = PDBMapSwiss.swiss_dict.get(ensp,[])
     return models
@@ -190,7 +188,6 @@ Fields in modbase that may become more relevant
     """ Return all SwissModel dictionaries for a Uniprot AC (unp) """
     """ Maps a UniProt protein ID to list of SwissModel models """
     swiss = []
-    # import pdb; pdb.set_trace()
     for modelid in PDBMapSwiss.unp2modelids(unp,IsoformOnly):
       swiss.append(PDBMapSwiss.get_info(modelid))
     return swiss 
@@ -232,7 +229,7 @@ Fields in modbase that may become more relevant
     """ Parse the REMARK section of a SwissModel .pdb file to get a variety of quality metrics (eg qmn4, sid etc) """
     metrics = {}
     fname = PDBMapSwiss.get_coord_file(modelid)
-    with open(fname,'r') as f:
+    with open(fname,'rt') as f:
       for line in f:
         if line.startswith('ATOM  '): # Then we're done parsing the pdb file.  ATOM comes after all REMARK lines of interest
           break;
@@ -257,7 +254,7 @@ Fields in modbase that may become more relevant
   @classmethod
   def concatenate_modelid(cls,unp,start,end,template):
     """ Build a Swiss-model unique key from INDEX file row information """
-    return "%s_%d_%d_%s"%(unp,int(start),int(end),template)
+    return "%s_%s_%s_%s"%(unp,start,end,template)
 
   @classmethod
   def load_swiss_INDEX_JSON(cls,swiss_dir,summary_fname):
@@ -271,7 +268,65 @@ Fields in modbase that may become more relevant
     if not os.path.exists(summary_fname):
       msg = "ERROR: (PDBMapSwiss) Cannot load SwissModel. %s does not exist."%summary_fname
       logging.exception(msg)
-      raise(Exception(msg))
+      raise Exception
+    logging.getLogger().info("Opening SwissModel Summary File (JSON format):" + summary_fname)
+    import json
+    with open(summary_fname,'rt') as json_file:
+      json_str = json_file.read()
+      json_data = json.loads(json_str)
+      del json_str
+
+    logging.getLogger().info("%d rows read from %s successfully."%(len(json_data),summary_fname))
+
+    for d in json_data:
+      # import pdb; pdb.set_trace()
+      # For sanity, we need dictionary elements that match the naming convention of our ModBase models
+      # Convert columns from/to to start/end  notation like ModBase
+      d['start'] = d.pop('from')
+      d['end'] = d.pop('to')
+
+      # Convert column 'uniprot_ac' to 'unp' for modbase compatability
+      # First, if there is an isoform identifier which does not match the base iso-less identifier
+      # Then be sure to use the new isoform identifier.
+      if ('iso_id' in d and
+          ('-' not in d['uniprot_ac']) and 
+          ('-' in d['iso_id']) and
+          (d['uniprot_ac'] != d['iso_id'])):
+        d['unp'] = d['iso_id']
+      else:
+        d['unp'] = d['uniprot_ac']
+
+      del d['uniprot_ac']
+      if 'iso_id' in d:
+        del d['iso_id']
+
+      d['modelid'] = PDBMapSwiss.concatenate_modelid(d['unp'],d['start'],d['end'],d['template'])
+
+      # We have a lot of duplicates - don't worry about that for now (Chris Moth 2017-09-11
+      # if (modelid in PDBMapSwiss._modelid2info):
+      # print "CAUTION: %s aleady in swiss dictionary\n"%modelid
+      # Add this unique modelid to the growing large dictionary      
+      PDBMapSwiss._modelid2info[d['modelid']] = d
+      PDBMapSwiss._unp2modelids[d['unp']].append(d['modelid'])
+      # If this unp is an isoform, then also add it to the generic (base) unp dictionary
+      if (d['unp'].find('-') != -1):
+        PDBMapSwiss._unp2modelids[d['unp'].split('-')[0]].append(d['modelid'])
+
+    logging.getLogger(__name__).info( "%d Swiss models added to in-memory dictionary"%len(PDBMapSwiss._modelid2info))
+
+  @classmethod
+  def old_load_swiss_INDEX_JSON(cls,swiss_dir,summary_fname):
+    """ Adds a SwissModel summary file to the lookup dictionary """
+    # print "Parameter swiss_dir = " + swiss_dir
+    # print "Parameter summary_fname = " + summary_fname
+    swiss_dir = swiss_dir.rstrip('/')
+    if not PDBMapSwiss.swiss_dir:
+      PDBMapSwiss.swiss_dir = swiss_dir
+
+    if not os.path.exists(summary_fname):
+      msg = "ERROR: (PDBMapSwiss) Cannot load SwissModel. %s does not exist."%summary_fname
+      logging.exception(msg)
+      raise Exception
     logging.getLogger().info("Opening SwissModel Summary File (JSON format):" + summary_fname)
     try:
       df = pandas.read_json(summary_fname) # ,orient='records')

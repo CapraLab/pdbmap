@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 #
 # Project        : PDBMap
 # Filename       : PDBMapModel.py
@@ -143,7 +143,7 @@ class PDBMapModel(Structure):
   @classmethod
   def get_models(cls):
     """ Returns all recorded ModBase models """
-    return [m for v in PDBMapModel.modbase_dict.values() for m in v]
+    return [m for v in list(PDBMapModel.modbase_dict.values()) for m in v]
 
   @classmethod
   def ensp2modbase(cls,ensp):
@@ -187,9 +187,9 @@ class PDBMapModel(Structure):
       PDBMapModel.modbase_dir.append(modbase_dir)
     if not os.path.exists(summary_fname):
       msg = "ERROR: (PDBMapModel) Cannot load ModBase. %s does not exist."%summary_fname
-      raise(Exception(msg))
+      raise Exception
     # print "Opening Modbase File " + summary_fname
-    fin = open(summary_fname,'rb')
+    fin = open(summary_fname,'rt')
     fin.readline() # burn the header
     reader = csv.reader(fin,delimiter='\t')
     total_count = 0
@@ -217,7 +217,7 @@ class PDBMapModel(Structure):
       # Set UniProt ID as last field in model summary
       row.append(unp)
       # Convert to dictionary
-      d = dict(zip(PDBMapModel._info_fields,row))
+      d = dict(list(zip(PDBMapModel._info_fields,row)))
       # Populate Ensembl protein ID to model summary dictionary
       if ensp in PDBMapModel.modbase_dict:
         PDBMapModel.modbase_dict[ensp].append(d['modelid'])
