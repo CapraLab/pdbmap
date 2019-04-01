@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 #
 # Project        : PDBMap
 # Filename       : PDBMapStructure.py
@@ -74,10 +74,10 @@ class PDBMapStructure(Structure):
           self._pdb2pose[mid][cid][r.id[1]] = i+1
       else:
         # Revert indexing to original PDB indexing per pdb2pose
-        for mid,d1 in self._pdb2pose.iteritems():
-          for cid,d2 in d1.iteritems():
+        for mid,d1 in self._pdb2pose.items():
+          for cid,d2 in d1.items():
             # The pose ID should always be less than the PDB ID
-            for rid,pose_id in sorted(d2.iteritems(),reverse=True):
+            for rid,pose_id in sorted(iter(d2.items()),reverse=True):
               # Isolate the residue
               res = self.structure[mid][cid][pose_id]
               # Detach from the chain
@@ -273,7 +273,7 @@ class PDBMapStructure(Structure):
     ts = copy.deepcopy(self.structure.snpmapper)
     # Resolve the SNPMapper to an alias
     sm = self.structure.snpmapper
-    unps = sm.keys()
+    unps = list(sm.keys())
     # Chains may not cover full length of protein sequence
     # Only permute protein sequence present in the structure
     pr = {} # protein range
@@ -394,7 +394,7 @@ class PDBMapStructure(Structure):
       return sr,sc,np.nan,np.nan,rmsd,np.nan,np.nan,farep
     logger.info("## Spawning a pool of %d relax workers ##\n"%(min(iters,maxprocs)))
     pool     = Pool(processes=min(iters,maxprocs))
-    ensemble = pool.map(unwrap_self_relax,zip([self]*iters))
+    ensemble = pool.map(unwrap_self_relax,list(zip([self]*iters)))
     scores = [e.score()    for e in ensemble]
     rmsds  = [e.rmsd(self) for e in ensemble]
     return ensemble[np.argmin(scores)],np.min(scores),np.mean(scores),np.std(scores),np.min(rmsds),np.mean(rmsds),np.std(rmsds),ensemble[np.argmin(scores)].fa_rep()
@@ -452,7 +452,7 @@ class PDBMapStructure(Structure):
       io.set_structure(self.structure)
       io.save(structfile)
     cmd = ["scwrl","-0","-i",structfile,'-s',seqfname,'-o',scwrlfile]
-    print "\n%s"%' '.join(cmd)
+    print("\n%s"%' '.join(cmd))
     sp.Popen(cmd,stdout=sp.PIPE,stderr=sp.PIPE).communicate()
     p = PDBParser()
     with open(scwrlfile,'rb') as fin:
@@ -467,7 +467,7 @@ class PDBMapStructure(Structure):
 
 ## Copied from biolearn
 def multidigit_rand(digits):
-  randlist = [random.randint(1,10) for i in xrange(digits)]
+  randlist = [random.randint(1,10) for i in range(digits)]
   multidigit_rand = int(''.join([str(x) for x in randlist]))
   return multidigit_rand
 

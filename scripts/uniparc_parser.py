@@ -1,46 +1,78 @@
 #!/usr/bin/env python
-# Parses a directory of SIFTS XML files
+# Parses a (large!) uniparc cross reference file
 # and uploads data to mysql database
 
-from lxml import etree,objectify
 from collections import defaultdict
-import sys,os,glob,re
+import sys,os,glob,re,gzip
 
 # Parse config file for database parameters
 import argparse,configparser
-conf_parser = argparse.ArgumentParser(add_help=False)
-conf_parser.add_argument("-c","--conf_file",
+cmdline_parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+cmdline_parser.add_argument("uniprot_filename",nargs="?",help="Large uniparc filename",default='/dors/capra_lab/data/uniprot/current/uniparc_active.fasta.gz')
+cmdline_parser.add_argument("-c","--conf_file",required=True,
   help="Specify database config file",metavar="FILE")
-args,remaining_argv = conf_parser.parse_known_args()
-defaults = {
-  "dbhost" : None,
-  "dbuser" : None,
-  "dbpass" : None,
-  "dbname" : None,
-  "xmldir" : None
-}
-if args.conf_file:
-  config = configparser.ConfigParser()
-  config.read([args.conf_file])
-  defaults.update(dict(config.items("Genome_PDB_Mapper")))
-conf_file = args.conf_file
-# Check for command line argument for the XML directory
-parser = argparse.ArgumentParser(parents=[conf_parser],
-  description=__doc__,formatter_class=argparse.RawDescriptionHelpFormatter)
-parser.set_defaults(**defaults)
-parser.add_argument("xmldir",nargs="?",help="XML directory")
-args = parser.parse_args(remaining_argv)
-args.conf_file = conf_file
+args = cmdline_parser.parse_args()
 
-# Check that all parameters were specified
-if not all(vars(args)):
-  print("Must provide database information and XML directory.")
-  sys.exit()
+config = configparser.ConfigParser()
+config.read([args.conf_file])
+
+configdict = dict(config.items("Genome_PDB_Mapper"))
 
 # Connect to the databsae
 import MySQLdb
-con = MySQLdb.connect(host=args.dbhost,user=args.dbuser,
-                      passwd=args.dbpass,db=args.dbname)
+con = MySQLdb.connect(host=configdict['dbhost'],user=configdict['dbuser'],
+                      passwd=configdict['dbpass'],db=configdict['dbname'])
+
+import hashlib
+
+def flush_uniparcs(uniparc_dict):
+  if not uniparc_dict:
+    return
+  insert_list = []
+  first_flag = True
+  for uniparc_id in uniparc_dict:
+    insert_list.append((uniparc_id,hashlib.md5(uniparc_dict[uniparc_id].encode('UTF-8')).hexdigest(),uniparc_dict[uniparc_id]))
+
+  ## Upload to database
+  c   = con.cursor()
+  sql = "INSERT INTO pdbmap_v14.Uniparc (uniparc,md5sum,fasta) VALUES (%s, %s, %s)"
+
+  try:
+    c.executemany(sql,insert_list)
+    con.commit()
+    print("Uploaded!")
+  except:
+    con.rollback()
+    print("Failed to upload rows.")
+    print(c._last_executed)
+    raise
+  c.close()
+
+with gzip.open(args.uniprot_filename,"rt") as f:
+  cur_uniparc = ''
+  cur_fasta = ''
+  uniparc_dict = {}
+  for line in f:
+     if len(line) > 10 and line[0] == '>':
+       if cur_fasta and cur_uniparc:
+          uniparc_dict[cur_uniparc] = cur_fasta;
+          if len(uniparc_dict) > 1000:
+             flush_uniparcs(uniparc_dict)
+             uniparc_dict = {}
+          
+       assert(line[1:4] == "UPI")
+       cur_uniparc = line[1:14] #  UPI + 10 character unique ID make the identifier
+       cur_fasta = ''
+     else:
+       cur_fasta += line.rstrip()
+       
+  if len(uniparc_dict):
+     flush_uniparcs(uniparc_dict)
+  uniparc_dict = {}
+
+sys.exit(0)
+
+
 # Increase maximum packet size for this connection
 # Oops - not allowed under Redhat 7 new server!
 # c = con.cursor()

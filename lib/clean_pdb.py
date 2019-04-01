@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.6
+#!/usr/bin/env python
 
 ##!/dors/meilerlab/apps/Linux2/x86_64/bin/python2.5
 

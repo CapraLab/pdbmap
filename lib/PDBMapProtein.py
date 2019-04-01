@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 #
 # Project        : PDBMap
 # Filename       : PDBMapProtein.py
@@ -263,7 +263,7 @@ class PDBMapProtein():
 
     logging.getLogger(__name__).info("Opening idmapping file: %s",idmapping_fname)
     # Load UniProt crossreferences, keyed on UniProt
-    with gzip.open(idmapping_fname) as fin:
+    with gzip.open(idmapping_fname,'rt',encoding='ascii') as fin:
       reader = csv.reader(fin,delimiter='\t')
     # Parse the comprehensive UniProt ID mapping resource
     # and extract all necessary information from the 3 columns

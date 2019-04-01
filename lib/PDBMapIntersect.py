@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 #
 # Project        : PDBMap
 # Filename       : PDBMapIntersect.py
@@ -92,7 +92,7 @@ class PDBMapIntersect():
           data = self.io.secure_query(query,(dlabel,),cursorclass='SSCursor')
         else:
           data = self.io.secure_query(query,cursorclass='SSCursor')
-        print " # Fetching PDBMap::GenomicConsequence,GenomicData #"
+        print(" # Fetching PDBMap::GenomicConsequence,GenomicData #")
         for row in data:
           writer.writerow(row)
 
@@ -120,7 +120,7 @@ class PDBMapIntersect():
           structures = self.io.secure_query(query,(slabel,),cursorclass='SSCursor')
         else:
           structures = self.io.secure_query(query,cursorclass='SSCursor')
-        print " # Fetching PDBMap::Alignment,Transcript #"
+        print(" # Fetching PDBMap::Alignment,Transcript #")
         for row in structures:
           writer.writerow(row)
 
@@ -131,7 +131,7 @@ class PDBMapIntersect():
       ## Temp files written. Beginning Intersection and upload. ##
 
       # Intersect with intersectBed and upload output to PDBMap.IntersectGenome
-      print " # Performing intersection #"
+      print(" # Performing intersection #")
       cmd = ["intersectBed","-wb","-a",temp1,"-b",temp2]
       p = sp.Popen(cmd,stdout=sp.PIPE)
       parser = process_parser(p)
@@ -160,7 +160,7 @@ class PDBMapIntersect():
     
 ## Copied from biolearn
 def multidigit_rand(digits):
-  randlist = [random.randint(1,10) for i in xrange(digits)]
+  randlist = [random.randint(1,10) for i in range(digits)]
   multidigit_rand = int(''.join([str(x) for x in randlist]))
   return multidigit_rand
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 #
 # Project        : PDBMap
 # Filename       : PDBMapIO.py
@@ -20,14 +20,14 @@ from Bio.PDB.PDBIO import PDBIO
 import Bio.PDB
 import tempfile
 import numpy as np
-from PDBMapModel import PDBMapModel
-from PDBMapSwiss import PDBMapSwiss
-from PDBMapProtein import PDBMapProtein
-from PDBMapStructure import PDBMapStructure
+from .PDBMapModel import PDBMapModel
+from .PDBMapSwiss import PDBMapSwiss
+from .PDBMapProtein import PDBMapProtein
+from .PDBMapStructure import PDBMapStructure
 import MySQLdb, MySQLdb.cursors
 # Support for caching sql queries
 import hashlib
-import cPickle as pickle
+import pickle as pickle
 
 from warnings import filterwarnings,resetwarnings
 from Bio.PDB.PDBExceptions import PDBConstructionWarning
@@ -56,7 +56,7 @@ class PDBMapIO(PDBIO):
   def __del__(self):
     # Guarantee all database connections are closed
     for con in self._cons:
-      logger.info("Calling con.close() to close SQL connection")
+      # logger.info("Calling con.close() to close SQL connection")
       con.close()
 
 
@@ -252,8 +252,8 @@ class PDBMapIO(PDBIO):
           rquery += '%(tco)s,%(k)s,%(a)s,%(conflict)s),'
           rfields = dict((key,r.__getattribute__(key)) for key in dir(r) 
                           if isinstance(key,collections.Hashable))
-          rfields["conflict"] = '"%s"'%rfields["conflict"] if rfields["conflict"] else '\N'
-          for key,val in rfields.iteritems():
+          rfields["conflict"] = '"%s"'%rfields["conflict"] if rfields["conflict"] else '\\N'
+          for key,val in list(rfields.items()):
             if val is None:
               if key == 'ss':
                 rfields[key] = '?'
@@ -270,27 +270,26 @@ class PDBMapIO(PDBIO):
       logger.critical(msg)
       return (0)
 
-    try:
-      tquery  = "INSERT IGNORE INTO Transcript "
-      tquery += "(label,transcript,protein,gene,seqid,rescode,chr,start,end,strand) "
-      tquery += "VALUES "
-      seen = set([])
-      for t in s.get_transcripts(io=self):
-        if t.transcript not in seen or seen.add(t.transcript):
-          for seqid,(rescode,chr,start,end,strand) in t.sequence.iteritems():
-            # If length exceeds 10 thousand characters, start a new query
-            if len(tquery) > 10000:
-              queries.append(tquery[:-1])
-              tquery  = "INSERT IGNORE INTO Transcript "
-              tquery += "(label,transcript,protein,gene,seqid,rescode,chr,start,end,strand) "
-              tquery += "VALUES "
-            tquery += '("%s","%s","%s","%s",'%(self.slabel,t.transcript,t.protein,t.gene)
-            tquery += '%d,"%s",'%(seqid,rescode)
-            tquery += '"%s",%d,%d,%d),'%(chr,start,end,strand)
-      queries.append(tquery[:-1])
-    except Exception as e:
-      msg = "ERROR (PDBMapIO) Failed to INSERT transcripts for %s: %s"%(s.id,str(e).rstrip('\n'))
-      raise Exception(msg)
+    tquery  = "INSERT IGNORE INTO Transcript "
+    tquery += "(label,transcript,protein,gene,seqid,rescode,chr,start,end,strand) "
+    tquery += "VALUES "
+    seen = set([])
+    for t in s.get_transcripts(io=self):
+      if t.transcript not in seen or seen.add(t.transcript):
+        for seqid,(rescode,chr,start,end,strand) in list(t.sequence.items()):
+          # If length exceeds 10 thousand characters, start a new query
+          if len(tquery) > 10000:
+            queries.append(tquery[:-1])
+            tquery  = "INSERT IGNORE INTO Transcript "
+            tquery += "(label,transcript,protein,gene,seqid,rescode,chr,start,end,strand) "
+            tquery += "VALUES "
+          tquery += '("%s","%s","%s","%s",'%(self.slabel,t.transcript,t.protein,t.gene)
+          tquery += '%d,"%s",'%(seqid,rescode)
+          tquery += '"%s",%d,%d,%d),'%(chr,start,end,strand)
+    queries.append(tquery[:-1])
+    # except Exception as e:
+    #  msg = "ERROR (PDBMapIO) Failed to INSERT transcripts for %s: %s"%(s.id,str(e).rstrip('\n'))
+    #  raise Exception(msg)
 
     # Execute all queries at once to ensure everything completed.
     try:
@@ -301,7 +300,7 @@ class PDBMapIO(PDBIO):
     except:
       msg  = "ERROR (PDBMapIO) Query failed for %s: "%s.id
       msg += "%s\n"%self._c._last_executed
-      sys.stderr.write(msg)
+      logger.exception(msg)
       self._con.rollback()
       raise
     finally:
@@ -324,7 +323,7 @@ class PDBMapIO(PDBIO):
       except:
         msg  = "ERROR (PDBMapIO) Query failed for %s: "%s.id
         msg += "%s\n"%self._c._last_executed
-        sys.stderr.write(msg)
+        logger.exception(msg)
         self._con.rollback()
         raise
 
@@ -345,7 +344,7 @@ class PDBMapIO(PDBIO):
       INSERT_VALUES = "INSERT IGNORE INTO AlignChainTranscriptResidue (chain_res_num, chain_res_icode, trans_seqid, al_id) VALUES "
       aquery  =       INSERT_VALUES
 
-      for c_seqid,t_seqid in a.pdb2seq.iteritems():
+      for c_seqid,t_seqid in list(a.pdb2seq.items()):
         # If length exceeds 10 thousand characters, start a new query
         if len(aquery) > 10000:
           queries.append(aquery[:-1])
@@ -617,9 +616,9 @@ class PDBMapIO(PDBIO):
       res = {}
       for row in q:
         if not res:
-          res = dict([(key,[val]) for key,val in row.iteritems()])
+          res = dict([(key,[val]) for key,val in list(row.items())])
         else:
-          for key,val in row.iteritems():
+          for key,val in list(row.items()):
             res[key].append(val)
       return res
     # Construct and return as a Bio.PDB.Structure
@@ -694,6 +693,7 @@ class PDBMapIO(PDBIO):
 
   @classmethod
   def dssp(cls,m,fname,dssp_executable='dssp'):
+    dssp_executable = '/dors/capra_lab/projects/psb_collab/psb_pipeline/data/dssp/dssp_local.exe'
     # Create temp file containing only ATOM rows
     try:
       temp_fileobject = tempfile.NamedTemporaryFile(delete=False)
@@ -712,8 +712,10 @@ class PDBMapIO(PDBIO):
       p = sp.Popen(cmd,stdout=sp.PIPE)
       resdict = {}
       start_flag = False
-      for i,line in enumerate(iter(p.stdout.readline,'')):
-        if not line: continue
+      stdout,stderr = p.communicate()
+      for i,linebytes in enumerate(stdout.splitlines()):
+        if not linebytes: continue
+        line = linebytes.decode('latin')
         if not start_flag:
           if line.startswith('  #'):
             start_flag = True
@@ -958,10 +960,10 @@ class PDBMapIO(PDBIO):
     logmsg = "With cursorclass %s, performing SQL query:\n"%str(cursorclass)
     query_hash = cursorclass 
     if qvars:
-      query_hash += hashlib.sha256(query%qvars).hexdigest()
+      query_hash += hashlib.sha256((query%qvars).encode('utf-8')).hexdigest()
       logmsg += query%qvars
     else:
-      query_hash += hashlib.sha256(query).hexdigest()
+      query_hash += hashlib.sha256(query.encode('utf-8')).hexdigest()
       logmsg += query
     
     query_hash_filename = os.path.join(cache_dir,query_hash)
@@ -1039,9 +1041,10 @@ class PDBMapIO(PDBIO):
     return rc
 
   def check_schema(self):
+    return  # I have no idea why we'd want to do this with every startup
     self._connect(usedb=False)
     format_dict = {'dbuser':self.dbuser,'dbhost':self.dbhost}
-    queries = [ 'lib/create_scheme_Idmapping.sql',
+    queries = [ 'lib/create_schema_Idmapping.sql',
                 'lib/create_schema_Structure.sql',
                 'lib/create_schema_Model.sql',
                 'lib/create_schema_Chain.sql',
@@ -1052,23 +1055,24 @@ class PDBMapIO(PDBIO):
                 'lib/create_schema_GenomicConsequence.sql',
                 'lib/create_schema_GenomicIntersection.sql',
                 'lib/create_schema_sifts.sql',
-                'lib/create_schema_pfam.sql',
+                # 'lib/create_schema_pfam.sql',
                 'lib/create_procedure_assign_foreign_keys.sql',
                 'lib/create_procedure_get_protein.sql',
                 'lib/create_procedure_get_structure.sql',
-                'lib/create_procedure_get_full_structure.sql',
-                'lib/create_procedure_get_repr_subset.sql']
+                'lib/create_procedure_get_full_structure.sql']
+                # 'lib/create_procedure_get_repr_subset.sql']
     filterwarnings('ignore', category = MySQLdb.Warning)
     try: # Create the database if not exists
       self._c.execute("CREATE DATABASE %s"%self.dbname)
     except: pass # Database exists. Using existing.
     finally: self._c.execute("USE %s"%self.dbname)
-    for q in queries:
-      try: # Create the tables and procedures if not exists
-        lines = [line.split('#')[0].rstrip() for line in open(q,'rb')]
-        query = ' '.join(lines)
-        self._c.execute(query%format_dict)
-      except: pass # Table exists. Using existing.
+    for sql_file in queries:
+      with open(sql_file) as sql_fp:
+        lines = [line.split('#')[0].rstrip() for line in sql_fp]
+        try: # Create the tables and procedures if not exists
+          query = ' '.join(lines)
+          self._c.execute(query%format_dict)
+        except: pass # Table exists. Using existing.
     resetwarnings()
     self._close()
 
@@ -1146,7 +1150,7 @@ aa_code_map = {"ala" : "A",
         "trp" : "W",
         "tyr" : "Y",
         "val" : "V"}
-for key,val in aa_code_map.items():
+for key,val in list(aa_code_map.items()):
   aa_code_map[val] = key        
 solv_acc = {"A" : 115,
         "R" : 225,
@@ -1174,7 +1178,7 @@ solv_acc = {"A" : 115,
 
 ## Copied from biolearn
 def multidigit_rand(digits):
-  randlist = [random.randint(1,10) for i in xrange(digits)]
+  randlist = [random.randint(1,10) for i in range(digits)]
   multidigit_rand = int(''.join([str(x) for x in randlist]))
   return multidigit_rand
 

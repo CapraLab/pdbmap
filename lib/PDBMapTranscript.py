@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 #
 # Project        : PDBMap
 # Filename       : PDBMapTranscript.py
@@ -13,8 +13,8 @@
 #=============================================================================#
 
 # See main check for cmd line parsing
-import sys,os,csv,commands
-from PDBMapProtein import PDBMapProtein
+import sys,os,csv,subprocess
+from .PDBMapProtein import PDBMapProtein
 
 import logging
 logger = logging.getLogger(__name__)
@@ -40,11 +40,11 @@ class PDBMapTranscript():
     # Cache the transid->transcript query
     PDBMapTranscript.trans_cache[transid] = (transcript,0)
     # Update access counts
-    for tid,(tobj,count) in PDBMapTranscript.trans_cache.iteritems():
+    for tid,(tobj,count) in PDBMapTranscript.trans_cache.items():
       PDBMapTranscript.trans_cache[tid] = (tobj,count+1)
     # Remove infrequently accessed entries
     PDBMapTranscript.trans_cache = dict([(x,(y,z)) for x,(y,z) in \
-                PDBMapTranscript.trans_cache.iteritems() \
+                PDBMapTranscript.trans_cache.items() \
                 if z < PDBMapTranscript.CACHE_ACCESS_MIN])
 
   @classmethod
@@ -55,7 +55,7 @@ class PDBMapTranscript():
       unpid = PDBMapProtein._sec2prim[unpid]
       msg += "Using primary AC: %s\n"%unpid
       logger.warning(msg)
-    transids = PDBMapProtein.unp2enst(unpid)
+    transids = PDBMapProtein.unp2enst(PDBMapProtein.best_unp(unpid))
     if len(transids) < 1:
       msg = "WARNING (query_from_unp) No transcripts match %s\n"%unpid
       logger.warning(msg)
@@ -81,7 +81,7 @@ class PDBMapTranscript():
     # Query the Ensembl API for the transcript
     cmd = "perl lib/transcript_to_genomic.pl %s"%transid
     logger.info("Executing: %s"%cmd)
-    status, output = commands.getstatusoutput(cmd)
+    status, output = subprocess.getstatusoutput(cmd)
     if status > 0:
       logger.warn("Exit Code of %d from perl lib/transcript_to_genomic.pl %s stdout:\n%s"%(status,transid,output))
       # msg = "   WARNING (transcript_to_genomic.pl) %s: %s\n"%(transid,output)
@@ -109,7 +109,7 @@ class PDBMapTranscript():
       gene       = fields[2]
       seqid      = int(fields[3])
       rescode    = fields[4].upper()
-      if rescode not in aa_code_map.values():
+      if rescode not in list(aa_code_map.values()):
         rescode  = 'X' # replace non-standard amino acids with X
       start      = int(fields[5])
       end        = int(fields[6])

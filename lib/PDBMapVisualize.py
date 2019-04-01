@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 #
 # Project        : PDBMap
 # Filename       : PDBMapVisualize.py
@@ -29,7 +29,7 @@ class PDBMapVisualize():
   def visualize_structure(self,structid,biounit=0,anno_list=['maf'],eps=None,mins=None,spectrum_range=[],group=None,colors=[],permute=False,syn=False):
     """ Visualize the annotated dataset within a structure """
     biounit = 0 if biounit<0 else biounit
-    print "Visualizing %s.%s..."%(structid,biounit)
+    print("Visualizing %s.%s..."%(structid,biounit))
     structid = structid.lower()
     res  = self.io.load_structure(structid,biounit,raw=True,syn=syn)
     if not res:
@@ -49,13 +49,13 @@ class PDBMapVisualize():
         import inflect
         convA = inflect.engine().number_to_words(anno[0]) + anno[1:]
         anno = convA
-        print "\nConverted annotation label from %s to %s"%(anno,convA)
+        print("\nConverted annotation label from %s to %s"%(anno,convA))
       res[anno] = [1 if l==self.io.dlabel else None for l in res["dlabel"]]
       anno_list = [anno]
 
     # If synonymous variants are requested, switch the issnp flag
     if syn:
-      print "\nSwitching from nonsynonymous to synonymous variants..."
+      print("\nSwitching from nonsynonymous to synonymous variants...")
       res['issnp'] = [int('synonymous_variant' in c) if c else 0 for c in res['consequence']]
 
     # Convert MAF values into DAF values
@@ -76,7 +76,7 @@ class PDBMapVisualize():
           nres = self.io.load_structure(structid,biounit,useranno=True,raw=True)
           if syn:
             # If synonymous variants are requested, switch the issnp flag
-            print "\nSwitching from nonsynonymous to synonymous variants..."
+            print("\nSwitching from nonsynonymous to synonymous variants...")
             nres['issnp'] = [int(c.contains('synonymous_variant')) for c in nres['consequence']]
           if not res:
             # Initialize res with the first user-annotated result
@@ -102,9 +102,9 @@ class PDBMapVisualize():
     del res['issnp']
 
     # Report the final annotation count
-    print "(%d annotated residues)"%len(res['seqid'])
-    print "(%d non-duplicate residues)"%len(set(zip(res['chain'],res['seqid'])))
-    print "(%d with non-zero/null values)"%len([x for x in res[anno] if x])
+    print("(%d annotated residues)"%len(res['seqid']))
+    print("(%d non-duplicate residues)"%len(set(zip(res['chain'],res['seqid']))))
+    print("(%d with non-zero/null values)"%len([x for x in res[anno] if x]))
 
     # Determine the first residue for renumbering
     resrenumber = {}
@@ -124,7 +124,7 @@ class PDBMapVisualize():
       location = np.array([list(coord) for coord in zip(res['x'],res['y'],res['z'])])
       seen = set()
       seen_add = seen.add
-      newres = dict((k,[]) for k in res.keys())
+      newres = dict((k,[]) for k in list(res.keys()))
       for i in range(len(res['x'])):
         coord = (res['x'][i],res['y'][i],res['z'][i])
         if not (coord in seen or seen_add(coord)):
@@ -239,16 +239,16 @@ class PDBMapVisualize():
         from lib import PDBMapModel
         struct_loc = PDBMapModel.get_coord_file(structid.upper())
       elif int(biounit) == 0:
-        struct_loc = "%s/structures/all/pdb/pdb%s.ent.gz"%(self.pdb_dir,structid)
+        struct_loc = "%s/structures/pdb%s.ent.gz"%(self.pdb_dir,structid)
       else:
-        struct_loc = "%s/biounit/coordinates/all/%s.pdb%s.gz"%(self.pdb_dir,structid,biounit)
+        struct_loc = "%s/biounits/%s.pdb%s.gz"%(self.pdb_dir,structid,biounit)
       params = {'structid':structid,'biounit':biounit,'anno':anno,'attrf':attrf,'colors':colors,'vtype':params['vtype'],
                 'minval':minval,'maxval':maxval,'resis':out,'struct_loc':struct_loc,'resrenumber':resrenumber}
       self.visualize(params,group=group)
 
   def visualize_unp(self,unpid,anno_list=['maf'],eps=None,mins=None,spectrum_range=[],colors=[],syn=False):
     """ Visualize the annotated dataset associated with a protein """
-    print "Visualizing protein %s"%(unpid)
+    print("Visualizing protein %s"%(unpid))
     res_list  = self.io.load_unp(unpid)
     # Visualize for each biological assembly
     for entity_type,entity in res_list:
@@ -261,13 +261,13 @@ class PDBMapVisualize():
           res   = self.io.secure_query(query,(self.io.slabel,entity),cursorclass='Cursor')
           biounits = [r[0] for r in res]
         for biounit in biounits:
-          print "Visualizing structure %s.%s"%(entity,biounit)
+          print("Visualizing structure %s.%s"%(entity,biounit))
           self.visualize_structure(entity,biounit,anno_list,eps,mins,spectrum_range,group=unpid,colors=colors,syn=syn)
       elif entity_type == 'model':
         # Query all biological assemblies
         biounits = [-1]
         for biounit in biounits:
-          print "Visualizing model %s.%s"%(entity,biounit)
+          print("Visualizing model %s.%s"%(entity,biounit))
           self.visualize_structure(entity,biounit,anno_list,eps,mins,spectrum_range,group=unpid,colors=colors,syn=syn)
       else:
         msg = "ERROR (PDBMapVisualize) Invalid entity_type for %s: %s"%(entity,entity_type)
@@ -275,7 +275,7 @@ class PDBMapVisualize():
 
   def visualize_all(self,anno_list=['maf'],eps=None,mins=None,spectrum_range=[],colors=[],syn=False):
     """ Visualize all structures and models for the annotated dataset """
-    print "Visualizing dataset %s"%self.io.dlabel
+    print("Visualizing dataset %s"%self.io.dlabel)
     query = "SELECT DISTINCT structid FROM GenomicIntersection WHERE dlabel=%s"
     res   = [r for r in self.io.secure_query(query,(self.io.dlabel,),cursorclass='Cursor')]
     structures = [r[0] for r in res if self.io.detect_entity_type(r[0]) == 'structure']
@@ -319,7 +319,7 @@ class PDBMapVisualize():
     if platform.system() == 'Darwin':
       cmd  = "TEMP=$PYTHONPATH; unset PYTHONPATH; chimera --silent --script %s; export PYTHONPATH=$TEMP"%script
     try:
-      print "Launching Chimera visualization script..."
+      print("Launching Chimera visualization script...")
       status = os.system(cmd)
       if status:
         raise Exception("Chimera process return non-zero exit status.")
@@ -382,8 +382,8 @@ class PDBMapVisualize():
     commands = [PDBMapVisualize.overwrite_bfactor(row[0],row[1],int(row[2]),float(row[col])) for row in scores]
     include = "br. b > %f"%min_score
     exclude = "br. b < %f"%min_score
-    print("Minimum score: %s"%min_score)
-    print("Maximum score: %s"%max_score)
+    print(("Minimum score: %s"%min_score))
+    print(("Maximum score: %s"%max_score))
 
     # Generate models
     if surface:
@@ -468,7 +468,7 @@ def dist(ipos,jpos):
 ## Copied from biolearn
 def multidigit_rand(digits):
   import random
-  randlist = [random.randint(1,10) for i in xrange(digits)]
+  randlist = [random.randint(1,10) for i in range(digits)]
   multidigit_rand = int(''.join([str(x) for x in randlist]))
   return multidigit_rand
 
@@ -512,9 +512,9 @@ if __name__ == '__main__':
   rc("setattr m autochain 0")
   rc("setattr m ballScale .7")
   if params['colors']:
-    crange = range(int(params['minval']),int(params['maxval'])+1)
+    crange = list(range(int(params['minval']),int(params['maxval'])+1))
     colors = params['colors']
-    print ';'.join(["%d->%s"%(val,colors[i]) for i,val in enumerate(crange)])
+    print(';'.join(["%d->%s"%(val,colors[i]) for i,val in enumerate(crange)]))
     for i,val in enumerate(crange):
       rc("color %s,a :/%s=%d"%(colors[i],params['anno'],val))
   elif len(params['resis']) < 2 or params['minval'] == params['maxval']:

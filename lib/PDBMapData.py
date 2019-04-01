@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python
 #
 # Project        : PDBMap
 # Filename       : PDBMapData.py
@@ -192,7 +192,7 @@ class PDBMapData():
 
   def load_vcf(self,fname,vep=True):
     """ Pipe VCF file through VEP and yield VEP rows """
-    print "Initializing VCF generator."
+    print("Initializing VCF generator.")
     # Parse the VCF output from VEP, save to cache
     cache  = 'data/cache/%s'%os.path.basename(fname)
     if cache.split('.')[-1] != 'gz':
@@ -211,7 +211,7 @@ class PDBMapData():
         # If no CSQ present, insert dummy structure
         parser.infos['CSQ'] = bed.Consequence() # dummy object
     # Determine Info headers
-    info_headers = parser.infos.keys()
+    info_headers = list(parser.infos.keys())
     # Determine Consequence headers
     csq_headers  = parser.infos['CSQ'].desc.split(': ')[-1].split('|')
     snpcount = 0
@@ -228,16 +228,16 @@ class PDBMapData():
           snpcount += 1
           yield self.record_parser(record,info_headers,csq_headers)
     ## We are now allowing Synonymous SNPs to be mapped ##
-    print "\nTotal SNPs (syn+nonsyn) in %s: %d"%(fname,snpcount)
+    print("\nTotal SNPs (syn+nonsyn) in %s: %d"%(fname,snpcount))
     # print "Nonsynonymous SNPs in %s: %d"%(fname,nscount)
 
   def load_pedmap(self,fname):
     """ Convert PED/MAP to VCF, pipe VCF through VEP and load VEP output """
-    print "load_pedmap not implemented"
+    print("load_pedmap not implemented")
 
   def load_bed(self,fname,id_type="id",vep=True,indexing=None):
     """ Load data from BED """
-    print "Initializing BED generator."
+    print("Initializing BED generator.")
     # Parse the VCF output from VEP, save to cache
     cache  = 'data/cache/%s.gz'%os.path.basename(fname)
     if cache.split('.')[-1] != 'gz':
@@ -247,7 +247,7 @@ class PDBMapData():
     else:
       parser = bed.Reader(fname,indexing=indexing,prepend_chr=True)
     # Determine Info headers
-    info_headers = parser.infos.keys()
+    info_headers = list(parser.infos.keys())
     # Determine Consequence headers
     if vep:
       csq_headers  = parser.infos['CSQ'].desc.split(': ')[-1].split('|')
@@ -265,7 +265,7 @@ class PDBMapData():
                         'chrX','chrY','chrMT']:
         continue
       yield self.record_parser(record,info_headers,csq_headers)
-    print "Total SNPs (syn+nonsyn) in %s: %d"%(fname,snpcount)
+    print("Total SNPs (syn+nonsyn) in %s: %d"%(fname,snpcount))
 
   def load_vcffile(self,fname,io,buffer_size=1):
     """ Creates a supplementary table for original VCF datafile """
@@ -276,20 +276,20 @@ class PDBMapData():
     header_types  = ["VARCHAR(100)","BIGINT","VARCHAR(100)","VARCHAR(100)"]
     header_types += ["VARCHAR(100)","DOUBLE","VARCHAR(100)"]
     # Correct any overlaps with the default header
-    for name in parser.infos.keys():
+    for name in list(parser.infos.keys()):
       if name.lower() in var_header:
         parser.infos["%s2"%name] = parser.infos[name]
         del parser.infos[name]
     # Extract info fields
-    info_header = parser.infos.keys()
+    info_header = list(parser.infos.keys())
     # Extract and convert info types
     type_conv = {"Integer":"BIGINT","Float":"DOUBLE","Flag":"TINYINT","String":"TEXT"}
-    info_types  = [type_conv[info.type] for info in parser.infos.values()]
+    info_types  = [type_conv[info.type] for info in list(parser.infos.values())]
     for char in ['.',' ','/','\\','(',')','[',']','-','!','+','=']:
         info_header = [f.replace(char,'_') for f in info_header]
     header = var_header + info_header #+ csq_header
     # Use the first row to infer data types for the INFO fields
-    record = parser.next()
+    record = next(parser)
     types    = header_types + info_types #+ csq_types
     # Set default values for each type
     defaults = {"BIGINT":0,"DOUBLE":0.0,"TINYINT":0,"TEXT":"''","VARCHAR(100)":"''"}
@@ -316,7 +316,7 @@ class PDBMapData():
       row  = [record.CHROM,record.POS,record.ID]
       row += [record.REF,record.ALT,record.QUAL,record.FILTER]
       # Only retain the most frequent alternate allele (force biallelic)
-      row += [record.INFO[f] if f in record.INFO else None for f in infos.keys()]
+      row += [record.INFO[f] if f in record.INFO else None for f in list(infos.keys())]
       # Replace any empty lists with None
       row =  [r if type(r)!=list or len(r)<1 else r[0] for r in row]
       row =  [r if r!=[] else None for r in row]
@@ -330,7 +330,7 @@ class PDBMapData():
         try:
           io.secure_command(query,rows)
         except:
-          print "Isolating the problem row..."
+          print("Isolating the problem row...")
           rowlen = queryf.count("%")
           for i in range(0,len(rows),rowlen):
             row = rows[i:i+rowlen]
@@ -346,7 +346,7 @@ class PDBMapData():
       try:
         io.secure_command(query,rows)
       except:
-        print "Isolating the problem row..."
+        print("Isolating the problem row...")
         rowlen = queryf.count("%")
         for i in range(0,len(rows),rowlen):
           row = rows[i:i+rowlen]
@@ -357,14 +357,14 @@ class PDBMapData():
 
   def load_bedfile(self,fname,io,delim='\t',indexing=None,vepprep=True):
     """ Creates a supplementary table for original BED datafile """
-    print "Uploading original datafile to supplementary database."
+    print("Uploading original datafile to supplementary database.")
     with open(fname,'rb') as fin:
       header = fin.readline().strip().split('\t')
       header[0:4] = ["chr","start","end","name"]
       for char in ['.',' ','/','\\','(',')','[',']','-','!','+','=']:
         header = [f.replace(char,'_') for f in header]
       reader = csv.reader(fin,delimiter='\t')
-      row1   = reader.next()
+      row1   = next(reader)
       prepend_chr = True if row1[0][:3] != "chr" else False
     # Remove header from bed file
     types = ["VARCHAR(100)","INT","INT","VARCHAR(100)"]
@@ -383,7 +383,7 @@ class PDBMapData():
         try:
           col = float(col)
           types.insert(i,"DOUBLE")
-        except ValueError,TypeError:
+        except ValueError as TypeError:
           if len(col) > 150:
             types.insert(i,"TEXT")
           else:
@@ -421,7 +421,7 @@ class PDBMapData():
 
   def load_vep(self,fname,intype='vcf',outfile=None):
     """ Yield VEP rows """
-    print "Initializing VEP generator."
+    print("Initializing VEP generator.")
     cmd = [f for f in self.vep_cmd]
     cmd[2] = fname
     if intype == 'default':
@@ -430,7 +430,7 @@ class PDBMapData():
     else:
       # Provide the correct format argument (vcf;id;hgvs)
       cmd[4] = intype
-    print ' '.join(cmd)
+    print(' '.join(cmd))
     try:
       # Call VEP and capture stdout in realtime
       p = sp.Popen(cmd,stdout=sp.PIPE,bufsize=1)
@@ -580,7 +580,7 @@ class PDBMapData():
       try: return bool(key) 
       except: return None
 
-    print "Debug: %s"%' '.join(row)
+    print("Debug: %s"%' '.join(row))
 
     vep["name"] = row[0]
     loc = row[1].split(':')  # split chr and loc
