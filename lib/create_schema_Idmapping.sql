@@ -1,5 +1,6 @@
 -- The idmapping input file is prepared via download and post-processing as
--- described in the data subdirectory.
+-- described in the data/uniprot/current/ subdirectory.
+-- gunzip the file HUMAN_9606_idmapping_sprot.dat.gz to /tmp/Idmapping
 --
 -- By loading this file into an indexed table, startup time is dramatically reduced
 -- ftp://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/idmapping/README
