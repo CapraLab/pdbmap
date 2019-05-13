@@ -469,7 +469,7 @@ __  __  __
     "ppidx"  : None
     }
   if args.conf_file:
-    config = configparser.SafeConfigParser()
+    config = configparser.ConfigParser()
     config.read([args.conf_file])
     defaults.update(dict(config.items("Genome_PDB_Mapper")))
   conf_file = args.conf_file
@@ -477,7 +477,6 @@ __  __  __
   # Setup the Command Line Parser
   parser = argparse.ArgumentParser(parents=[conf_parser],description=__doc__,formatter_class=argparse.RawDescriptionHelpFormatter)
   defaults['create_new_db'] = ('True' == defaults['create_new_db'])
-  parser.set_defaults(**defaults)
   parser.add_argument("-v", "--version", action="version", 
               version="PDBMap version 1.8")
   parser.add_argument("cmd",nargs='?', 
@@ -542,6 +541,7 @@ __  __  __
               help="Used to manage parallel subprocesses. Do not call directly.")
   parser.add_argument("-j", "--cores", type=int,
               help="Number of available processors")
+  parser.set_defaults(**defaults)
 
   args = parser.parse_args(remaining_argv)
   args.conf_file = conf_file
