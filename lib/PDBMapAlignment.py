@@ -33,7 +33,8 @@ class PDBMapAlignment():
     self.aln_str,      \
     self.score,        \
     self.perc_aligned, \
-    self.perc_identity = self.align(chain,transcript,io=io)
+    self.perc_identity, \
+    self.trivial_alignment = self.align(chain,transcript,io=io)
     # except Exception as e:
     #    msg = "ERROR (PDBMapAlignment) Error aligning %s to %s: %s\n"%(
     #            chain.id,transcript.transcript,str(e))
@@ -122,7 +123,7 @@ class PDBMapAlignment():
       aln_str = temp_aln_str + "\n" + temp_aln_str
       aln_score = sum([matlist.blosum62[(t_seq[trans_seq],t_seq[trans_seq])] for trans_seq in seq2pdb])
 
-      perc_aligned = 99.0
+      perc_aligned = 100.0
       perc_identity = 1.0
     else:
       return self.align_complex(c_seq,t_seq,chain,transcript,io)
@@ -130,8 +131,8 @@ class PDBMapAlignment():
       # s blank codes for now - these insertion codes are quite rare
       # pdb2seq = OrderedDict(((' ',pdb_res,' '),pdb2seq_deprecated[pdb_res]) for pdb_res in sorted(pdb2seq_deprecated))
       # seq2pdb       = OrderedDict((trans_seq, chain_seq) for chain_seq, trans_seq in pdb2seq.items())
-    
-    return pdb2seq,seq2pdb,aln_str,aln_score,perc_aligned,perc_identity
+   
+    return pdb2seq,seq2pdb,aln_str,aln_score,perc_aligned,perc_identity,trivialAlignmentPossible
 
 
 
@@ -276,7 +277,7 @@ class PDBMapAlignment():
     # The next(iter and next(reversed below return first and last elements
     logger.info("Complex pairwise (non-sifts) alignment of %d residues %s to %s"%(len(pdb2seq),str(next(iter(pdb2seq))),str(next(reversed(pdb2seq)))))
 
-    return pdb2seq,seq2pdb,aln_str,aln_score,perc_aligned,perc_identity
+    return pdb2seq,seq2pdb,aln_str,aln_score,perc_aligned,perc_identity,False
 
   def _gap_shift(self,seq,seq_start,gaps=[]):
     """ Support generator function for align """
