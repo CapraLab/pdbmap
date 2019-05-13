@@ -1,8 +1,7 @@
 #!/usr/bin/env perl
 
-# use lib "/dors/capra_lab/opt/ensembl_87/ensembl/modules";
-
 use Bio::EnsEMBL::Registry;
+
 my $registry = 'Bio::EnsEMBL::Registry';
 
 my $instances_found = $registry->load_all(); # pens the config file in the environment variable ENSEMBL_CONF
@@ -13,13 +12,64 @@ if ($instances_found < 1) {
   exit 1;
 }
 
+
+
+sub feature2string
+{
+    my $feature = shift;
+
+    my $stable_id  = $feature->stable_id();
+    my $seq_region = $feature->slice->seq_region_name();
+    my $start      = $feature->start();
+    my $end        = $feature->end();
+    my $strand     = $feature->strand();
+
+    return sprintf( "%s: %s:%d-%d (%+d)",
+        $stable_id, $seq_region, $start, $end, $strand );
+}
+
 # Command line argument: transcript ID
 my $transcript_id = $ARGV[0];
 # Open connection with local Ensembl database (read-only)
 # Bio::EnsEMBL::Registry->load_registry_from_db(-host=>'vgi01.accre.vanderbilt.edu',-user=>'script_access',-pass=>'capralab');
 # Bio::EnsEMBL::Registry->load_registry_from_db(-host =>'useastdb.ensembl.org',-user =>'anonymous');
 # Create a transcript adaptor from the transcript ID
-$transcript_adaptor = Bio::EnsEMBL::Registry->get_adaptor('human','core','Transcript');
+my $transcript_adaptor = Bio::EnsEMBL::Registry->get_adaptor('human','core','Transcript');
+
+my $slice_adaptor = Bio::EnsEMBL::Registry->get_adaptor( 'Human', 'Core', 'Slice' );
+
+$slice = $slice_adaptor->fetch_by_region('chromosome', '7', 48315043,48315043);
+# The method coord_system() returns a Bio::EnsEMBL::CoordSystem object
+my $coord_sys  = $slice->coord_system()->name();
+my $seq_region = $slice->seq_region_name();
+my $start      = $slice->start();
+my $end        = $slice->end();
+my $strand     = $slice->strand();
+
+print "Slice: $coord_sys $seq_region $start-$end ($strand)\n";
+
+my $genes = $slice->get_all_Genes();
+
+while ( my $gene = shift @{$genes} ) {
+    my $gstring = feature2string($gene);
+    print "$gstring\n";
+
+    my $transcripts = $gene->get_all_Transcripts();
+    while ( my $transcript = shift @{$transcripts} ) {
+        my $tstring = feature2string($transcript);
+        print "\t$tstring\n";
+        my $protein = $transcript->translate();
+
+        print "Translation: ", ( defined $protein ? $protein->seq() : "None" ), "\n";
+        # foreach my $exon ( @{ $transcript->get_all_Exons() } ) {
+        #    my $estring = feature2string($exon);
+        #    print "\t\t$estring\n";
+        # }
+    }
+}
+
+exit 0;
+
 $transcript = $transcript_adaptor->fetch_by_stable_id($transcript_id);
 
 # Check that the transcript query was successful
