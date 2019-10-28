@@ -32,9 +32,7 @@ import pickle as pickle
 from warnings import filterwarnings,resetwarnings
 from Bio.PDB.PDBExceptions import PDBConstructionWarning
 import logging
-logging.basicConfig(format='%(asctime)s %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
-    datefmt='%d-%m-%Y:%H:%M:%S',)
-logger = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__name__)
 
 class PDBMapIO(PDBIO):
   def __init__(self,dbhost=None,dbuser=None,dbpass=None,dbname=None,slabel="",dlabel="",createdb=False):
@@ -56,7 +54,7 @@ class PDBMapIO(PDBIO):
   def __del__(self):
     # Guarantee all database connections are closed
     for con in self._cons:
-      # logger.info("Calling con.close() to close SQL connection")
+      # LOGGER.info("Calling con.close() to close SQL connection")
       con.close()
 
 
@@ -267,7 +265,7 @@ class PDBMapIO(PDBIO):
     # Inner exception if empty list, outer exception if error during query
     if not len(s.get_transcripts(io=self)):
       msg = "No transcripts for structure %s, proteins: %s"%(s.id,','.join([c.unp for m in s for c in m]))
-      logger.critical(msg)
+      LOGGER.critical(msg)
       return (0)
 
     tquery  = "INSERT IGNORE INTO Transcript "
@@ -300,7 +298,7 @@ class PDBMapIO(PDBIO):
     except:
       msg  = "ERROR (PDBMapIO) Query failed for %s: "%s.id
       msg += "%s\n"%self._c._last_executed
-      logger.exception(msg)
+      LOGGER.exception(msg)
       self._con.rollback()
       raise
     finally:
@@ -323,7 +321,7 @@ class PDBMapIO(PDBIO):
       except:
         msg  = "ERROR (PDBMapIO) Query failed for %s: "%s.id
         msg += "%s\n"%self._c._last_executed
-        logger.exception(msg)
+        LOGGER.exception(msg)
         self._con.rollback()
         raise
 
@@ -381,11 +379,11 @@ class PDBMapIO(PDBIO):
       "DELETE FROM Model"]
 
     for mquery in deleteCommands:
-      logger.info(mquery)
+      LOGGER.info(mquery)
       try:
         self._c.execute(mquery)
       except (MySQLdb.Error, MySQLdb.Warning) as e:
-        logger.critical(e)
+        LOGGER.critical(e)
         sys.exit(1)
     self._close()
 
@@ -428,11 +426,11 @@ class PDBMapIO(PDBIO):
       "DELETE FROM Swiss"]
 
     for mquery in deleteCommands:
-      logger.info(mquery)
+      LOGGER.info(mquery)
       try:
         self._c.execute(mquery)
       except (MySQLdb.Error, MySQLdb.Warning) as e:
-        logger.critical(e)
+        LOGGER.critical(e)
         sys.exit(1)
     self._close()
 
@@ -679,7 +677,7 @@ class PDBMapIO(PDBIO):
     q = self.secure_query(query,qvars=('swiss',base_unp,base_unp),
                                         cursorclass='Cursor')
     entities.extend([r[0] for r in q])
-    logger.info("%s found in %d structures/models."%(unpid,len(entities)))
+    LOGGER.info("%s found in %d structures/models."%(unpid,len(entities)))
     res = []
     for entity in entities:
       entity_type = self.detect_entity_type(entity)
@@ -848,7 +846,7 @@ class PDBMapIO(PDBIO):
           self._con = con
         else:
           # Remove dead connection
-          logger.info("Calling con.close() to close SQL connection")
+          LOGGER.info("Calling con.close() to close SQL connection")
           con.close()
           self._cons.remove(con)
     # If none was found, open a new connection with desired cursorclass
@@ -857,7 +855,7 @@ class PDBMapIO(PDBIO):
       nMaxRetries = 100000
       while (True):
         trycount += 1
-        logger.info("Connecting to %s with %s"%(self.dbhost,cursorclass.__name__))
+        LOGGER.info("Connecting to %s with %s"%(self.dbhost,cursorclass.__name__))
         try:
           if usedb:
             if self.dbpass:
@@ -878,7 +876,7 @@ class PDBMapIO(PDBIO):
                   user=self.dbuser,cursorclass=cursorclass)
           # Add to connection pool and set as active connection
           # This point is "success" from MySQLdb.connect
-          # logger.info("Successful connect to %s"%self.dbhost)
+          # LOGGER.info("Successful connect to %s"%self.dbhost)
           self._cons.append(con)
           self._con = con
           # Success... Leave while loop
@@ -886,7 +884,7 @@ class PDBMapIO(PDBIO):
         except MySQLdb.OperationalError as e:
           if e[0] == 1040:          
             msg = "Unable to connect to connect to mySQL: %s\n"%e
-            logger.exception(msg)
+            LOGGER.exception(msg)
             sys.stderr.write(msg)
             # If nMaxRetries, terminate with exception
             if (trycount == nMaxRetries):
@@ -896,7 +894,7 @@ class PDBMapIO(PDBIO):
             else:
               waitTime = 30*(1+trycount % 5)
               msg = "Try %d failed.  Waiting %d secs and retrying...\n"%(trycount,waitTime)
-              logger.exception(msg)
+              LOGGER.exception(msg)
               time.sleep(waitTime) # Wait 30/60/90 etc seconds and retry (return to top of while loop)
             # Loop back through while loop
           else:
@@ -913,7 +911,7 @@ class PDBMapIO(PDBIO):
     return self._c
 
   def _close(self):
-    # logger.info("Closing SQL connection")
+    # LOGGER.info("Closing SQL connection")
     self._c.close() # Close only the cursor
     return
 
@@ -924,7 +922,7 @@ class PDBMapIO(PDBIO):
       logmsg += query%qvars
     else:
       logmsg += query
-    logger.info(logmsg)
+    LOGGER.info(logmsg)
 
     if cursorclass == 'SSDictCursor':
       self._connect(cursorclass=MySQLdb.cursors.SSDictCursor)
@@ -946,7 +944,7 @@ class PDBMapIO(PDBIO):
       msg += " Provided args: %s"%str(qvars)
       if "_last_executed" in dir(self._c):
         msg += "\n Executed Query: \n%s"%self._c._last_executed
-      logger.exception(msg)
+      LOGGER.exception(msg)
       raise Exception(msg)
     finally:
       # msg = "Executed Query: \n%s\n"%self._c._last_executed
@@ -968,15 +966,15 @@ class PDBMapIO(PDBIO):
     
     query_hash_filename = os.path.join(cache_dir,query_hash)
     logmsg += "\nquery_hash = %s"%query_hash_filename
-    logger.info(logmsg)
+    LOGGER.info(logmsg)
     if os.path.exists(query_hash_filename):
-      logger.info("returning query results from cache")
+      LOGGER.info("returning query results from cache")
       with open(query_hash_filename,'rb') as cache_file_handle:
         rows = pickle.load(cache_file_handle)
         for row in rows:
           yield row
     else: 
-      logger.info("Cache not found.  Executing new query")
+      LOGGER.info("Cache not found.  Executing new query")
       if cursorclass == 'SSDictCursor':
         self._connect(cursorclass=MySQLdb.cursors.SSDictCursor)
       elif cursorclass == 'SSCursor':
@@ -998,7 +996,7 @@ class PDBMapIO(PDBIO):
         msg += " Provided args: %s"%str(qvars)
         if "_last_executed" in dir(self._c):
           msg += "\n Executed Query: \n%s"%self._c._last_executed
-        logger.exception(msg)
+        LOGGER.exception(msg)
         raise Exception(msg)
       finally:
         # msg = "Executed Query: \n%s\n"%self._c._last_executed
@@ -1011,12 +1009,12 @@ class PDBMapIO(PDBIO):
         try: # Atomic rename can fail due to multi-process contention.  don't halt for that!
           os.link(cache_file_handle.name,query_hash_filename)
         except:
-          logger.warn("Unable to rename %s to %s"%(cache_file_handle.name,query_hash_filename))
+          LOGGER.warn("Unable to rename %s to %s"%(cache_file_handle.name,query_hash_filename))
         else:
           umask = os.umask(0)
           os.umask(umask)
           os.chmod(query_hash_filename, 0o666 & ~umask)
-          logger.info("Query results saved to %s"%query_hash_filename)
+          LOGGER.info("Query results saved to %s"%query_hash_filename)
       for row in rows:
         yield row
 

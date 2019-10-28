@@ -17,8 +17,7 @@
 # See main check for cmd line parsing
 import sys,csv,gzip
 import logging
-logging.basicConfig(format='%(asctime)s %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
-    datefmt='%d-%m-%Y:%H:%M:%S',)
+LOGGER = logging.getLogger(__name__)
 from collections import defaultdict
 
 class PDBMapProtein():
@@ -83,6 +82,11 @@ class PDBMapProtein():
     if not PDBMapProtein._unp2uniparc[unp]:
       return False
     return PDBMapProtein._unp2uniparc[unp] == PDBMapProtein._unp2uniparc[base_unp]
+
+  @classmethod
+  def all_unps(cls):
+     for unp in PDBMapProtein._unp2uniprotKB:
+        yield unp
 
   @classmethod
   def best_unp(cls,unp):
@@ -175,7 +179,7 @@ class PDBMapProtein():
     if unpbase in PDBMapProtein._sec2prim:
       if PDBMapProtein._sec2prim[unpbase] in PDBMapProtein._unp2hgnc:
         return PDBMapProtein._unp2hgnc[PDBMapProtein._sec2prim[unpbase]]
-    logging.getLogger(__name__).warn("unp of %s not found in PDBMapProtein._unp2hgnc or _sec2prim\n"%unpbase)
+    LOGGER.warn("unp of %s not found in PDBMapProtein._unp2hgnc or _sec2prim\n"%unpbase)
     return None
 
   @classmethod
@@ -224,6 +228,11 @@ class PDBMapProtein():
     return PDBMapProtein._enst2ensp.get(enst,'')
 
   @classmethod
+  def enst2unp(cls,enst):
+    # Return Ensembl Protein ID associated with Ensembl Transcript ID
+    return PDBMapProtein._enst2unp.get(enst,'')
+
+  @classmethod
   def unp2pdb(cls,unp):
     # Return Protein Data Bank ID associated with UniProt ID
     # PDBs never have transcript identifiers in their depositions
@@ -258,10 +267,10 @@ class PDBMapProtein():
   def load_idmapping(cls,idmapping_fname):
     baseMappingFileName = "HUMAN_9606_idmapping_sprot.dat.gz" 
     if not baseMappingFileName in idmapping_fname:
-      logging.getLogger(__name__).critical("idmapping_fname %s does not include: %s"%(idmapping_fname,baseMappingFileName));
+      LOGGER.critical("idmapping_fname %s does not include: %s"%(idmapping_fname,baseMappingFileName));
       sys.exit()
 
-    logging.getLogger(__name__).info("Opening idmapping file: %s",idmapping_fname)
+    LOGGER.info("Opening idmapping file: %s",idmapping_fname)
     # Load UniProt crossreferences, keyed on UniProt
     with gzip.open(idmapping_fname,'rt',encoding='ascii') as fin:
       reader = csv.reader(fin,delimiter='\t')
@@ -276,7 +285,6 @@ class PDBMapProtein():
           unp,iso = unp.split('-')
         else:
           # Proteins with a single (thus canonical) isoform have no identifier
-          unp,iso = unp,"1"
           unpBest = unp
         # This is necessary to avoid an unnecessary GRCh37/GRCh38 version mismatch
         # e.g. Some canonical isoforms in UniProt map to transcripts that only exist
@@ -341,7 +349,7 @@ class PDBMapProtein():
 
         # There are MANY other db values in the file we are parsing
         # However, those are ignored for our purposes
-    logging.getLogger(__name__).info("Cross-references for %d human genes loaded into RAM"%len(PDBMapProtein._hgnc2unp))
+    LOGGER.info("Cross-references for %d human genes loaded into RAM"%len(PDBMapProtein._hgnc2unp))
 
   @classmethod
   def load_sec2prim(cls,sec2prim_fname):

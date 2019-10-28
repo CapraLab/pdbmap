@@ -17,12 +17,11 @@ import sys,os,re
 import pandas
 from Bio.PDB.Structure import Structure
 from lib.PDBMapProtein import PDBMapProtein
-from lib.PDBMapTranscript import PDBMapTranscript
 from lib.PDBMapAlignment import PDBMapAlignment
 from collections import defaultdict
 
 import logging
-logging.basicConfig(Level='INFO')
+LOGGER = logging.getLogger(__name__)
 
 class PDBMapSwiss(Structure):
   # SwissModels are represented in RAM by small dictionaries that are reached individually by modelid
@@ -116,7 +115,7 @@ Fields in modbase that may become more relevant
       # Query all transcripts associated with the chain's UNP ID
       # from the Ensembl mySQL database records
       # print "Analyzing unp id", self.unp
-      candidate_transcripts = PDBMapTranscript.query_from_unp(self.unp)
+      candidate_transcripts = PDBMapProtein.unp2enst(self.unp)
       # But only keep the Ensemble transcripts matching this model's reference ENSP, if specified
       # IF the uniporit ID has a DASH (only!) THEN make sure to ONLY keep
       # The transcript which we KNOW from INDEX_JSON and tracing... to be the relevant one
@@ -129,13 +128,13 @@ Fields in modbase that may become more relevant
         candidate_transcripts = [ct for ct in candidate_transcripts if
                                PDBMapProtein.enst2ensp(ct.transcript) in PDBMapProtein.unp2ensp(self.unp)]
         if len(candidate_transcripts) < 1:
-          logging.getLogger(__name__).warning("Unable to  cross reference transcripts from Ensembl for Uniprot AC: %s"%self.unp)
+          LOGGER.warning("Unable to  cross reference transcripts from Ensembl for Uniprot AC: %s"%self.unp)
         if len(candidate_transcripts) > 1:
           candidate_transcripts = [candidate_transcripts[0]]
-          logging.getLogger(__name__).info( "Too many transcripts for Uniprot isoform AC: %s.  Retained %s only"%(self.unp,candidate_transcripts[0].transcript))
+          LOGGER.info( "Too many transcripts for Uniprot isoform AC: %s.  Retained %s only"%(self.unp,candidate_transcripts[0].transcript))
 
       if len(candidate_transcripts) < 1:
-        logging.getLogger(__name__).warning( "No transcripts from Ensembl SQL db found for Uniprot AC: %s"%self.unp)
+        LOGGER.warning( "No transcripts from Ensembl SQL db found for Uniprot AC: %s"%self.unp)
         return []
 
       # Align chain to first candidate transcript
@@ -312,7 +311,7 @@ Fields in modbase that may become more relevant
       if (d['unp'].find('-') != -1):
         PDBMapSwiss._unp2modelids[d['unp'].split('-')[0]].append(d['modelid'])
 
-    logging.getLogger(__name__).info( "%d Swiss models added to in-memory dictionary"%len(PDBMapSwiss._modelid2info))
+    LOGGER.info( "%d Swiss models added to in-memory dictionary"%len(PDBMapSwiss._modelid2info))
 
   @classmethod
   def old_load_swiss_INDEX_JSON(cls,swiss_dir,summary_fname):
@@ -388,7 +387,7 @@ Fields in modbase that may become more relevant
       if (d['unp'].find('-') != -1):
         PDBMapSwiss._unp2modelids[d['unp'].split('-')[0]].append(d['modelid'])
 
-    logging.getLogger(__name__).info( "%d Swiss models added to in-memory dictionary"%len(PDBMapSwiss._modelid2info))
+    LOGGER.info( "%d Swiss models added to in-memory dictionary"%len(PDBMapSwiss._modelid2info))
 
 # Main check
 if __name__== "__main__":
