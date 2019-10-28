@@ -2,15 +2,15 @@
 #
 # Project        : PDBMap
 # Filename       : PDBMapAlignment.py
-# Author         : R. Michael Sivley
+# Author         : R. Michael Sivley (2019 rewrite Chris Moth)
 # Organization   : Center for Human Genetics Research,
 #                : Department of Biomedical Informatics,
 #                : Vanderbilt University Medical Center
 # Email          : mike.sivley@vanderbilt.edu
-# Date           : 2014-02-12
+# Date           : 2014-02-12  2019-08-15
 # Description    : Defines the PDBMapAlignment class for calculating and
-#                : representing an alignment between a PDBMapStructure and
-#                : a PDBMapAlignment.
+#                : representing an alignment between a Bio Python pdb chain
+#                : and any of the PDBMap*Transcript classes
 #=============================================================================#
 
 # See main check for cmd line parsing
@@ -19,281 +19,588 @@ from collections import OrderedDict
 import logging
 from Bio import pairwise2
 from Bio.SubsMat import MatrixInfo as matlist
-logger = logging.getLogger(__name__)
+from Bio.PDB import Structure
+from Bio.SeqUtils import seq1
+from lib import PDBMapSQLdb
+from lib import PDBMapTranscriptUniprot
+LOGGER = logging.getLogger(__name__)
+
+
+def sifts_best_unps(structure: Structure):
+    """Return a dictionary mapping chain IDs to the uniprot identifiers that sifts 
+       has determined to be 'best' for each chain"""
+
+    chain_to_best_unp = {}
+
+    query = "SELECT pdbid,uniprot_acc,mapping_pdb_chain FROM pdbmap_v14.sifts_mappings_pdb_uniprot_best_isoforms where pdbid=%(pdbid)s ORDER BY mapping_pdb_chain"
+    with PDBMapSQLdb() as db:
+        db.activate_dict_cursor()
+        db.execute(query,{'pdbid': structure.id})
+        for row in db.fetchall():
+            chain_to_best_unp[row['mapping_pdb_chain']] = row['uniprot_acc']
+
+    return chain_to_best_unp
 
 class PDBMapAlignment():
+    """ Encapsulate all techniques for alignment of transcript sequences to BioPython structures
+        Importantly, instances of this class do not retain references to aligned
+        transcripts nor structures provided to the member functions - only the final
+        seq_to_resid and resid_to_seq dictionaries are retained """
 
-  def __init__(self,chain,transcript,io=None):
-    """ Alignment of PDBMapStructure chain to PDBMapAlignment """
-    self.chain      = chain
-    self.transcript = transcript
-    # try:
-    self.pdb2seq,      \
-    self.seq2pdb,      \
-    self.aln_str,      \
-    self.score,        \
-    self.perc_aligned, \
-    self.perc_identity, \
-    self.trivial_alignment = self.align(chain,transcript,io=io)
-    # except Exception as e:
-    #    msg = "ERROR (PDBMapAlignment) Error aligning %s to %s: %s\n"%(
-    #            chain.id,transcript.transcript,str(e))
-    #    logger.exception(msg)
-    #    raise
-
-  # Helped with diagnosis of biopython 1.69/1.7 problems
-  # def __str__(self):
-  #  temp = ""
-  #  for x in self.chain.get_residues():
-  #    temp = temp + str(x)
-  #  return temp
-
-  def align(self,chain,transcript,io=None):
-    """ Aligns one chain of a PDBMapStructure to a PDBMapTranscript 
-        This version handles insertion codes and returns full dictionaries rather than lists
-    """
-    # Generate chain sequence (may contain gaps)
-    # Recal r.id is Biopython tuple of (heteroflag, residue number, Insert Code)
-    unsorted_c_seq = {r.id: r.rescode for r in chain}
-    # Should ensure that the final c_seq is ordered
-    # and maps residue ID tuples to single letter amino acids
-    c_seq = OrderedDict(sorted(unsorted_c_seq.items(), key=lambda t: t[0]))
-
-    # Get the last res#+insert code from this dict
-    # These are BIOpython residue 3-tuples and the final [0] is the tuple key (not residue value)
-    cseq_items_list = list(c_seq.items())
-    first_c_seq = cseq_items_list[0][0]
-    last_c_seq = cseq_items_list[-1][0]
-    # To follow Mike's earlier code, we need to add dashes 2 positions beyond the end, and 2 positions below the first  Then, resort again
-    for residue_number in range(last_c_seq[1]):
-      res_id_tuple = (' ',residue_number,' ')
-      if res_id_tuple not in c_seq:
-        c_seq[res_id_tuple] = '-'
-
-    # Finally add two extra dashes per Mike's earlier code
-    c_seq[(' ',last_c_seq[1]+1,' ')] = '-'
-    c_seq[(' ',last_c_seq[1]+2,' ')] = '-'
-
-    # Resort a final time
-    unsorted_c_seq = c_seq
-    c_seq = OrderedDict(sorted(unsorted_c_seq.items(), key=lambda t: t[0]))
-
-
-    # Generate transcript/protein sequence
-    # Transcripts are always numbered from 1, and have no 
-    # odd-ball inserts or deletes.
-    t_seq = ['-']*(1+max(transcript.sequence.keys()))
-
-    for i,res in transcript.sequence.items():
-        t_seq[i] = res[0]
-
-    # We first try a "trivial" alignment.  This should work in all cases of
-    # swiss and modbase models
-
-    trivialAlignmentPossible = True
-    for c_resid,c_rescode in c_seq.items():
-      if (c_rescode != '-'):
-        if (c_resid[2] != ' '):
-          logger.warning("chain residue %s has insert code.  Complex alignment required"%(str(c_resid)))
-          trivialAlignmentPossible = False
-          break
-
-        if (c_resid[1] < 0) or (c_resid[1] >= len(t_seq)):
-          trivialAlignmentPossible = False
-          logger.warning("chain residue %s lies outside of transcript sequence which has last residue %d"%(str(c_resid),len(t_seq)))
-          break
- 
-        # Trivial alignment is intolerant of any variation between chian and transcript
-        if t_seq[c_resid[1]] != c_rescode:
-          trivialAlignmentPossible = False
-          logger.warning("chain residue %s has diferent AA  Transcript=%s  Chain=%s"%(str(c_resid),t_seq[c_resid[1]],c_rescode))
-          break
-
-    # If trivial, then no inserts, and every member of the 3D chain maps directly
-    # to the transcript residue of same numbering.  So, return the trival result
-    if trivialAlignmentPossible:
-      pdb2seq       = OrderedDict((r.id,r.id[1]) for r in chain) 
-
-      # The next(iter and next(reversed below return first and last elements
-      logger.info("Simple alignment of %d residues %s to %s"%(len(pdb2seq),str(next(iter(pdb2seq))),str(next(reversed(pdb2seq)))))
-      # Provide the reverse lookup which will be 
-      seq2pdb       = OrderedDict((trans_seq, chain_seq) for chain_seq, trans_seq in pdb2seq.items())
-
-      temp_aln_str = ''.join([t_seq[trans_seq] for trans_seq in seq2pdb])
-      aln_str = temp_aln_str + "\n" + temp_aln_str
-      aln_score = sum([matlist.blosum62[(t_seq[trans_seq],t_seq[trans_seq])] for trans_seq in seq2pdb])
-
-      perc_aligned = 100.0
-      perc_identity = 1.0
-    else:
-      return self.align_complex(c_seq,t_seq,chain,transcript,io)
-      # The deprecated aligner does not know about insertion codes so we have to patch that in
-      # s blank codes for now - these insertion codes are quite rare
-      # pdb2seq = OrderedDict(((' ',pdb_res,' '),pdb2seq_deprecated[pdb_res]) for pdb_res in sorted(pdb2seq_deprecated))
-      # seq2pdb       = OrderedDict((trans_seq, chain_seq) for chain_seq, trans_seq in pdb2seq.items())
+    def __init__(self,structure:Structure =None,chain_id:str =None,model_id=None,align_method=None):
+      """Arguments:
+         ## transcript: any PDBMapTranscript-implementing object
+         structure:  biopython structure with chain to be aligned
+         chain_id:   the chain ID (ex: 'E') from the structure which will be aligned to the transcript
+                     If omitted, the chain_id will be extracted from the structure if it has only one chain
+         model_id:   The model # of the structure.  Typically None (default) is supplied and the first
+                     model is used for all processing.  (All multi-model structures present the same 
+                     amino acid sequence for each model.)"""
+      self._aligned_chain_id = None   # Only interesting if user does not pass in a chain ID to align
+      self._seq_to_resid = {}         # given an integer [1..N] transcript position, return Biopython residue id tuple
+      self._resid_to_seq = {}         # given a biopython residue id tuple, return integer in [1..N] transcript position
+  
+      self._aln_str = None            # --A--CDE-- etc format string showing how each transcript position aligned to 
+      self._aln_score = None
+      self._perc_aligned = None
+      self._perc_identity = None
+      self._perc_identity_from_sql = None
+      self._model_id = None
+      self._chain_id = None
+  
+      if structure:
+          self._set_model_and_chain_ids(structure,chain_id,model_id)
+  
+    @property
+    def seq_to_resid(self):
+        """Dictionary mapping the aligned transcript positions (1..TranscriptLength) to 
+           the structure.chain residue id tuples (' ','X',InsertionCode)"""
+        assert self._seq_to_resid, "You must successfully align before referencing seq_to_resid"
+        return self._seq_to_resid  
+  
+    @property
+    def resid_to_seq(self):
+        """Dictionary mapping the structure.chain residue id tuples (' ',aaLetter,InsertionCode)
+           to the aligned transacript positions  (1..TranscriptLength)"""
+        assert self._resid_to_seq, "You must successfully align before referencing resid_to_seq"
+        return self._resid_to_seq  
+  
+    @property
+    def aln_str(self):
+        """Human readinable alignment string of chain amino acids, and transcript amino acods"
+        assert self._aln_str, "You must successfully align before referencing aln_str"""
+        return self._aln_str
+  
+    @property
+    def aln_score(self):
+        """blosum62 matrix-generated quality score"""
+        assert self._aln_score, "You must successfully align before referencing aln_score"
+        return self._aln_score
+  
+    @property
+    def perc_identity(self):
+      assert self._perc_identity
+      return self._perc_identity
+  
+    def _set_model_and_chain_ids(self,structure,chain_id,model_id):
+      if model_id:
+         self._model_id = model_id
+      elif not self._model_id: # Then just grab the first model from the structure
+          for model in structure:
+              self._model_id = model.id
+              break
+      assert self._model_id != None, "The pdb/mmcif structure you provided somehow lacks a first model" 
+      chain_ids_found = ''
+      if chain_id:
+         self._chain_id = chain_id
+      elif not self._chain_id: # Then just grab the first chain from the structure
+          for chain in structure[self._model_id]:
+              _chain_id = chain.id
+              chain_ids_found = chain_ids_found + chain_id
+      assert len(chain_ids_found) < 2,"Your structure has more than one chain.  You must specify a chain ID from %s"%chain_ids_fond 
+      assert self._chain_id, "The pdb/mmcif structure you provided somehow lacks a first chain" 
+  
+    def _calc_stats(self,transcript,structure):
+        # Aligned residues over total residues in chain
+  
+        self._perc_aligned  = min(float(len(self._resid_to_seq)) / float(len(transcript.aa_seq)), 1.0)
+  
+        exact_aa_matches = 0
+        for resid,seq in self._resid_to_seq.items():
+            chain_aa_letter = seq1(structure[self._model_id][self._chain_id][resid].get_resname())
+            transcript_aa_letter = transcript.aa_seq[seq-1]
+          
+            if transcript_aa_letter == chain_aa_letter:
+                exact_aa_matches += 1
+            else:
+                LOGGER.debug("non identical seq resid %s:%s for transcript seq %d:%s"%(resid,chain_aa_letter,seq,transcript_aa_letter))
+             
+        nResiduesInStructure = float(len(self._resid_to_seq))
+        self._perc_identity = round(  min(float(exact_aa_matches)/nResiduesInStructure,1.0)   ,2)
+  
+        aligned_transcript_structure_aa_pairs = [(transcript.aa_seq[trans_seq-1],
+            seq1(structure[self._model_id][self._chain_id][self._seq_to_resid[trans_seq]].get_resname())) for trans_seq in self._seq_to_resid]
+  
+        self._aln_score = sum([matlist.blosum62[aa_pair] if aa_pair in matlist.blosum62 else matlist.blosum62[(aa_pair[1],aa_pair[0])] for aa_pair in aligned_transcript_structure_aa_pairs])
+        LOGGER.info("_calc_stats: perc_aligned = %f  perc_identity = %f  aln_score=%d"%(self._perc_aligned,self._perc_identity,self._aln_score))
    
-    return pdb2seq,seq2pdb,aln_str,aln_score,perc_aligned,perc_identity,trivialAlignmentPossible
+    def _generate_aln_str(self,transcript,structure):
+        # The game here is to account for all transcripts in the transcript, and all residues in the structure.chain, 
+        # and mark the gaps as we have them
+        transcript_str = ''
+        chain_str = ''
+        connect_str = ''  # Has the vertical bars where transcript maps to residue
+        
+        transcript_no = 0 # We stat by saying we've output NONE of the transcript AAs
+        chain_gap_char = '-'
+        previous_residue_number = None
+        for residue in structure[self._model_id][self._chain_id]:
+            # Skip over any non-ATOM (HETATM for example) entries in the pdb
+            if residue.id[0] and residue.id[0] != ' ':
+                continue
+            current_residue_number =  int(residue.id[1])
+            if not previous_residue_number: # First time through initialize this
+                previous_residue_number = current_residue_number
+  
+            chain_skipped_residues = 0
+            if current_residue_number > previous_residue_number+1:
+                chain_skipped_residues = current_residue_number - previous_residue_number - 1
+                chain_str += 'X' * chain_skipped_residues
+            previous_residue_number = current_residue_number
+  
+            if residue.id in self._resid_to_seq: # This chain residue is already aligned to a transcript position
+                transcript_jump = self._resid_to_seq[residue.id] - transcript_no
+                # The idea here is that if we last matched transcript aa_seq #7, but NOW we are matching #12 to a structural residue
+                # THEN, we need to let some of the transcript skips map to any XXs in the last chain skip, and THEN continue
+                while transcript_jump > 1:
+                    if transcript_no >= len(transcript.aa_seq):
+                        t_aaseq_char = '-'
+                    else:
+                        t_aaseq_char = transcript.aa_seq[transcript_no]
+                    transcript_str += t_aaseq_char
+                    if chain_skipped_residues > 1:
+                        chain_skipped_residues -= 1
+                        connect_str += '.' # We match but not residue type
+                    else:
+                        chain_str += '-'
+                        connect_str += ' '
+                    transcript_no += 1
+                    transcript_jump -= 1
+                residue_letter = seq1(residue.get_resname())
+                chain_str += residue_letter
+                transcript_letter = transcript.aa_seq[transcript_no]
+                transcript_str += transcript_letter
+                connect_str += '|' if transcript_letter == residue_letter else '.'
+                if chain_skipped_residues > 0: # Then some of the missing structural residues must map to transcript gaps
+                     transcript_str += '-' * chain_skipped_residues
+                     connect_str += ' ' * chain_skipped_residues
+                     chain_skipped_residues = 0
+                transcript_no += 1
+            else: # We have a residue in the chain that is NOT aligned to a transcript position
+                chain_str += seq1(residue.get_resname())
+                transcript_str += '-' * (1+ chain_skipped_residues)
+                connect_str += ' ' * (1+ chain_skipped_residues)
+        
+        # Finally, we've matched up everything in the structure
+        # IF there are transcript aa_seqs not yet output, do that now                
+        if transcript_no < len(transcript.aa_seq):
+            transcript_tail_len = len(transcript.aa_seq) - transcript_no
+            chain_str += '-' * transcript_tail_len
+            # connect_str += ' ' * transcript_tail_len << No need to output these trailing spaces
+            transcript_str += transcript.aa_seq[transcript_no:]
+        self._aln_str = chain_str + "\n" + connect_str + "\n" + transcript_str + "\n"
+  
+    def align_trivial(self,transcript,structure,chain_id=None,model_id=None):
+      """ In cases of most models, structures have no insertion codes, and numbering
+          of resolved residues exactly matches transcript numbering.  These are best
+          aligned 'trivially' without external resources or algorithms 
+          Arguments: 
+          transcript: An instance of PDBMapTranscript or a derived class
+          structure: A Biopython structure, typically loaded from mmcif or .pdb file
+          chain_id: Required only for multi-chain structures.  The letter, (ex: 'E') of the chain
+                    that is being aligned """
+  
+      self._set_model_and_chain_ids(structure,chain_id,model_id)
+  
+      del chain_id
+      del model_id
+  
+      # 1m6d.pdb chain A is an example of how PDB depositors need not even number the residues in ascending order.
+      # If there are any residues in the change which are not ascending, or which have insertion codes, then a trivial
+      # alignment is obviously not possible
+  
+      previous_residue = None
+      error_msg = None
+      residue_count = 0
+      for residue in structure[self._model_id][self._chain_id]:
+          if residue.id[0] != ' ':
+              error_msg = "Trivial Alignment Impossible: %s.%s residue %s is not an ATOM but instead %s"%\
+                  (structure.id,self._chain_id,residue.id,residue.id[0])
+          elif residue.id[2] != ' ':
+              error_msg = "Trivial Alignment Impossible: %s.%s residue %s has insertion code %s"%\
+                  (structure.id,self._chain_id,residue.id,residue.id[2])
+          elif residue.id[1] < 1 or residue.id[1] > transcript.len:
+              error_msg = "Trivial Alignment Impossible: %s.%s residue %s has number %d not in transcript range (1,%d)"%\
+                  (structure.id,self._chain_id,residue.id,residue.id[1],transcript.len)
+          elif previous_residue and previous_residue.id >= residue.id:
+              error_msg = "Trivial Alignment Impossible: In structure %s chain %s, residue %s follows %s"%\
+                  (structure.id,self._chain_id,residue.id,previous_residue.id)
+          else:
+              residue_count += 1
+              if residue_count > transcript.len:
+                  error_msg = "Trivial Alignment Impossible: %s.%s residue %s is the %dth residue. Transcript len only %d"%\
+                      (structure.id,self._chain_id,residue.id,residue_count,transcript.len)
+              else:
+                  # We know the residue from the structure has no insertion code and is an ATOM (not HETATM/etc) entry
+                  # Now, critically, does the residue # in the structure match the residue # of the transcript?
+                  if transcript.aa_seq[residue.id[1] - 1] != seq1(residue.get_resname()):
+                      error_msg = "Trivial Alignment Impossible: %s.%s residue %s is %s but the transcript sequence is %s"%\
+                          (structure.id,self._chain_id,residue.id,residue.get_resname(),transcript.aa_seq[residue.id[1] - 1])
+  
+          if error_msg:
+              LOGGER.info(error_msg)
+              return (False,error_msg)
+  
+          previous_residue = residue
+  
+      # To arrive here we know residue.id[1] == the transcript amino acid type at each position - so quick fill the dict:
+      self._resid_to_seq = OrderedDict((residue.id,residue.id[1]) for residue in structure[self._model_id][self._chain_id])
+  
+      # The next(iter and next(reversed below return first and last elements
+      LOGGER.info("Trivial Alignment Succeeded: %d residues %s to %s"%(len(self._resid_to_seq),str(next(iter(self._resid_to_seq))),str(next(reversed(self._resid_to_seq)))))
+      # Provide the reverse lookup which will be 
+      self._seq_to_resid       = OrderedDict((trans_seq, chain_seq) for chain_seq, trans_seq in self._resid_to_seq.items())
+      self._calc_stats(transcript,structure)
+      self._generate_aln_str(transcript,structure)
+  
+  
+      # self._perc_aligned = 100.0
+      # self._perc_identity = 1.0
+  
+      return (True,None) 
+      # end align_trivial()
+  
+    def align_sifts_isoform_specific(self,uniprot_transcript: PDBMapTranscriptUniprot,structure: Structure,chain_id:str =None,model_id=None):
+      """ The most recent 2019 SIFTS API provides segmented alignments of isoform
+          specific uniprot identifers to pdb chains, ranges
+  
+          Arguments: 
+          uniprot_transcript: An instance of PDBMapTranscriptUniprot
+          structure: A Biopython structure, typically loaded from mmcif or .pdb file
+          chain_id: Required only for multi-chain structures.  The letter, (ex: 'E') of the chain
+                    that is being aligned """
+  
+      self._set_model_and_chain_ids(structure,chain_id,model_id)
+      self._seq_to_resid = {}
+  
+      unp_starts=[]
+      unp_ends=[]
+      start_author_residues=[]
+      end_author_residues=[]
+  
+      # Biopython would like a single space in residue.id[2] to denote lack of insertion code
+      def _ic_format(insertion_code):
+          if (not insertion_code) or (len(insertion_code) != 1):
+              return ' '
+          return insertion_code
+  
+      self._sifts_perc_identity = None
+  
+      query = "SELECT * FROM pdbmap_v14.sifts_mappings_pdb_uniprot_all_isoforms where uniprot_acc=%(unp)s and pdbid=%(pdbid)s and mapping_pdb_chain=%(chain_id)s order by mapping_unp_start"
+  
+      with PDBMapSQLdb() as db:
+          db.activate_dict_cursor()
+          db.execute(query,{'pdbid': structure.id, 'unp':uniprot_transcript.id, 'chain_id': self._chain_id})
+          for row in db.fetchall():
+              unp_starts.append(int(row['mapping_unp_start']))
+              unp_ends.append(int(row['mapping_unp_end']))
+              start_author_residues.append((' ',int(row['mapping_start_author_residue_number']),_ic_format(row['mapping_start_author_insertion_code'])))
+              end_author_residues.append((' ',int(row['mapping_end_author_residue_number']),_ic_format(row['mapping_end_author_insertion_code'])))
+              # Capture the sifts identity to compare with our final check at end
+              # This number should not change segment to segment (row by row) so we assert that
+              # because the number should be over all segments vs transcript when we're done
+              sifts_perc_identity_this_row =  float(row['mapping_seq_identity']) 
+              if self._perc_identity_from_sql: # Make sure rows 2..N are no different than row 1
+                  assert self._perc_identity_from_sql-.001 < sifts_perc_identity_this_row < self._perc_identity_from_sql + .001
+              else: # Get the sifts identity value from first row
+                  self._sifts_perc_identity = sifts_perc_identity_this_row
+ 
+      residue_iterator = iter(structure[self._model_id][self._chain_id].get_residues())
+      residue = next(residue_iterator)
+  
+      if unp_starts:
+          for segment in range(len(unp_starts)):
+              while residue.id != start_author_residues[segment]:
+                  residue = next(residue_iterator)
+              for transcript_resno in range(unp_starts[segment],unp_ends[segment]+1):
+                  self._seq_to_resid[transcript_resno] = residue.id
+                  self._resid_to_seq[residue.id] = transcript_resno
+                  residue = next(residue_iterator)
+          self._calc_stats(uniprot_transcript,structure)
+          self._generate_aln_str(uniprot_transcript,structure)
+          assert self._perc_identity - .01 < self._sifts_perc_identity < self._perc_identity + .01, "Sifts sequence identity matched our recomputation"
+          return (True,None)
+  
+      error_msg = "No SIFTS Isoform-specific alignment was found for %s<->%s.%s"%\
+          (uniprot_transcript.id,structure.id,self._chain_id)
+      return (False,error_msg)
 
+    def align_sifts_canonical(self,canonical_uniprot_transcript,structure,chain_id=None,model_id=None):
+        """Precision align a pdb chain to a canonical uniprot transcript via the exquisitely
+           detailed Sifts xml mapping, previously loaded into SQL
 
+        Arguments: 
+        canonical_uniprot_transcript: An instance of PDBMapTranscriptUniprot
+        structure: A Biopython structure, typically loaded from mmcif or .pdb file
+        chain_id: Required only for multi-chain structures.  The letter, (ex: 'E') of the chain
+                  that is being aligned """
 
-  def align_complex(self,c_seq,t_seq,chain,transcript,io=None):
-    """ Aligns one chain of a PDBMapStructure to a PDBMapTranscript 
-    This deprecated version loses residues with insertion codes
-    """
-    # If an io object was provided, first check for SIFTS alignment
-    # Define alignment parameters
-    gap_open   = -10
-    gap_extend = -0.5
-    matrix     = matlist.blosum62
-    if io:
-        q  = "SELECT resnum,icode,uniprot_resnum,uniprot_acc FROM sifts WHERE pdbid=%s "
-        q += "AND chain=%s AND uniprot_acc=%s ORDER BY resnum"
-        sifts_residues = io.secure_query(q,
-            (chain.get_parent().get_parent().id,chain.id,transcript.protein.split('-')[0]),
-            cursorclass='Cursor')
-        sifts_residues = list(sifts_residues)
+        self._resid_to_seq = {}           
+        self._seq_to_resid = {}           
+        self._set_model_and_chain_ids(structure,chain_id,model_id)
+
+        q =  "SELECT pdb_resnum,pdb_icode,uniprot_resnum,uniprot_acc FROM sifts_legacy_xml WHERE pdbid=%s "
+        q += "AND pdb_chain=%s AND uniprot_acc=%s ORDER BY pdb_resnum"
+   
+        sifts_residues = None 
+        canonical_uniprot_id = canonical_uniprot_transcript.id.split('-')[0]
+        with PDBMapSQLdb() as db:
+            sifts_residues = db.execute(q,(structure.id,chain_id,canonical_uniprot_id))
+    
+            sifts_residues = db.fetchall()
         if len(sifts_residues) > 0:
             # A SIFTS alignment is available
             # Only align residues in the structure
             pdb2seq = OrderedDict()
-            for sifts_residue in sifts_residues:
+            for sifts_residue in list(sifts_residues):
+                if not sifts_residue[0]:  # Skip residues where pdb_resnum = null from sifts file
+                    continue
                 pdbres = (' ',sifts_residue[0],sifts_residue[1] if len(sifts_residue[1]) == 1 else ' ')
-                if chain.has_id(pdbres):
-                    pdb2seq[pdbres] = sifts_residue[2]
+                if structure[self._model_id][self._chain_id].has_id(pdbres):
+                    self._resid_to_seq[pdbres] = sifts_residue[2]
+                else:
+                    LOGGER.warn('Sifts aligns %s.%s.%s to uniprot %s:%d.  But pdb residue does not exist',
+                        structure.id,self._chain_id,pdbres,canonical_uniprot_id,int(sifts_residue[2]))
 
-            seq2pdb       = OrderedDict((trans_seq, chain_seq) for chain_seq, trans_seq in pdb2seq.items())
-            # Aligned residues over total residues in chain
-            n = float(len(list(chain.get_residues())))
-            perc_aligned  = min(float(len(pdb2seq)) / n, 1.)
-
-            exact_aa_matches = 0
-            for cid,tid in pdb2seq.items():
-               if cid in c_seq and 0 < tid < len(t_seq) and c_seq[cid] == t_seq[tid]:
-                   exact_aa_matches += 1
+            self._seq_to_resid = OrderedDict((trans_seq, chain_seq) for chain_seq, trans_seq in self._resid_to_seq.items())
+            self._calc_stats(canonical_uniprot_transcript,structure)
+            self._generate_aln_str(canonical_uniprot_transcript,structure)
+            return (True,None)
+        error_msg = 'No sifts canonical alignment found in database for %s -> %s'%(canonical_uniprot_id,structure.id,chain_id)
+        LOGGER.info(error_msg)
+        return(False,error_msg)
            
-            perc_identity = min(float(exact_aa_matches)/n,1.0)
-            aln_tuples = [(cid,c_seq[cid],tid,t_seq[tid]) for cid,tid in pdb2seq.items() if
-               cid in c_seq and 0 < tid < len(t_seq)]
+    def align_biopython(self,transcript,structure,chain_id=None,model_id=None):
+      """Perform a de-novo Needleman Wunsch alignment 
+         of a transcript to a chain in a structure  
+         via Biopython's pairwise2.align.globalx dynamic programming algorithm
+         Pass 1 is an initial alignment.  In Pass 2 structure gaps are removed
+         to compute a score"""
+      self._set_model_and_chain_ids(structure,chain_id,model_id)
+  
+      # Residue ids are not necessarily monotonic increasing.  We must preserve
+      # the order we see in the original pdb file 
+      # Get the last res#+insert code from this dict
+      # These are BIOpython residue 3-tuples and the final [0] is the tuple key (not residue value)
+  
+      # This routine could be improved greatly if Biopython's PDB Sequence tracking
+      # were improved.  That is a topic for another day.  For now, we create chain_aaseq which is like
+      # the transcript aaseq except that missing residues from a deposited structure are replaced with
+      # XXs.  Simultaneously, we create chain_aaseq_to_resid so that given any index 1,2,N we can immediately
+      # lookup the corresponding residue id.  This is critical for deciphering the final alignment strings
+      # returned by biopython
+  
+      previous_residue_number = None
 
-            aln_chain = ''.join([r[1] for r in aln_tuples])
-            aln_trans = ''.join([r[3] for r in aln_tuples])
-            aln_str   = "<sifts>\n%s\n%s"%(aln_chain,aln_trans)
-            aln_score = pairwise2.align.globalds(aln_chain.replace('-','X'),aln_trans.replace('-','X'),
-                                        matrix,gap_open,gap_extend,score_only=True,penalize_end_gaps=False)
-            if perc_identity >= 0.85:
-                # Successfully aligned with SIFTS. Do not continue processing.
-                # The next(iter and next(reversed below return first and last elements
-                logger.info("SIFTs alignment of %d residues %s to %s"%(len(pdb2seq),str(next(iter(pdb2seq))),str(next(reversed(pdb2seq)))))
-                return pdb2seq,seq2pdb,aln_str,aln_score,perc_aligned,perc_identity
-            else:
-                msg  = "    WARNING (PDBMapAlignment) SIFTS error (%0.f%% identity). "%(perc_identity*100)
-                msg += "Realigning %s to %s.\n"%(chain.id,transcript.transcript)
-                logger.warning(msg)
-
-
-    # Begin a "denovo" sequence alignment of a chain with residue ID tuples to a sequence
-    # Determine start indices
-    logger.warning("Performing complex non-sifts de novo alignment of chain to transcript")
-    c_start = min([r.id for r in chain.get_residues()])
-    c_end   = max([r.id for r in chain.get_residues()])
-    c_inserts = sum(1 for r in chain.get_residues() if (r.id[2] and len(r.id[2].strip())>0) )
-    t_start = min(transcript.sequence.keys())
-    t_end   = max(transcript.sequence.keys())
-
-    # Generate chain sequence (may contain gaps)
-    c_aa_seq = ['-' for i in range(c_end[1] + c_inserts +1)]
-
-    resid2cseq_pos = {}
-    cseq_pos2resid = {}
-    cseq_pos = c_start[1]
-    for r in chain.get_residues():
-        c_aa_seq[cseq_pos] = r.rescode
-        resid2cseq_pos[r.id] = cseq_pos
-        cseq_pos2resid[cseq_pos] = r.id
-        cseq_pos += 1
-
-    c_aa_seq = c_aa_seq[c_start[1]:] # Remove leading gaps for alignment
-    t_seq_nogaps = t_seq[t_start:] # Remove leading gaps for alignment
-    # Record the gaps
-    c_gap = [i+c_start[1] for i,r in enumerate(c_aa_seq) if r == '-']
-    c_aa_seq = ''.join(c_aa_seq) # Convert to string
-    c_aa_seq = c_aa_seq.replace('-','X') # Dummy code sequence gaps to X
-    t_gap = [i+t_start for i,r in enumerate(t_seq_nogaps) if r == '-']
-    t_seq_nogaps = ''.join(t_seq_nogaps) # Convert to string
-    t_seq_nogaps = t_seq_nogaps.replace('-','X') # Dummy code sequence gaps to X
-    # # Generate transcript/protein sequence
-
-    # Perform pairwise alignment
-    alignment = pairwise2.align.globalds(c_aa_seq,t_seq_nogaps,matrix,
-                    gap_open,gap_extend,one_alignment_only=True,penalize_end_gaps=False)
-    aln_chain, aln_trans, aln_score, begin, end = alignment[0]
-
-    # Create an alignment map from chain to transcript
-    aln_chain_sub = 0
-    aln_trans_sub = 0
-    trans_sub = 0
-    pdb2seq = OrderedDict()
-    for r in chain.get_residues():
-       while aln_chain_sub < len(aln_chain) and (aln_chain[aln_chain_sub] in "-X"):
-         aln_chain_sub += 1
-       if aln_chain_sub >= len(aln_chain): # We are done in some curious way
-         logger.error("We ran past end of aln_chain")
-         break
-       assert aln_chain[aln_chain_sub] == r.rescode
-       # So, now our question is which transcript are we matching to if not a -/X
-       while aln_trans_sub < aln_chain_sub:
-         if aln_trans[aln_trans_sub] not in "-X": # Then we encountered an unmatched transcript amino acid as we traveresed transciprt alignment
-           trans_sub += 1
-         aln_trans_sub += 1
-       if aln_trans_sub >= len(aln_trans): # We are done in some curious way
-         logger.error("We ran past end of aln_trans")
-         break
-       aln_chain_sub += 1
-       aln_trans_sub += 1
-       trans_sub += 1
-       pdb2seq[r.id] = trans_sub
-
-    seq2pdb       = OrderedDict((trans_seq, chain_seq) for chain_seq, trans_seq in pdb2seq.items())
-    # Aligned residues over total residues in chain
-    n = float(len(list(chain.get_residues())))
-    perc_aligned  = min(float(len(pdb2seq)) / n, 1.)
-
-    exact_aa_matches = 0
-    # import pdb; pdb.set_trace()
-    for cid,tid in pdb2seq.items():
-       if cid in c_seq and 0 < tid < len(t_seq) and c_seq[cid] == t_seq[tid]:
-           exact_aa_matches += 1
-           
-    perc_identity = min(float(exact_aa_matches)/n,1.0)
-    aln_tuples = [(cid,c_seq[cid],tid,t_seq[tid]) for cid,tid in pdb2seq.items() if
-       cid in c_seq and 0 < tid < len(t_seq)]
-
-    aln_chain = ''.join([r[1] for r in aln_tuples])
-    aln_trans = ''.join([r[3] for r in aln_tuples])
-    aln_str   = "<biopython>\n%s\n%s"%(aln_chain,aln_trans)
-    aln_score = pairwise2.align.globalds(aln_chain.replace('-','X'),aln_trans.replace('-','X'),
-                                        matrix,gap_open,gap_extend,score_only=True,penalize_end_gaps=False)
+      chain_aaseq = '' # Start with empty chain_aaseq
+      chain_aaseq_to_resid = {}
+      for chain_residue in structure[self._model_id][self._chain_id]:
+         # Ignore all the non-ATOM entries in the PDB chain
+         # We will not be aligning those
+         if chain_residue.id[0] and chain_residue.id[0] != ' ':
+             continue
+         chain_residue_number =  int(chain_residue.id[1])
+         if not previous_residue_number: # First time through initialize this
+             previous_residue_number = chain_residue_number
+         # We need to take care when there are skips in the pdb, representing them with ---s
+         # For now, just go with missing residue numbers, which is NOT so great an idea... 
+         # In a perfect world, we'd use meta information in .cif/.pdb format to map to the original
+         # peptides in the experiment.  However, Biopython is not helping us there
+         if chain_residue_number > previous_residue_number+1:
+             # 'X' means "unknown amino acid".  Again, this is super-lame because pdb files usually have SEQRES
+             # letters that should be filling this in.
+             chain_aaseq += 'X' * (chain_residue_number - previous_residue_number)
+         previous_residue_number = chain_residue_number
+         
+         # Match the position in the emerging ---AAA--- string to the residue id
+         # Add the amino acid letter to chain_aaseq
+         chain_aaseq += seq1(chain_residue.get_resname()) # The amino acid letter goes into the chain_aaseq
+         chain_aaseq_to_resid[len(chain_aaseq)] = chain_residue.id
+  
+            
+      # If an io object was provided, first check for SIFTS alignment
+      # Define alignment parameters
+      gap_open   = -10
+      gap_extend = -0.5
+      matrix     = matlist.blosum62
       
-    # The next(iter and next(reversed below return first and last elements
-    logger.info("Complex pairwise (non-sifts) alignment of %d residues %s to %s"%(len(pdb2seq),str(next(iter(pdb2seq))),str(next(reversed(pdb2seq)))))
-
-    return pdb2seq,seq2pdb,aln_str,aln_score,perc_aligned,perc_identity,False
-
-  def _gap_shift(self,seq,seq_start,gaps=[]):
-    """ Support generator function for align """
-    # Returns a dictionary mapping
-    index = seq_start
-    for i in seq:
-        # Alignment Match
-        if i != '-':
-            # Do not return matches to sequence gaps
-            yield index if index not in gaps else None
-            index += 1
-        # Alignment Gap
-        else:
-            yield None
-    
-    
+      # Begin a "denovo" sequence alignment of a chain with residue ID tuples to a sequence
+      # Determine start indices
+      LOGGER.warning("Performing Biopython (non-sifts) de novo alignment of chain to transcript")
+  
+      # Record the gaps
+      # chain_aaseq = chain_aaseq.replace('-','X') # Dummy code sequence gaps to X (match anything)
+  
+      #
+      # Perform pairwise alignment
+      #
+      LOGGER.debug("pairwise2.align.globalds(\n%s\n%s\ngap_open=%f,gap_extend=%f,one_alignment_only,not penalize_end_gaps   )"%(chain_aaseq,transcript.aa_seq,gap_open,gap_extend))
+      self._alignment = pairwise2.align.globalds(chain_aaseq,transcript.aa_seq,matrix,
+                      gap_open,gap_extend,one_alignment_only=True,penalize_end_gaps=False)
+  
+      # Pull apart the tuple returned by the alignment
+      LOGGER.debug("Alignment Result=\n%s"%pairwise2.format_alignment(*self._alignment[0]))
+      aln_chain, aln_trans, aln_score, begin, end = self._alignment[0]
+      self._aln_str = pairwise2.format_alignment(*self._alignment[0])
+  
+      # Create an alignment map from chain to transcript
+      self._resid_to_seq = OrderedDict()
+      chain_aaseq_index = 0
+      trans_aaseq_index = 0
+      
+      # Buzz through the alignment 
+      for aln_chain_letter,aln_trans_letter in zip(aln_chain,aln_trans):
+          if aln_chain_letter == '-':  # We're skipping this alignment, so just advance the transscript
+              trans_aaseq_index += 1  
+          elif aln_trans_letter == '-':  # We're skipping this alignment, so just advance the transscript
+              chain_aaseq_index += 1  
+          else:  # Great - we are matching a letter to a letter
+               # However, if we have an 'X' in the chain_aaseq, that means that we do not have a position
+               # and in that case we need to NOT record
+               # However, we could be looking at a '-' in the transcript match string - so the chain
+               # could be matched to nothing
+               if chain_aaseq_index+1 in chain_aaseq_to_resid:
+                   self._resid_to_seq[chain_aaseq_to_resid[chain_aaseq_index+1]] = trans_aaseq_index + 1
+               trans_aaseq_index += 1
+               chain_aaseq_index += 1
+              
+      self._seq_to_resid       = OrderedDict((self._resid_to_seq[chain_seq], chain_seq) for chain_seq in self._resid_to_seq)
+      self._calc_stats(transcript,structure)
+  
+      # Per Mike Sivley's code we want to now just rescore the alignment, but do that rescoring on 
+      # letter strings that do not refer to the residues missing from the structure
+  
+      aln_trans = ''.join([transcript.aa_seq[transcript_no-1] for transcript_no in self._seq_to_resid])
+      aln_chain = ''.join([seq1(structure[self._model_id][self._chain_id][resid].get_resname()) for resid in self._resid_to_seq])
+  
+      # old idea: aln_str   = "<biopython>\n%s\n%s"%(aln_chain,aln_trans)
+      _aln_rescore = pairwise2.align.globalds(aln_chain.replace('-','-'),aln_trans.replace('-','-'),
+                                          matrix,gap_open,gap_extend,score_only=True,penalize_end_gaps=False)
+ 
+      assert _aln_rescore == self._aln_score,"_calc_stats alignment score = %f but Biopython rescore is %d"%(self._aln_score,_aln_rescore)
+        
+      # The next(iter and next(reversed below return first and last elements
+      LOGGER.info("Complex pairwise (non-sifts) Biopython alignment of %d residues %s to %s"%(len(self._resid_to_seq),str(next(iter(self._resid_to_seq))),str(next(reversed(self._resid_to_seq)))))
+  
+      return (True,None)
+  
+                  
+    # def __str__(self):
+    #  temp = ""
+    #  for x in self.chain.get_residues():
+    #    temp = temp + str(x)
+    #  return temp
+  
+    def align(self,chain,transcript,io=None):
+      """ DO NOT USE - This one will try various approaches - but not working yet
+          Aligns one chain of a PDBMapStructure to a PDBMapTranscript 
+          This version handles insertion codes and returns full dictionaries rather than lists
+          This is still being rewired - 
+      """
+      # Generate chain sequence (may contain gaps)
+      # Recal r.id is Biopython tuple of (heteroflag, residue number, Insert Code)
+      unsorted_c_seq = {r.id: r.rescode for r in chain}
+      # Should ensure that the final c_seq is ordered
+      # and maps residue ID tuples to single letter amino acids
+      c_seq = OrderedDict(sorted(unsorted_c_seq.items(), key=lambda t: t[0]))
+  
+  
+      # swiss and modbase models
+  
+      trivialAlignmentPossible = True
+      for c_resid,c_rescode in c_seq.items():
+        if (c_rescode != '-'):
+          if (c_resid[2] != ' '):
+            LOGGER.warning("chain residue %s has insert code.  Complex alignment required"%(str(c_resid)))
+            trivialAlignmentPossible = False
+            break
+  
+          if (c_resid[1] < 0) or (c_resid[1] >= len(t_seq)):
+            trivialAlignmentPossible = False
+            LOGGER.warning("chain residue %s lies outside of transcript sequence which has last residue %d"%(str(c_resid),len(t_seq)))
+            break
+   
+          # Trivial alignment is intolerant of any variation between chian and transcript
+          if t_seq[c_resid[1]] != c_rescode:
+            trivialAlignmentPossible = False
+            LOGGER.warning("chain residue %s has diferent AA  Transcript=%s  Chain=%s"%(str(c_resid),t_seq[c_resid[1]],c_rescode))
+            break
+  
+      # If trivial, then no inserts, and every member of the 3D chain maps directly
+      # to the transcript residue of same numbering.  So, return the trival result
+      if trivialAlignmentPossible:
+          resid_to_seq       = OrderedDict((r.id,r.id[1]) for r in chain) 
+  
+          # The next(iter and next(reversed below return first and last elements
+          LOGGER.info("Simple alignment of %d residues %s to %s"%(len(resid_to_seq),str(next(iter(resid_to_seq))),str(next(reversed(resid_to_seq)))))
+          # Provide the reverse lookup which will be 
+          seq_to_resid       = OrderedDict((trans_seq, chain_seq) for chain_seq, trans_seq in resid_to_seq.items())
+  
+          temp_aln_str = ''.join([t_seq[trans_seq] for trans_seq in seq_to_resid])
+          aln_str = temp_aln_str + "\n" + temp_aln_str
+          aln_score = sum([matlist.blosum62[(t_seq[trans_seq],t_seq[trans_seq])] for trans_seq in seq_to_resid])
+  
+          perc_aligned = 100.0
+          perc_identity = 1.0
+      else:
+          return self.align_complex(c_seq,t_seq,chain,transcript,io)
+          # The deprecated aligner does not know about insertion codes so we have to patch that in
+          # s blank codes for now - these insertion codes are quite rare
+          # resid_to_seq = OrderedDict(((' ',pdb_res,' '),resid_to_seq_deprecated[pdb_res]) for pdb_res in sorted(resid_to_seq_deprecated))
+          # seq_to_resid       = OrderedDict((trans_seq, chain_seq) for chain_seq, trans_seq in resid_to_seq.items())
+     
+      return resid_to_seq,seq_to_resid,aln_str,aln_score,perc_aligned,perc_identity,trivialAlignmentPossible
+  
+  
+  
+  
+    def _gap_shift(self,seq,seq_start,gaps=[]):
+      """ Support generator function for align """
+      # Returns a dictionary mapping
+      index = seq_start
+      for i in seq:
+          # Alignment Match
+          if i != '-':
+              # Do not return matches to sequence gaps
+              yield index if index not in gaps else None
+              index += 1
+          # Alignment Gap
+          else:
+              yield None
+      
+    def __eq__(self,other_alignment):
+        """Compare the seq_to_resid dictionaries of two alignments for == equality"""
+  
+        if len(self._seq_to_resid) != len(other_alignment._seq_to_resid):
+            return False
+        if set(self._seq_to_resid.keys()) != set(other_alignment._seq_to_resid.keys()):
+            return False
+        # To get this far, we know the keys are the same - so compare their values
+        for seq in self._seq_to_resid.keys():
+           if self._seq_to_resid[seq] != other_alignment._seq_to_resid[seq]:
+               return False
+        return True
+          
 
 # Main check
 if __name__== "__main__":
