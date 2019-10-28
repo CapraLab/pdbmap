@@ -23,7 +23,6 @@ import argparse
 import sys,os,csv
 from Bio.PDB.Structure import Structure
 from lib.PDBMapProtein import PDBMapProtein
-from lib.PDBMapTranscript import PDBMapTranscript
 from lib.PDBMapAlignment import PDBMapAlignment
 
 class PDBMapModel(Structure):
@@ -110,7 +109,7 @@ class PDBMapModel(Structure):
       return self.transcripts
     for chain in self.structure[0]:
       # Query all transcripts associated with the chain's UNP ID
-      candidate_transcripts = PDBMapTranscript.query_from_unp(self.unp)
+      candidate_transcripts = PDBMapProtein.unp2enst(self.unp)
       # But only keep the one matching this model's reference ENSP, if specified
       if self.id.startswith("ENSP"):
         candidate_transcripts = [ct for ct in candidate_transcripts if
