@@ -22,7 +22,6 @@ LOGGER = logging.getLogger(__name__)
 import gc
 
 from lib.PDBMapGlobals import PDBMapGlobals
-assert(PDBMapGlobals.config)
 
 
 class PDBMapSQLdb(object):
@@ -39,7 +38,7 @@ class PDBMapSQLdb(object):
 
     _static_access_dictionary = {}
     _global_connection = None
-    _static_access_dictionary = PDBMapGlobals.config
+    # _static_access_dictionary = PDBMapGlobals.config
 
     @staticmethod
     def set_access_dictionary(global_config_dict):
@@ -62,12 +61,15 @@ class PDBMapSQLdb(object):
         LOGGER.info("Closing global SQL connection.")
         assert PDBMapSQLdb._global_connection,"No global SQL connection have been opened"
         assert PDBMapSQLdb._connections_count == 1,"There are somehow multiple open SQL connections"
+        PDBMapSQLdb.commit()
         PDBMapSQLdb._global_connection.__close_cursor_and_connection__()
         PDBMapSQLdb._global_connection = None
 
     def __init__(self,config_dict = None):
         if not config_dict:
            config_dict = PDBMapSQLdb._static_access_dictionary
+        if not config_dict:
+           config_dict = PDBMapGlobals.config
         if not config_dict:
             raise Exception("You must provide a dictionary with dbhost/dbuser/dbname/dbpass defined, either here or via PDBMapSQLdb.set_access_dictionary")
         if PDBMapSQLdb._global_connection:
@@ -84,21 +86,135 @@ class PDBMapSQLdb(object):
     def rowcount(self):
         return self._db_connection.rowcount
 
+    @property
+    def description(self):
+        return self._db_cursor.description
+
     def activate_row_cursor(self):
         self._db_cursor = self._db_connection.cursor(MySQLdb.cursors.Cursor)
 
     def activate_dict_cursor(self):
         self._db_cursor = self._db_connection.cursor(MySQLdb.cursors.DictCursor)
 
-    def execute(self, query, params):
+    def execute(self, query: str, params=None) -> int:
+        """Execute a SQL query, logging the query, and returning rows affected"""
         if self._db_cursor is None:
             self.activate_row_cursor()
+        rows_affected = -1
+        # If we are logging a CREATE/DROP/SELECT, put that at level WARN
+        # Inserts can make a LOT of log entries - so push them to DEBUG level logging
+        log_level = logging.DEBUG if query.startswith('INSERT') else logging.INFO
         if params:
-            LOGGER.info("SQL Query: %s"%query%params)
-            return self._db_cursor.execute(query, params)
+            # Worst case is 2 separate strings
+            query_log_entry = ""
+            try:
+                if isinstance(params,list):
+                    query_log_entry = query%tuple(params)
+                else:
+                    query_log_entry = query%params
+            except:
+                query_log_entry = "Query=%s\nmismatches params suppled=%s"%(query,str(params))
+                log_level = logging.CRITICAL  # << We're going to die anyway win execute
         else:
-            LOGGER.info("SQL Query: %s"%query)
-            return self._db_cursor.execute(query)
+            query_log_entry = query
+  
+        LOGGER.log(log_level,"SQL Query: %s"%query_log_entry)
+
+        attempts = 0
+        retry = True
+        while retry:        
+            retry = False
+            if attempts > 4:
+                msg = "Critical - failed to perform database query after 5 attempts"
+                LOGGER.critical(msg)
+                raise Exception(msg)
+ 
+            try:
+                rows_affected = self._db_cursor.execute(query, params)
+
+            except MySQLdb.OperationalError as err: 
+                if err.args[0] == 1205: 
+                    # Lock wait timeout
+                    LOGGER.exception("Operational Error %s"%str(err))
+                    time.sleep(3)
+                    retry = True
+                else:
+                    LOGGER.exception("Operational Error %s"%str(err))
+                raise
+
+            except MySQLdb.DatabaseError as err: 
+                LOGGER.exception("Database Error %s"%str(err))
+                raise
+
+            except err:
+                LOGGER.exception("Unhandled SQL error from execute: %s"%str(err))
+                raise  
+            else:
+                LOGGER.log(log_level,"Successful SQL Query status return: %d 'rows affected'"%rows_affected)
+            
+            if retry:
+                attempts += 1
+                LOGGER.warning("Retrying SQL Query - attempt %d"%(attempts+1))
+        
+        return rows_affected
+
+    def executemany(self,query, sequence_of_params) -> int:
+        """Execute a SQL query, logging the query, and returning rows affected"""
+        if self._db_cursor is None:
+            self.activate_row_cursor()
+        rows_affected = -1
+        # If we are logging a CREATE/DROP/SELECT, put that at level WARN
+        # Inserts can make a LOT of log entries - so push them to DEBUG level logging
+        log_level = logging.DEBUG if query.startswith('INSERT') else logging.INFO
+
+        try:
+            query_log_entry = "Executemany (count = %d) query %s"%(len(sequence_of_params),sequence_of_params[0]) + "..."
+        except:
+            query_log_entry = "Query=%s\nmismatches params suppled=%s"%(query,str(sequence_of_params))
+            log_level = logging.CRITICAL  # << We're going to die anyway win execute
+        else:
+            query_log_entry = query_log_entry[0:75] # Truncate this huge string
+  
+        LOGGER.log(log_level,"SQL Query: %d params %s"%(len(sequence_of_params),query_log_entry))
+
+        attempts = 0
+        retry = True
+        while retry:        
+            retry = False
+            if attempts > 4:
+                msg = "Critical - failed to perform database query after 5 attempts"
+                LOGGER.critical(msg)
+                raise Exception(msg)
+ 
+            try:
+                rows_affected = self._db_cursor.executemany(query, sequence_of_params)
+
+            except MySQLdb.OperationalError as err: 
+                if err.args[0] == 1205: 
+                    # Lock wait timeout
+                    LOGGER.exception("Operational Error %s"%str(err))
+                    time.sleep(3)
+                    retry = True
+                else:
+                    LOGGER.exception("Operational Error %s"%str(err))
+                raise
+
+            except MySQLdb.DatabaseError as err: 
+                LOGGER.exception("Database Error %s"%str(err))
+                raise
+
+            except:
+                LOGGER.exception("Unhandled SQL error from MySQLdb.execute()")
+                raise  
+            else:
+                LOGGER.log(log_level,"Successful SQL Query status return: %d 'rows affected'"%rows_affected)
+            
+            if retry:
+                attempts += 1
+                LOGGER.warning("Retrying SQL Query - attempt %d"%(attempts+1))
+        
+        return rows_affected
+
 
     def fetchone(self):
         if self._db_cursor:
@@ -128,6 +244,7 @@ class PDBMapSQLdb(object):
             self._db_cursor.close()
             self._db_cursor = None
         if self._db_connection is not None:
+            self._db_connection.commit()
             self._db_connection.close() 
             self._db_connection = None
             PDBMapSQLdb._connections_count -= 1
