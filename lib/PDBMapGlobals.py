@@ -24,12 +24,15 @@ class _PDBMapGlobals_meta(type):
             path_to_this_py_file = os.path.dirname(os.path.abspath(__file__))
             path_to_default_global_config = os.path.join(path_to_this_py_file,"../../config/global.config")
             config = configparser.ConfigParser(allow_no_value=True)
-            parsed_file_list = config.read([os.path.abspath(path_to_default_global_config)])
+            config_filename_abspath = os.path.abspath(path_to_default_global_config)
+            parsed_file_list = config.read([config_filename_abspath])
             if len(parsed_file_list) < 1:
-                LOGGER.critical("""global.config was not found.  
-                                   Either create one in pdbmap/../config/global.config or set PDBMapGlobals.config to dictionary """)
-                sys.exit(1)
+                msg = "global.config was not found in %s."%config_filename_abspath + '\n'
+                msg +="Either create one in pdbmap/../config/global.config or set PDBMapGlobals.config to dictionary "
+                LOGGER.critical(msg)
+                sys.exit(msg)
             cls._config = dict(config.items("Genome_PDB_Mapper"))
+            LOGGER.info("%d PDBMapGlobal configuration keys loaded from [Genome_PDB_Mapper] section of %s",len(cls._config),config_filename_abspath)
             
         return cls._config
         
