@@ -359,15 +359,15 @@ class PDBMapAlignment():
         self._seq_to_resid = {}           
         self._set_model_and_chain_ids(structure,chain_id,model_id)
 
-        q =  "SELECT pdb_resnum,pdb_icode,uniprot_resnum,uniprot_acc FROM sifts_legacy_xml WHERE pdbid=%s "
-        q += "AND pdb_chain=%s AND uniprot_acc=%s ORDER BY pdb_resnum"
+        query =  "SELECT pdb_resnum,pdb_icode,uniprot_resnum,uniprot_acc FROM sifts_legacy_xml WHERE pdbid=%s "
+        query += "AND pdb_chain=%s AND uniprot_acc=%s ORDER BY pdb_resnum"
    
         sifts_residues = None 
         canonical_uniprot_id = canonical_uniprot_transcript.id.split('-')[0]
         with PDBMapSQLdb() as db:
-            sifts_residues = db.execute(q,(structure.id,chain_id,canonical_uniprot_id))
-    
+            sifts_residues = db.execute(query,(structure.id,chain_id,canonical_uniprot_id))
             sifts_residues = db.fetchall()
+
         if len(sifts_residues) > 0:
             # A SIFTS alignment is available
             # Only align residues in the structure
