@@ -18,3 +18,4 @@ CREATE TABLE Idmapping (
   KEY (ID_type,unp,ID)  -- Speeds searches like "retrieve all pdb ids"
 ) ENGINE=InnoDB COMMENT 'Bidirectionally maps uniprot IDs to other IDs'
 
+CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci
