@@ -13,6 +13,6 @@ from .PDBMapTranscriptFasta import PDBMapTranscriptFasta
 # deprecating from .PDBMapTranscript import PDBMapTranscript
 from .PDBMapAlignment import PDBMapAlignment
 from .PDBMapGenomeVariants import PDBMapGenomeVariants
-from .PDBMapData import PDBMapData
+from .PDBMapVEP import PDBMapVEP
 # from .PDBMapIntersect import PDBMapIntersect
 from .PDBMapVisualize import PDBMapVisualize
