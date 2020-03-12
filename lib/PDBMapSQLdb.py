@@ -13,6 +13,7 @@ When the queries are complete, be sure to:
 
 import MySQLdb, MySQLdb.cursors
 import datetime
+import time
 import sys
 import traceback
 
@@ -96,6 +97,13 @@ class PDBMapSQLdb(object):
     def activate_dict_cursor(self):
         self._db_cursor = self._db_connection.cursor(MySQLdb.cursors.DictCursor)
 
+    def set_session_transaction_isolation_read_committed(self):
+        """For massive parallel data loads, SQL row locks can become a (huge) problem.
+           Calling this function avoids many MariaDB 1205 exceptions"""
+        if self._db_cursor is None:
+            self.activate_row_cursor()
+        self._db_cursor.execute("SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED");
+
     def execute(self, query: str, params=None) -> int:
         """Execute a SQL query, logging the query, and returning rows affected"""
         if self._db_cursor is None:
@@ -136,11 +144,11 @@ class PDBMapSQLdb(object):
                 if err.args[0] == 1205: 
                     # Lock wait timeout
                     LOGGER.exception("Operational Error %s"%str(err))
-                    time.sleep(3)
+                    time.sleep(5)
                     retry = True
                 else:
-                    LOGGER.exception("Operational Error %s"%str(err))
-                raise
+                    LOGGER.exception("Unhandled operational Error %s"%str(err))
+                    raise
 
             except MySQLdb.DatabaseError as err: 
                 LOGGER.exception("Database Error %s"%str(err))
@@ -193,11 +201,11 @@ class PDBMapSQLdb(object):
                 if err.args[0] == 1205: 
                     # Lock wait timeout
                     LOGGER.exception("Operational Error %s"%str(err))
-                    time.sleep(3)
+                    time.sleep(5)
                     retry = True
                 else:
-                    LOGGER.exception("Operational Error %s"%str(err))
-                raise
+                    LOGGER.exception("Unhandled operational Error %s"%str(err))
+                    raise
 
             except MySQLdb.DatabaseError as err: 
                 LOGGER.exception("Database Error %s"%str(err))
