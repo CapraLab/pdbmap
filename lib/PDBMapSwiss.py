@@ -268,16 +268,19 @@ Fields in modbase that may become more relevant
       msg = "ERROR: (PDBMapSwiss) Cannot load SwissModel. %s does not exist."%summary_fname
       logging.exception(msg)
       raise Exception
-    logging.getLogger().info("Opening SwissModel Summary File (JSON format):" + summary_fname)
+    LOGGER.info("Opening SwissModel Summary File (JSON format):" + summary_fname)
     import json
     with open(summary_fname,'rt') as json_file:
       json_str = json_file.read()
       json_data = json.loads(json_str)
       del json_str
 
-    logging.getLogger().info("%d rows read from %s successfully."%(len(json_data),summary_fname))
+    assert type(json_data) == dict and len(json_data) == 2 and 'index' in json_data and 'info' in json_data,(
+        "SwissModel Summary File %s/%s does not have simply 'index' and 'info' keys at top level")
 
-    for d in json_data:
+    LOGGER.info("%d rows read from index area of %s successfully."%(len(json_data['index']),summary_fname))
+
+    for d in json_data['index']:
       # import pdb; pdb.set_trace()
       # For sanity, we need dictionary elements that match the naming convention of our ModBase models
       # Convert columns from/to to start/end  notation like ModBase
@@ -326,7 +329,7 @@ Fields in modbase that may become more relevant
       msg = "ERROR: (PDBMapSwiss) Cannot load SwissModel. %s does not exist."%summary_fname
       logging.exception(msg)
       raise Exception
-    logging.getLogger().info("Opening SwissModel Summary File (JSON format):" + summary_fname)
+    LOGGER.info("Opening SwissModel Summary File (JSON format):" + summary_fname)
     try:
       df = pandas.read_json(summary_fname) # ,orient='records')
     except ValueError:
@@ -338,7 +341,7 @@ Fields in modbase that may become more relevant
       logging.exception(msg)
       raise
 
-    logging.getLogger().info("%d rows read from %s successfully."%(len(df),summary_fname))
+    LOGGER.info("%d rows read from %s successfully."%(len(df),summary_fname))
     total_count = 0
     for index,row in df.iterrows():
       total_count += 1
