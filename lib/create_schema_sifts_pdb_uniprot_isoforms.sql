@@ -47,8 +47,8 @@ CREATE TABLE IF NOT EXISTS sifts_mappings_pdb_uniprot_all_isoforms (
 --            "pdb_end": 380, 
 --            "struct_asym_id": "A", 
 --            "identity": 1
-  mapping_pdb_chain varchar(20) NOT NULL   COMMENT 'chain in pdb.  Ex A/B/Z etc',
-  mapping_struct_asym_id varchar(20) NOT NULL   COMMENT 'chain in mmcif.',
+  mapping_pdb_chain varchar(20)       NOT NULL   COMMENT 'chain in pdb.  Ex A/B/Z etc',
+  mapping_struct_asym_id varchar(20)  NOT NULL   COMMENT 'chain in mmcif.',
 
   mapping_pdb_start int(11) NOT NULL  COMMENT 'First residue: pdb number',
   mapping_pdb_start_insertion_code varchar(10) DEFAULT NULL  COMMENT 'First residue: pdb insertion code if seen',
@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS sifts_mappings_pdb_uniprot_all_isoforms (
 
   PRIMARY KEY (pdbid,uniprot_acc,mapping_pdb_chain,mapping_pdb_start),
   KEY (uniprot_acc,pdbid,mapping_unp_start,mapping_pdb_chain)
-)
+) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci
 
 
 -- The best isoforms from sifts come in identical format
