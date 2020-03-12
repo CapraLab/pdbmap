@@ -78,13 +78,16 @@ def test_align_sifts_isoform_specific():
     """
 
     filename_1AGW = PDBList().retrieve_pdb_file('1AGW',file_format='mmCif',pdir='/tmp',overwrite=True)
-    structure_1AGW = MMCIFParser(QUIET=True).get_structure('1AGW',filename_1AGW)
+    mmcif_parser = MMCIFParser(QUIET=True)
+    structure_1AGW = mmcif_parser.get_structure('1AGW',filename_1AGW)
+    mmcif_dict_1AGW = mmcif_parser._mmcif_dict
+    pdb_seq_resid_xref_1AGW = PDBMapAlignment.create_pdb_seq_resid_xref(mmcif_dict_1AGW)
 
     transcript_1AGW_A = PDBMapTranscriptUniprot('P11362-16')
     transcript_1AGW_A.load_aa_seq_from_sql()
 
     align_1AGW = PDBMapAlignment(structure_1AGW,'A',None)
-    result = align_1AGW.align_sifts_isoform_specific(transcript_1AGW_A,structure_1AGW,'A',None)
+    result = align_1AGW.align_sifts_isoform_specific(transcript_1AGW_A,structure_1AGW,pdb_seq_resid_xref_1AGW,'A')
     LOGGER.debug("Sifts iso-specific alignment string is\n%s"%align_1AGW.aln_str)
     assert result[1] == None
     assert result[0] == True
