@@ -12,6 +12,7 @@ from .PDBMapTranscriptEnsembl import PDBMapTranscriptEnsembl
 from .PDBMapTranscriptFasta import PDBMapTranscriptFasta
 # deprecating from .PDBMapTranscript import PDBMapTranscript
 from .PDBMapAlignment import PDBMapAlignment
+from .PDBMapSIFTSdb import PDBMapSIFTSdb
 from .PDBMapGenomeVariants import PDBMapGenomeVariants
 from .PDBMapVEP import PDBMapVEP
 # from .PDBMapIntersect import PDBMapIntersect
