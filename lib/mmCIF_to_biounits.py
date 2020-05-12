@@ -20,8 +20,11 @@ import numpy as np
 # from pdbx.reader.PdbxReader import PdbxReader
 # from pdbx.writer.PdbxWriter import PdbxWriter
 # from pdbx.reader.PdbxContainers import *
+import logging
+LOGGER = logging.getLogger()
 
 def parseOperationExpression(expression: str) :
+    LOGGER.debug('Parsing biounit operation %s',str)
     operations = []
     stops = [ "," , "-" , ")" ]
 
@@ -95,6 +98,9 @@ def prepareOperation(mmcif_dict, op1index, op2index) :
     return operation
 
 def mmCIF_to_biounits(mmcif_dict):
+    """Return a list of mmcif dictionaries for each biounit, and a dictionary of chains copies to new chains"""
+    biounits_as_mmcif_dicts = []
+
     assembly_ids = mmcif_dict.get('_pdbx_struct_assembly_gen.assembly_id',None)
     if not assembly_ids: # We cannot create biounits if there are not assemblies to create
         return []
@@ -115,8 +121,10 @@ def mmCIF_to_biounits(mmcif_dict):
     assert len(atom_site_Cartn_y) == atom_site_count,"Cartn_x entries are missing in the structure"
     assert len(atom_site_Cartn_z) == atom_site_count,"Cartn_x entries are missing in the structure"
 
-    # Create a CIF file for every assembly specified in pdbx_struct_assembly_gen
+    # Create a CIF dictionary for every assembly specified in pdbx_struct_assembly_gen
+    
     for index in range(assembly_count):
+        LOGGER.info("Processing biounit assembly %d of %d",index,assembly_count)
         # Ultimately we want to create transformed lists of atomic coordinates
         # setup numpy matrix to receive  maximum number of calculation results
         # Keep in mind that often many atoms are excluded from biounits
@@ -176,6 +184,7 @@ def mmCIF_to_biounits(mmcif_dict):
 
         # For every operation in the first parenthesized list
         for op1 in oper :
+            LOGGER.debug("op1=%s",str(op1))
             # Find the index of the current operation in the oper_list category table
             op1index = 0
             for row in range(oper_list_count):
@@ -235,10 +244,5 @@ def mmCIF_to_biounits(mmcif_dict):
         # for key in new_mmcif_dict:
         #   if '_atom_site.' in key:
         #      print(key,len(new_mmcif_dict[key]))
-        
-        from Bio.PDB.mmcifio import MMCIFIO
-        io = MMCIFIO()
-        io.set_dict(mmcif_dict)
-        io.save("/tmp/new_rcox.cif")
-        print("Success for now")
-        sys.exit(1)
+        biounits_as_mmcif_dicts.append(new_mmcif_dict)
+    return biounits_as_mmcif_dicts        

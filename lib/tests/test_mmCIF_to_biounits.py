@@ -2,6 +2,7 @@
 """Very specific tests of transcript alignments"""
 
 import pytest
+import sys
 import warnings
 import logging
 import pprint
@@ -9,26 +10,39 @@ import pprint
 from Bio.PDB import *
 from lib.mmCIF_to_biounits import mmCIF_to_biounits
 
-LOGGER = logging.getLogger()
 # warnings.simplefilter('ignore', PDBConstructionWarning)
 
-def test_mmCIF_to_biounits():
-    """
-    6DWU should return two biounit file
-
-    First, align using the new sifts isoform specific mechanism.
-    Second, aling with biopython Needleman-Wunsch
-    Third, attempt a terrible alignment
-    """
-
-    # Alignment 1: Sifts isoform specific alignment
-    filename_6DWU = PDBList().retrieve_pdb_file('6DWU',file_format='mmCif',pdir='/tmp',overwrite=True)
+def exercise_mmCIF_to_biounits(pdb_id):
+    LOGGER.info("Attempting biounit creation for %s"%pdb_id)
+    filename = PDBList().retrieve_pdb_file(pdb_id,file_format='mmCif',pdir='/tmp',overwrite=True)
+    LOGGER.info("Successful download of %s to %s",pdb_id,filename)
+    sys.exit(1)
     mmcif_parser = MMCIFParser(QUIET=True)
-    structure_6DWU = mmcif_parser.get_structure('6DWU',filename_6DWU)
-    # import pdb; pdb.set_trace()
-    biounits = mmCIF_to_biounits(mmcif_parser._mmcif_dict)
-    assert len(biounits) == 2,"Two biounits should have been created - but only got %d"%len(biounits)
+    structure_6DWU = mmcif_parser.get_structure('pdb',filename)
+    biounits_list= mmCIF_to_biounits(mmcif_parser._mmcif_dict)
+    assert type(biounits_list[0]) == dict
+    LOGGER.info("%d biounits returned for %s",len(biounits_list),pdb_id)
+
+    # Can we save the biounit???
+    mmcif_io = MMCIFIO()
+    mmcif_io.set_dict(biounits_list[0])
+    mmcif_io.save('/tmp/%s1.cif'%pdb_id)
+    return biounits_list
 
 
+def test_mmCIF_to_biounits():
+    # biounits_list = exercise_mmCIF_to_biounits('6dw1')
+    # assert len(biounits) == 2,"Two biounits should have been created - but only got %d"%len(biounits)
+
+    biounits_list = exercise_mmCIF_to_biounits('4rkk')
+    assert len(biounits_list) == 1
+    biounits_list = exercise_mmCIF_to_biounits('3c70')
+    assert len(biounits_list) == 1
+
+FORMAT='%(asctime)s %(levelname)-4s [%(filename)16s:%(lineno)d] %(message)s'
+logging.basicConfig(format=FORMAT,level=logging.DEBUG)
+LOGGER = logging.getLogger()
+LOGGER.info("Starting...")
 test_mmCIF_to_biounits() 
+
 
