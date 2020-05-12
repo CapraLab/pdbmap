@@ -85,11 +85,12 @@ parser.add_argument("-b","--best_isoforms",action='store_true',
   help="Load 'best' isoforms data from sifts rest api")
 parser.add_argument("-a","--all_isoforms",action='store_true',
   help="Load alignments for all isoforms from sifts rest api")
+parser.add_argument("-p","--pdb",
+  help="Load alignments for a single pdb for all isoforms in the sifts RESTapi")
 args = parser.parse_args(remaining_argv)
 args.conf_file = conf_file
 
 assert args.legacy_xml or args.best_isoforms or args.all_isoforms
-
 
 # Check that all parameters were specified
 if not all(vars(args)):
@@ -216,12 +217,18 @@ if args.best_isoforms or args.all_isoforms:
     # pdbs = ['6CES','1M6D']
 
     cursor = con.cursor()
-    pdbids_from_idmapping = load_idmapping_pdbids()
-    for pdbid in pdbids_from_idmapping:
-        LOGGER.info("Processing pdbid %d/%d %s"%(pdbs_processed_count+1,len(pdbids_from_idmapping),pdbid))
-        isoform_json = sifts_get_all_isoforms(pdbid[0]) if args.all_isoforms else sifts_get_best_isoforms(pdbid[0])
+    pdb_list=[]
+    if args.pdb:
+        pdb_list = args.pdb.split(',')
+    else:
+        pdbid_rows_from_idmapping = load_idmapping_pdbids()
+        pdb_list = [pdbid_row[0] for pdbid_row in pdbids_from_idmapping]
+
+    for pdbid in pdb_list:
+        LOGGER.info("Processing pdbid %d/%d %s"%(pdbs_processed_count+1,len(pdb_list),pdbid))
+        isoform_json = sifts_get_all_isoforms(pdbid) if args.all_isoforms else sifts_get_best_isoforms(pdbid)
         if not isoform_json:
-            LOGGER.warning("NO SIFTS REPONSE FOR %s"%pdbid[0])
+            LOGGER.warning("NO SIFTS REPONSE FOR %s"%pdbid)
             continue
         # assert(pdb.lower() in isoform_json)
         # print(isoform_json)
@@ -245,14 +252,19 @@ if args.best_isoforms or args.all_isoforms:
  
     cursor.close()
 
-    print("Processing %d pdbids"%number_of_rows)
+    print("Processed %d pdbids"%len(pdb_list))
     sys.exit(1)
     
 if args.legacy_xml:
     LOGGER.info("Converting *.xml.gz files to SQL in %s"%args.xmldir)
     # Parse the split XML files
     # for xmlfile in ["%s/1y97.xml.gz"%args.xmldir.rstrip('/')]:
-    for xmlfile in glob.glob("%s/*.xml.gz"%args.xmldir.rstrip('/')):
+    if args.pdb:
+        xmlfile_list = [os.path.join(args.xmldir.rstrip('/'),pdbid.lower()+".xml.gz") for pdbid in args.pdb.split(',')]
+    else:
+        xmlfile_list = glob.glob("%s/*.xml.gz"%args.xmldir.rstrip('/'))
+
+    for xmlfile in xmlfile_list:
       print("Parsing %s..."%xmlfile)
       parser = etree.XMLParser(remove_blank_text=True)
       tree   = etree.parse(xmlfile,parser)
