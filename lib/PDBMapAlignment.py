@@ -392,7 +392,7 @@ class PDBMapAlignment():
         return seq_resid_xref
 
   
-    def align_sifts_isoform_specific(self,uniprot_transcript: PDBMapTranscriptUniprot,structure: Structure,mmcif_seq_res_id_xref: Dict,chain_id:str =None,model_id:int=0):
+    def align_sifts_isoform_specific(self,uniprot_transcript: PDBMapTranscriptUniprot,structure: Structure,mmcif_seq_res_id_xref: Dict,chain_id:str =None,model_id:int=0,is_canonical:bool = False):
         """ The most recent 2019 SIFTS API provides segmented alignments of isoform
             specific uniprot identifers to pdb chains, ranges.  However, the SIFTS
             API only reliably maps transcript positions to the SEQRES entries in the mmcif file.
@@ -410,7 +410,7 @@ class PDBMapAlignment():
     
         with PDBMapSQLdb() as db:
             db.activate_dict_cursor()
-            db.execute(query,{'pdbid': structure.id, 'unp':uniprot_transcript.id, 'chain_id': self._chain_id})
+            db.execute(query,{'pdbid': structure.id, 'unp':uniprot_transcript.id.split('-')[0] if is_canonical else uniprot_transcript.id, 'chain_id': self._chain_id})
             for row in db.fetchall():
                 # import pdb; pdb.set_trace()
                 unp_starts.append(int(row['mapping_unp_start']))
@@ -431,6 +431,11 @@ class PDBMapAlignment():
             seq_res_xref_this_chain = mmcif_seq_res_id_xref[self._chain_id]
             for unp_start,unp_end,pdb_seq_start_number,pdb_seq_end_number in zip(unp_starts,unp_ends,pdb_seq_start_numbers,pdb_seq_end_numbers):
                 for unp_resno,pdb_seq_number in zip(range(unp_start,unp_end+1),range(pdb_seq_start_number,pdb_seq_end_number+1)):
+                    if pdb_seq_number-1  < 0 or pdb_seq_number-1 >= len(seq_res_xref_this_chain):
+                        LOGGER.critical("SIFTS has bad data for pdbid %s.%s align with  uniprot: %s"%(structure.id,self._chain_id,uniprot_transcript.id))
+                        LOGGER.critical("TERMINATING")
+                        sys.exit(1)
+
                     residue_id_or_unresolved_aa = seq_res_xref_this_chain[pdb_seq_number-1]
                     # if self._chain_id == 'S' and residue_id_or_unresolved_aa == (' ',97, ' '):
                     #    import pdb; pdb.set_trace()
