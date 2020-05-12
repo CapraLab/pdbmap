@@ -41,6 +41,7 @@ class PDBMapSwiss(Structure):
   # to match ModBase nomenclature
   _JSON_fields  = ["uniprot_ac","template","from","to","provider","url","qmean","qmean_norm","coordinate_id","iso_id"]
   swiss_dir = None
+  mthd_re = re.compile('(^.*) ([0-9]\.[0-9]*) A$')
 
   '''
 Fields in modbase that may become more relevant
@@ -227,6 +228,7 @@ Fields in modbase that may become more relevant
   def load_REMARK3_metrics(cls,modelid):
     """ Parse the REMARK section of a SwissModel .pdb file to get a variety of quality metrics (eg qmn4, sid etc) """
     metrics = {}
+    metrics['resolution'] = None # Try to pull this out of the method string if we can
     fname = PDBMapSwiss.get_coord_file(modelid)
     with open(fname,'rt') as f:
       for line in f:
@@ -240,6 +242,11 @@ Fields in modbase that may become more relevant
             # 'template' conflicts with the JSON meta file entry of same name, and carries less info
             if (key != 'template'):
               metrics[key] = value
+              if key == 'mthd':
+                 mthd_resolution_match = PDBMapSwiss.mthd_re.match(metrics[key])
+                 if mthd_resolution_match:
+                     metrics['mthd'] = mthd_resolution_match.group(1)
+                     metrics['resolution'] = float(mthd_resolution_match.group(2))
     return metrics
 
 
