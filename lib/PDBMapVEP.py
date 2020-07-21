@@ -76,7 +76,6 @@ class PDBMapVEP():
             LOGGER.critical(msg)
             sys.exit(msg)
 
-        # import pdb; pdb.set_trace()
         # Vep preferred access method #1
         if 'vep_cache_dir' in self._config_dict:
             self.vep_cache_dir = self._config_dict['vep_cache_dir']
@@ -172,6 +171,8 @@ class PDBMapVEP():
         #  DO NOT CHECK THIS IN 
         LOGGER.critical("*** REMOVE --db_version SOON ***")
         vep_cmd.extend(['--db_version','96'])
+        LOGGER.critical("*** REMOVE --assembly OON ***")
+        vep_cmd.extend(['--assembly','GRCh38'])
 
 
         # Send to stdout and don't generate a summary stats file
@@ -472,7 +473,7 @@ class PDBMapVEP():
         if vcf_filename.endswith(".bgz"): # Why does Gnomad use .bgz for .gz files?  So irritating!  But, we override and all works out
             vcf_file_compressed = True
         return vcf.Reader(filename=vcf_filename,
-            prepend_chr=True,
+            prepend_chr=(not 'liftover' in vcf_filename),
             compressed=vcf_file_compressed,
             encoding='UTF-8')
         
@@ -608,7 +609,6 @@ class PDBMapVEP():
         def write_unwritten_vcf_rows():
             nonlocal rows_inserted, query, unwritten_vcf_rows
             # try:
-            # import pdb; pdb.set_trace()
 
             with PDBMapSQLdb() as db:
                 db.set_session_transaction_isolation_read_committed()
@@ -687,11 +687,15 @@ class PDBMapVEP():
 
         snpcount = 0
         parse_count = 0
+        LOGGER.critical("Reminder: FILTER testing is NOT being used")
         for record in vcf_reader: 
             parse_count += 1
             LOGGER.debug("vcf parsed record #%d = %s"%(parse_count,str(record)))
-            # Do not load non-PASS variants
-            if not record.FILTER:
+            # Do not load non-PASS variants... Or do we...?????
+            # Clinvar38 lacks filter entries.
+            # In others it is very complex to know what to do with them
+            # This needs some thinking.  Today - we process everything with reasonable chr - and move on
+            if True: # record.FILTER:
                 # If position refers to a haplotype chromosome, ignore
                 if record.CHROM in ['chr1','chr2','chr3',
                                 'chr4','chr5','chr6','chr7','chr8',
@@ -702,9 +706,9 @@ class PDBMapVEP():
                     snpcount += 1
                     yield self._complete_vep_record_parse_and_clean(record,info_headers,csq_headers)
                 else:
-                    LOGGER.debug("Skipping record due to CHROM=%s pos=%d filter=%s"%(record.CHROM,record.POS,record.FILTER))
+                    LOGGER.debug("Skipping record due to CHROM=%s pos=%d"%(record.CHROM,record.POS))
             else:
-                LOGGER.debug("Skipping record that does not pass filter CHROM=%s pos=%d"%(record.CHROM,record.POS))
+                LOGGER.debug("Skipping record that does not pass filter CHROM=%s pos=%d FILTER=%s"%(record.CHROM,record.POS,record.FILTER))
         ## We are now allowing Synonymous SNPs to be mapped ##
         LOGGER.info("Exiting PDBMapVEP:yield_completed_vcf_records() after yielding %d Total SNPs (syn+nonsyn) records"%snpcount)
         # print "Nonsynonymous SNPs in %s: %d"%(fname,nscount)
@@ -763,7 +767,6 @@ class PDBMapVEP():
                 # We flushed the rows so now we re-initialize for more rows
                 unwritten_GenomicConsequenceCSQs = []
                 return rows_inserted
-
 
         for vcf_record in records_from_vep_generator:
             vcf_record.INFO['LABEL'] = data_label
