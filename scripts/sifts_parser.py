@@ -222,7 +222,7 @@ if args.best_isoforms or args.all_isoforms:
         pdb_list = args.pdb.split(',')
     else:
         pdbid_rows_from_idmapping = load_idmapping_pdbids()
-        pdb_list = [pdbid_row[0] for pdbid_row in pdbids_from_idmapping]
+        pdb_list = [pdbid_row[0] for pdbid_row in pdbid_rows_from_idmapping]
 
     for pdbid in pdb_list:
         LOGGER.info("Processing pdbid %d/%d %s"%(pdbs_processed_count+1,len(pdb_list),pdbid))
