@@ -21,7 +21,7 @@ import numpy as np
 # from pdbx.writer.PdbxWriter import PdbxWriter
 # from pdbx.reader.PdbxContainers import *
 import logging
-LOGGER = logging.getLogger()
+LOGGER = logging.getLogger(__name__)
 
 def parseOperationExpression(expression: str) :
     LOGGER.debug('Parsing biounit operation %s',str)
