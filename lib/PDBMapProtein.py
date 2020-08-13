@@ -16,9 +16,9 @@
 
 # See main check for cmd line parsing
 import sys,csv,gzip
+from collections import defaultdict
 import logging
 LOGGER = logging.getLogger(__name__)
-from collections import defaultdict
 
 class PDBMapProtein():
   # _sec2prim is initialized from an entirely different file
