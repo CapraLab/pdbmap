@@ -126,7 +126,6 @@ class PDBMap():
           print("  VALID (PDBMap) %s already in database."%pdbid)
           return 0
       # Load the PDB structure
-      # import pdb; pdb.set_trace()
       if not pdb_fname:
         pdb_fname = "%s/structures/pdb%s.ent.gz"%(self.pdb_dir,pdbid.lower())
         print("  # Fetching %s"%pdbid)
@@ -288,7 +287,6 @@ class PDBMap():
         completed_vep_records_generator = pdbmap_vep.yield_completed_vcf_records(vcf_reader)
 
         LOGGER.info("Calling PDBMapVEP.vep_records_to_genomic_tables")
-        # import pdb; pdb.set_trace()
         uploaded_records_count = pdbmap_vep.vep_records_to_genomic_tables(completed_vep_records_generator,dlabel)
         LOGGER.info("PDBMapVEP.pipe_vcf_to_vep_and_yield_complete_records returned %d (records uploaded)"%uploaded_records_count)
 
@@ -825,7 +823,6 @@ drwx------ 3 root   root             17 Oct 17 16:00 systemd-private-1461403187a
         msg = "WARNING (PDBMap) Uploading %d Human Swiss-Prot PDB structures.\n"%len(all_pdb_files)
         LOGGER.warning(msg)
         n = len(all_pdb_files)
-        # import pdb; pdb.set_trace()
         # If this is a parallel command with partition parameters
         if args.ppart != None and args.ppidx != None:
           psize = n / args.ppart # floor
