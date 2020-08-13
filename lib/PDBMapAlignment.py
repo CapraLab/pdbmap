@@ -708,6 +708,9 @@ class PDBMapAlignment():
          # Add the amino acid letter to chain_aaseq
          chain_aaseq += seq1(chain_residue.get_resname()) # The amino acid letter goes into the chain_aaseq
          chain_aaseq_to_resid[len(chain_aaseq)] = chain_residue.id
+
+      if len(chain_aaseq) < 1:
+          return (False, "Chain %s has 0 residues for alignment")
   
             
       # If an io object was provided, first check for SIFTS alignment
