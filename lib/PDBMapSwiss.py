@@ -17,7 +17,7 @@ import sys,os,re
 import pandas
 from Bio.PDB.Structure import Structure
 from lib.PDBMapProtein import PDBMapProtein
-from lib.PDBMapAlignment import PDBMapAlignment
+# from lib.PDBMapAlignment import PDBMapAlignment
 from collections import defaultdict
 
 import logging
@@ -106,6 +106,7 @@ Fields in modbase that may become more relevant
     else:
       return result
 
+  """
   def get_transcripts(self,io=None):
     # import pdb; pdb.set_trace()
     # io is an unused parameter required for polymorphic behavior
@@ -157,7 +158,7 @@ Fields in modbase that may become more relevant
       self.get_transcripts()
 
     return self.alignments
-
+  """
   @classmethod
   def get_swiss_modelids(cls):
     """ Returns all recorded SwissModel models """
