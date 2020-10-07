@@ -4,6 +4,7 @@ from .PDBMapSQLdb import PDBMapSQLdb
 # from .PDBMapParser import PDBMapParser
 from .PDBMapModbase2013 import PDBMapModbase2013
 from .PDBMapModbase2016 import PDBMapModbase2016
+from .PDBMapModbase2020 import PDBMapModbase2020
 from .PDBMapSwiss import PDBMapSwiss
 from .PDBMapProtein import PDBMapProtein
 # from .PDBMapStructure import PDBMapStructure
