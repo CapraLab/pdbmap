@@ -98,7 +98,7 @@ class PDBMapVEP():
                            "per ENSEMBL recommendations. VEP run will use SQL queries.")
                 sys.exit("Terminating for now until VEP cahcing is better understood")
                 
-
+        self.vep_assembly = self._config_dict['vep_assembly']
 
 
     def launch_vep(self,
@@ -170,9 +170,9 @@ class PDBMapVEP():
         #  SOMETHING IS WRONG WITH db_version
         #  DO NOT CHECK THIS IN 
         LOGGER.critical("*** REMOVE --db_version SOON ***")
-        vep_cmd.extend(['--db_version','96'])
+        vep_cmd.extend(['--db_version','100'])
         LOGGER.critical("*** REMOVE --assembly OON ***")
-        vep_cmd.extend(['--assembly','GRCh38'])
+        vep_cmd.extend(['--assembly',self.vep_assembly])
 
 
         # Send to stdout and don't generate a summary stats file
@@ -192,7 +192,7 @@ class PDBMapVEP():
                 LOGGER.info("Mal-formed (too few tabs) VEP output line",vep_output_line)
                 return False
             # The INFO column is the final (right-most) of the vep output columns 
-            return vcf_split_tabs[7].find(b';CSQ=') > 0
+            return vcf_split_tabs[7].find(b'CSQ=') > -1 
 
         vep_lines_yielded = 0
         for vep_output_line in iter(VEP_process.stdout.readline, b''):
