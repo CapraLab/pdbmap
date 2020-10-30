@@ -15,7 +15,9 @@ def test_ensembl():
     # assert ensembl_transcript.load_aa_seq_from_ENSEMBL() == (True,
     #  "MLSRNDDICIYGGLGLGGLLLLAVVLLSACLCWLHRRVKRLERSWAQGSSEQELHYASLQRLPVPSSEGPDLRGRDKRGTKEDPRADYACIAENKPT")
 
-    (success,chromosome_location) = ensembl_transcript.load_chromosome_location()
+    import pdb; pdb.set_trace()
+    (success,chrom,chromosome_locations) = ensembl_transcript.load_chromosome_location()
+    assert chrom=='chrCHR_HSCHR6_MHC_COX_CTG1',"Returned chrom was incorrect %s"%chrom
 
     # Make sure that a bad ensembl transcript reports back with False and explanation text
     ensembl_transcript = PDBMapTranscriptEnsembl(
@@ -25,3 +27,5 @@ def test_ensembl():
 
     assert success == False
     assert aa_seq.startswith('Not a valid human transcript ID: ENST99999999999')
+
+test_ensembl()
