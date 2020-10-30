@@ -145,13 +145,13 @@ class PDBMapTranscriptEnsembl(PDBMapTranscriptBase):
 
     def load_chromosome_location(self):
         """ Load genomic locations for the ensembl_ENST via the ENSEMBL PERL API """
-        if self.ensembl_sequence:
+        if self.ensembl_sequence and self.ensembl_chromosome:
             LOGGER.info("chromosome location already loaded.  Returning from load_chromosome_location immediately")
-            return (True,self.ensembl_sequence)
+            return (True,self.ensembl_chromosome,self.ensembl_sequence)
   
         completed_process = self._run_perl_script("transcript_to_genomic.pl")
         if completed_process.returncode != 0:
-            return (False,completed_process.stderr.rstrip())
+            return (False,completed_process.stderr.rstrip(),None)
         lineno = 1
         for line in completed_process.stdout.split('\n'):
             if len(line) < 1: continue # It's nothing 
@@ -197,16 +197,16 @@ class PDBMapTranscriptEnsembl(PDBMapTranscriptBase):
             self.ensembl_sequence[transcript_index] = (aa_letter,start,end)
 
         if not self.ensembl_sequence:
-            return (False,"No interpretable data returned from ENSEMBL PERL API transcript_to_genomic.pl: %s"%completed_process.stdout.rstrip())
+            return (False,"No interpretable data returned from ENSEMBL PERL API transcript_to_genomic.pl: %s"%completed_process.stdout.rstrip(),None)
         residue_numbers = sorted(self.ensembl_sequence.keys())
         if residue_numbers[0] != 1:
-            return (False,"Amino Acid for resdiue #1 was not returned by transcript_to_genomic.pl")
+            return (False,"Amino Acid for residue #1 was not returned by transcript_to_genomic.pl",None)
         if residue_numbers[-1] != len(residue_numbers):
-            return (False,"Last residue number returned by transcript_to_genomic.pl does not match residue count")
+            return (False,"Last residue number returned by transcript_to_genomic.pl does not match residue count",None)
 
         self._aa_seq = ''.join([self.ensembl_sequence[transcript_index][0] for transcript_index in residue_numbers])
 
-        return (True,self.ensembl_sequence)
+        return (True,self.ensembl_chromosome,self.ensembl_sequence)
 
     @classmethod
     def cache_transcript(cls,transid,transcript):
