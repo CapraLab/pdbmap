@@ -1,42 +1,41 @@
 CREATE TABLE IF NOT EXISTS GenomicData (
-# Standard columns
-label VARCHAR(100), # Dataset label
-chr VARCHAR(50),
-start INT, # Start site, always specified
-end INT,   # End site, specified by END or assumed start + 1
-name VARCHAR(100),  # Provided name
-variation VARCHAR(100), # Known variation names
-vtype VARCHAR(50),  # Variant Type
-svtype VARCHAR(50), # Structural variant type
-ref_allele VARCHAR(50),
-alt_allele VARCHAR(50),
-svlen INT, # Difference in length between ref and alt alleles
-quality DOUBLE, # Not sure how this is measured
-avgpost DOUBLE, # MaCH/Thunder: Average posterior probability
-rsq DOUBLE,     # MaCH/Thunder: Genotype imputation quality
-erate DOUBLE,   # MaCH/Thunder: Per-marker mutation rate
-theta DOUBLE,   # MaCH/Thunder: Per-marker transition rate
-ldaf DOUBLE,    # MLE allele frequency accounting for LD
-ac INT, # Alternate Allele Count
-an INT, # Total Allele Count
-aa VARCHAR(50), # Ancestral Allele
-da VARCHAR(50), # Derived Allele
-maf DOUBLE,     # Allele Frequency: Global (AC/AN)
-amr_af DOUBLE,  # Allele Frequency: American
-asn_af DOUBLE, # Allele Frequency: Asian
-eas_af DOUBLE, # Allele Frequency: East Asian
-sas_af DOUBLE, # Allele Frequency: South Asian
-afr_af DOUBLE, # Allele Frequency: African
-eur_af DOUBLE, # Allele Frequency: European
-ens_gene VARCHAR(50), # Ensembl Gene identifier
-hgnc_gene VARCHAR(50), # HGNC Gene identifier
-snpsource VARCHAR(50), # Low coverage or Exome?
-format VARCHAR(50), # Genotype Format
-gt TEXT, # Genotypes
-gd_id BIGINT NOT NULL AUTO_INCREMENT, # Unique, direct-reference key
-PRIMARY KEY(label,chr,start,end,name),
+label VARCHAR(100)      COMMENT 'Dataset label',
+chrom VARCHAR(50)       COMMENT 'Chromosome from VCF input',
+pos INT                 COMMENT 'VCF reference position, with the 1st base having positoin 1.  Previously renamed to start in Mike''s earlier schema',
+end INT                 COMMENT 'End site, specified by END key in VCF INFO or assumed pos + 1',
+id VARCHAR(100)         COMMENT 'VCF ID.  Typically RSID if available, or provided name.  Often NULL',
+variation VARCHAR(100)  COMMENT 'VCF EXISTING variation.  I.e., known variation names',
+vtype VARCHAR(50)       COMMENT 'VCF VTYPE - Variant Type: INS DEL DUP etc',
+svtype VARCHAR(50)      COMMENT 'VCF SVTYPEStructural variant type',
+ref_allele VARCHAR(50)  COMMENT 'VCF REF - always required',
+alt_allele VARCHAR(50)  COMMENT 'VCF ALT',
+svlen INT               COMMENT 'Difference in length between ref and alt alleles',
+quality DOUBLE          COMMENT 'quality metric that can be provided in a VCF file.  Meaning is source-dependent',
+avgpost DOUBLE          COMMENT 'MaCH/Thunder: Average posterior probability',
+rsq DOUBLE              COMMENT 'MaCH/Thunder: Genotype imputation quality',
+erate DOUBLE            COMMENT 'MaCH/Thunder: Per-marker mutation rate',
+theta DOUBLE            COMMENT 'MaCH/Thunder: Per-marker transition rate',
+ldaf DOUBLE             COMMENT 'MLE allele frequency accounting for LD',
+ac INT                  COMMENT 'Alternate Allele Count',
+an INT                  COMMENT 'Total Allele Count',
+aa VARCHAR(50)          COMMENT 'Ancestral Allele',
+da VARCHAR(50)          COMMENT 'Derived Allele',
+maf DOUBLE              COMMENT 'Allele Frequency: Global (AC/AN)',
+amr_af DOUBLE           COMMENT 'Allele Frequency: American',
+asn_af DOUBLE           COMMENT 'Allele Frequency: Asian',
+eas_af DOUBLE           COMMENT 'Allele Frequency: East Asian',
+sas_af DOUBLE           COMMENT 'Allele Frequency: South Asian',
+afr_af DOUBLE           COMMENT 'Allele Frequency: African',
+eur_af DOUBLE           COMMENT 'Allele Frequency: European',
+ens_gene VARCHAR(50)    COMMENT 'Ensembl Gene identifier',
+hgnc_gene VARCHAR(50)   COMMENT 'HGNC Gene identifier',
+snpsource VARCHAR(50)   COMMENT 'Low coverage or Exome?',
+format VARCHAR(50)      COMMENT 'Genotype Format',
+gt TEXT                 COMMENT 'Genotypes',
+gd_id BIGINT NOT NULL AUTO_INCREMENT COMMENT 'Unique, direct-reference key',
+PRIMARY KEY(label,chrom,pos,end,id),
 KEY(gd_id),
-KEY(label,name),
+KEY(label,id),
 KEY(label,maf),
 KEY(label,amr_af),
 KEY(label,asn_af),
@@ -44,4 +43,5 @@ KEY(label,afr_af),
 KEY(label,eur_af),
 KEY(label,eas_af),
 KEY(label,sas_af)
-)
+) COMMENT 'VEP-supplemented VCF records of genome (vs transcript) impacts.  See GenomicConsequence for transcript impacts' 
+CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci

@@ -1,18 +1,18 @@
-#!/usr/bin/env python2.7
+#!/usr/bin/env python3
 # Chris Moth 2017-Nov 30
 # Extract ONLY human entries from the ~150GB match_complete.xml
 # The resulting match_human.xml file in the same directory (specify in -c configfile)
 # is used to help generate domain graphics for isoform-specific uniprot ACs in the pipeline
 # output reports
 
-import argparse,ConfigParser
+import argparse,configparser
 import traceback
 import sys,os,csv,time,pdb,glob,gzip,shutil
 import subprocess as sp
 from multiprocessing import cpu_count
 from lib import PDBMapIO,PDBMapParser,PDBMapStructure,PDBMapProtein
-from lib import PDBMapAlignment,PDBMapData,PDBMapTranscript
-from lib import PDBMapIntersect,PDBMapModel
+# from lib import PDBMapAlignment,PDBMapData,PDBMapTranscript
+# from lib import PDBMapIntersect,PDBMapModel
 
 import logging
 from logging.handlers import RotatingFileHandler
@@ -39,15 +39,15 @@ conf_parser.add_argument("-c", "--conf_file",
 help="Specify config file", metavar="FILE", required=True)
 args, remaining_argv = conf_parser.parse_known_args()
 conf_file = args.conf_file
-print 'Reading config file: %s'%conf_file
-config = ConfigParser.SafeConfigParser()
+print('Reading config file: %s'%conf_file)
+config = configparser.SafeConfigParser()
 config.read([conf_file])
 defaults = {}
 defaults.update(dict(config.items("Genome_PDB_Mapper")))
-print 'Interpro directory: %s'%defaults['interpro_dir']
+print('Interpro directory: %s'%defaults['interpro_dir'])
 
-xml_input_file = defaults['interpro_dir'] + 'match_complete.xml'
-xml_output_file = defaults['interpro_dir'] + 'match_humanonly.xml'
+xml_input_file = os.path.join(defaults['interpro_dir'],'match_complete.xml.gz')
+xml_output_file = os.path.join(defaults['interpro_dir'],'match_humanonly.xml')
 
 xml_output = open(xml_output_file,"w+")
 xml_output.write('<?xml version="1.0" encoding="ISO-8859-1"?>\n')
@@ -64,7 +64,11 @@ xml_skipped = 0
 last_added = 0
 last_skipped = 0
 def iterate_xml():
-    doc = etree.iterparse(xml_input_file, events=('start', 'end'))
+    import gzip
+
+    xml_input_file_gz = gzip.open(xml_input_file,"rb")
+    # doc = etree.iterparse(xml_input_file, events=('start', 'end'))
+    doc = etree.iterparse(xml_input_file_gz, events=('start', 'end'))
     _, root = next(doc)
     start_tag = None
     for event, element in doc:
@@ -86,20 +90,21 @@ for element in iterate_xml():
     # If the base part of the uniprot identifier is in the KB based on our load of idmapping, then this is human
     isHumanUnp = PDBMapProtein.unp2uniprotKB(unp.split('-')[0])
     if isHumanUnp:
-      xml_output.write(etree.tostring(element))
-      print "Added human unp %s to xml"%unp
+      xml_output.write(etree.tostring(element).decode('utf-8'))
+      print("Added human unp %s to xml"%unp)
       xml_added += 1
     else:
       xml_skipped += 1 
   else:
-    xml_output.write(etree.tostring(element))
-    print "Added non-protein XML %s"%etree.tostring(element)
+    xml_output.write(etree.tostring(element).decode('utf-8'))
+    print("Added non-protein XML %s"%etree.tostring(element))
     xml_added += 1
 
-  if last_added != xml_added or last_skipped != (xml_skipped / 100000):
-    print "Xml added %d, Skipped: %d"%(xml_added,xml_skipped)
+  if last_added != xml_added or (last_skipped != (xml_skipped // 100000)):
+    print("Xml added %d, Skipped: %d"%(xml_added,xml_skipped))
     last_added = xml_added
-    last_skipped = xml_skipped / 100000
+    last_skipped = xml_skipped // 100000
 
 xml_output.write('</interpromatch>\n')
 
+print("Ending successfully with Xml added %d, Skipped: %d"%(xml_added,xml_skipped))

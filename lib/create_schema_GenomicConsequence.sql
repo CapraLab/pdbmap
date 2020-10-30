@@ -1,36 +1,35 @@
 CREATE TABLE IF NOT EXISTS GenomicConsequence (
-label VARCHAR(100), # Dataset label
-# Foreign Key to GenomicData
-chr VARCHAR(50),
-start INT, # Start site, always specified
-end INT,   # End site, specified by END or assumed start + 1
-name VARCHAR(100), # Provided name
+label VARCHAR(100)      COMMENT 'Dataset label ex ''clinvar''',
+-- Foreign Key to GenomicData
+chrom VARCHAR(50)       COMMENT 'Chromosome from VCF input',
+pos INT                 COMMENT 'VCF reference position, with the 1st base having positoin 1.  Previously renamed to start in Mike''s earlier schema',
+end INT                 COMMENT 'End site, specified by END key in VCF INFO or assumed pos + 1',
+id VARCHAR(100)         COMMENT 'VCF ID.  Typically RSID if available, or provided name.  Often NULL',
 # Consequence data
-transcript VARCHAR(100), # Ensembl transcript ID
-protein VARCHAR(100),    # Ensembl protein ID
-uniprot VARCHAR(100),    # UniProt accession ID
-canonical TINYINT,       # Canonical transcript?
+transcript VARCHAR(100) COMMENT 'ENSEMBL ENST..... transcript ID',
+protein VARCHAR(100)    COMMENT 'Ensembl ENSP..... protein ID',
+uniprot VARCHAR(100)    COMMENT 'UniProt accession ID',
+canonical TINYINT       COMMENT '1=Canonical transcript?',
 allele VARCHAR(50),
-consequence VARCHAR(100),
+consequence VARCHAR(100) COMMENT 'string from VEP',
 cdna_pos INT,
 cds_pos INT,
 protein_pos INT,
-ref_amino_acid VARCHAR(50),
-alt_amino_acid VARCHAR(50),
-ref_codon VARCHAR(50),
-alt_codon VARCHAR(50),
-polyphen DOUBLE, # Score only
-sift DOUBLE,     # Score only
-biotype VARCHAR(100), # of transcript
-domains TEXT, # formatted list as string
-gc_id BIGINT NOT NULL AUTO_INCREMENT, # Unique, direct-reference key
-gd_id BIGINT, # GenomicData direct-reference key
-PRIMARY KEY(label,transcript,chr,start,end),
+ref_amino_acid VARCHAR(50) COMMENT 'Single letter amino acid',
+alt_amino_acid VARCHAR(50) COMMENT 'Alternate letter amino acid',
+ref_codon VARCHAR(50)      COMMENT '3 bases... codon for ref_amino_acid',
+alt_codon VARCHAR(50)      COMMENT '3 bases... codon for alt_amino_acid',
+polyphen DOUBLE            COMMENT 'Score only',
+sift DOUBLE                COMMENT 'Score only',
+biotype VARCHAR(100)       COMMENT 'of transcript',
+domains TEXT               COMMENT 'formatted list as string',
+gc_id BIGINT NOT NULL AUTO_INCREMENT COMMENT 'Unique, direct-reference key',
+PRIMARY KEY(label,transcript,chrom,pos,end),
 KEY(gc_id),
-KEY(gd_id),
-KEY(label,chr,start,end),
+KEY(label,chrom,pos,end),
 KEY(label,consequence),
 KEY(label,protein),
 KEY(label,polyphen),
 KEY(label,sift)
 )
+CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci

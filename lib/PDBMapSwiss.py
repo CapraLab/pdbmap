@@ -17,12 +17,11 @@ import sys,os,re
 import pandas
 from Bio.PDB.Structure import Structure
 from lib.PDBMapProtein import PDBMapProtein
-from lib.PDBMapTranscript import PDBMapTranscript
-from lib.PDBMapAlignment import PDBMapAlignment
+# from lib.PDBMapAlignment import PDBMapAlignment
 from collections import defaultdict
 
 import logging
-logging.basicConfig(Level='INFO')
+LOGGER = logging.getLogger(__name__)
 
 class PDBMapSwiss(Structure):
   # SwissModels are represented in RAM by small dictionaries that are reached individually by modelid
@@ -42,6 +41,7 @@ class PDBMapSwiss(Structure):
   # to match ModBase nomenclature
   _JSON_fields  = ["uniprot_ac","template","from","to","provider","url","qmean","qmean_norm","coordinate_id","iso_id"]
   swiss_dir = None
+  mthd_re = re.compile('(^.*) ([0-9]\.[0-9]*) A$')
 
   '''
 Fields in modbase that may become more relevant
@@ -106,6 +106,7 @@ Fields in modbase that may become more relevant
     else:
       return result
 
+  """
   def get_transcripts(self,io=None):
     # import pdb; pdb.set_trace()
     # io is an unused parameter required for polymorphic behavior
@@ -116,7 +117,7 @@ Fields in modbase that may become more relevant
       # Query all transcripts associated with the chain's UNP ID
       # from the Ensembl mySQL database records
       # print "Analyzing unp id", self.unp
-      candidate_transcripts = PDBMapTranscript.query_from_unp(self.unp)
+      candidate_transcripts = PDBMapProtein.unp2enst(self.unp)
       # But only keep the Ensemble transcripts matching this model's reference ENSP, if specified
       # IF the uniporit ID has a DASH (only!) THEN make sure to ONLY keep
       # The transcript which we KNOW from INDEX_JSON and tracing... to be the relevant one
@@ -129,13 +130,13 @@ Fields in modbase that may become more relevant
         candidate_transcripts = [ct for ct in candidate_transcripts if
                                PDBMapProtein.enst2ensp(ct.transcript) in PDBMapProtein.unp2ensp(self.unp)]
         if len(candidate_transcripts) < 1:
-          logging.getLogger(__name__).warning("Unable to  cross reference transcripts from Ensembl for Uniprot AC: %s"%self.unp)
+          LOGGER.warning("Unable to  cross reference transcripts from Ensembl for Uniprot AC: %s"%self.unp)
         if len(candidate_transcripts) > 1:
           candidate_transcripts = [candidate_transcripts[0]]
-          logging.getLogger(__name__).info( "Too many transcripts for Uniprot isoform AC: %s.  Retained %s only"%(self.unp,candidate_transcripts[0].transcript))
+          LOGGER.info( "Too many transcripts for Uniprot isoform AC: %s.  Retained %s only"%(self.unp,candidate_transcripts[0].transcript))
 
       if len(candidate_transcripts) < 1:
-        logging.getLogger(__name__).warning( "No transcripts from Ensembl SQL db found for Uniprot AC: %s"%self.unp)
+        LOGGER.warning( "No transcripts from Ensembl SQL db found for Uniprot AC: %s"%self.unp)
         return []
 
       # Align chain to first candidate transcript
@@ -157,7 +158,7 @@ Fields in modbase that may become more relevant
       self.get_transcripts()
 
     return self.alignments
-
+  """
   @classmethod
   def get_swiss_modelids(cls):
     """ Returns all recorded SwissModel models """
@@ -228,6 +229,7 @@ Fields in modbase that may become more relevant
   def load_REMARK3_metrics(cls,modelid):
     """ Parse the REMARK section of a SwissModel .pdb file to get a variety of quality metrics (eg qmn4, sid etc) """
     metrics = {}
+    metrics['resolution'] = None # Try to pull this out of the method string if we can
     fname = PDBMapSwiss.get_coord_file(modelid)
     with open(fname,'rt') as f:
       for line in f:
@@ -241,6 +243,11 @@ Fields in modbase that may become more relevant
             # 'template' conflicts with the JSON meta file entry of same name, and carries less info
             if (key != 'template'):
               metrics[key] = value
+              if key == 'mthd':
+                 mthd_resolution_match = PDBMapSwiss.mthd_re.match(metrics[key])
+                 if mthd_resolution_match:
+                     metrics['mthd'] = mthd_resolution_match.group(1)
+                     metrics['resolution'] = float(mthd_resolution_match.group(2))
     return metrics
 
 
@@ -269,16 +276,19 @@ Fields in modbase that may become more relevant
       msg = "ERROR: (PDBMapSwiss) Cannot load SwissModel. %s does not exist."%summary_fname
       logging.exception(msg)
       raise Exception
-    logging.getLogger().info("Opening SwissModel Summary File (JSON format):" + summary_fname)
+    LOGGER.info("Opening SwissModel Summary File (JSON format):" + summary_fname)
     import json
     with open(summary_fname,'rt') as json_file:
       json_str = json_file.read()
       json_data = json.loads(json_str)
       del json_str
 
-    logging.getLogger().info("%d rows read from %s successfully."%(len(json_data),summary_fname))
+    assert type(json_data) == dict and len(json_data) == 2 and 'index' in json_data and 'info' in json_data,(
+        "SwissModel Summary File %s/%s does not have simply 'index' and 'info' keys at top level")
 
-    for d in json_data:
+    LOGGER.info("%d rows read from index area of %s successfully."%(len(json_data['index']),summary_fname))
+
+    for d in json_data['index']:
       # import pdb; pdb.set_trace()
       # For sanity, we need dictionary elements that match the naming convention of our ModBase models
       # Convert columns from/to to start/end  notation like ModBase
@@ -312,7 +322,7 @@ Fields in modbase that may become more relevant
       if (d['unp'].find('-') != -1):
         PDBMapSwiss._unp2modelids[d['unp'].split('-')[0]].append(d['modelid'])
 
-    logging.getLogger(__name__).info( "%d Swiss models added to in-memory dictionary"%len(PDBMapSwiss._modelid2info))
+    LOGGER.info( "%d Swiss models added to in-memory dictionary"%len(PDBMapSwiss._modelid2info))
 
   @classmethod
   def old_load_swiss_INDEX_JSON(cls,swiss_dir,summary_fname):
@@ -327,7 +337,7 @@ Fields in modbase that may become more relevant
       msg = "ERROR: (PDBMapSwiss) Cannot load SwissModel. %s does not exist."%summary_fname
       logging.exception(msg)
       raise Exception
-    logging.getLogger().info("Opening SwissModel Summary File (JSON format):" + summary_fname)
+    LOGGER.info("Opening SwissModel Summary File (JSON format):" + summary_fname)
     try:
       df = pandas.read_json(summary_fname) # ,orient='records')
     except ValueError:
@@ -339,7 +349,7 @@ Fields in modbase that may become more relevant
       logging.exception(msg)
       raise
 
-    logging.getLogger().info("%d rows read from %s successfully."%(len(df),summary_fname))
+    LOGGER.info("%d rows read from %s successfully."%(len(df),summary_fname))
     total_count = 0
     for index,row in df.iterrows():
       total_count += 1
@@ -388,7 +398,7 @@ Fields in modbase that may become more relevant
       if (d['unp'].find('-') != -1):
         PDBMapSwiss._unp2modelids[d['unp'].split('-')[0]].append(d['modelid'])
 
-    logging.getLogger(__name__).info( "%d Swiss models added to in-memory dictionary"%len(PDBMapSwiss._modelid2info))
+    LOGGER.info( "%d Swiss models added to in-memory dictionary"%len(PDBMapSwiss._modelid2info))
 
 # Main check
 if __name__== "__main__":

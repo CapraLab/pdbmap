@@ -9,11 +9,13 @@
 -- Tab delimiter allows us to load the idmapping file with the command line, easily
 -- for example: mysqlimport mysqlimport --ignore --verbose --fields-terminated-by='\t' --local -p  --columns=unp,ID_type,ID pdbmap_v14 /tmp/Idmapping
 
-CREATE TABLE pdbmap_v14.Idmapping (
+CREATE TABLE Idmapping (
   unp VARCHAR(40) NOT NULL COMMENT 'UniProtKB-AC  Typially A12345-nn max, but occasionally longer, especially if not curated',
   ID_type VARCHAR(40) NOT NULL COMMENT 'the type of the right column ID that is being cross-referenced',
   ID VARCHAR(40) NOT NULL COMMENT 'the right column ID that is being cross-referenced',
   PRIMARY KEY (unp,ID_type,ID),
-  KEY (ID,ID_type,unp)
+  KEY (ID,ID_type,unp), -- Speeds searches like "Find unps for an ENST sequence"
+  KEY (ID_type,unp,ID)  -- Speeds searches like "retrieve all pdb ids"
 ) ENGINE=InnoDB COMMENT 'Bidirectionally maps uniprot IDs to other IDs'
 
+CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci

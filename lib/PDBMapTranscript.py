@@ -12,6 +12,7 @@
 #                : genome-mapped Ensembl transcript. Depends on PDBMapProtein.
 #=============================================================================#
 
+ERROR DEAD CODE DO NOT USE
 # See main check for cmd line parsing
 import sys,os,csv,subprocess
 from .PDBMapProtein import PDBMapProtein
@@ -46,7 +47,7 @@ class PDBMapTranscript():
     PDBMapTranscript.trans_cache = dict([(x,(y,z)) for x,(y,z) in \
                 PDBMapTranscript.trans_cache.items() \
                 if z < PDBMapTranscript.CACHE_ACCESS_MIN])
-
+/hd0/psbadmin/pdbmap/lib/PDBMapTranscript*.py
   @classmethod
   def query_from_unp(cls,unpid):
     """ Use UniProt to map UniProt ID to Ensembl Transcript ID """
@@ -70,7 +71,7 @@ class PDBMapTranscript():
       msg = "No valid transcripts identified for %s\n"%unpid
       logger.warning(msg)
     return res
-
+/hd0/psbadmin/pdbmap/lib/PDBMapTranscript*.py
   @classmethod
   def query_from_trans(cls,transid):
     """ Use Ensembl Transcript ID to load transcript information """
@@ -110,7 +111,7 @@ class PDBMapTranscript():
       seqid      = int(fields[3])
       rescode    = fields[4].upper()
       if rescode not in list(aa_code_map.values()):
-        rescode  = 'X' # replace non-standard amino acids with X
+        rescode  = 'X' # replace non-standard amino acids with X/hd0/psbadmin/pdbmap/lib/PDBMapTranscript*.py
       start      = int(fields[5])
       end        = int(fields[6])
       chrom      = fields[7]
@@ -134,7 +135,7 @@ class PDBMapTranscript():
  
 aa_code_map = {"ala" : "A",
         "arg" : "R",
-        "asn" : "N",
+        "asn" : "N",/hd0/psbadmin/pdbmap/lib/PDBMapTranscript*.py
         "asp" : "D",
         "asx" : "B",
         "cys" : "C",

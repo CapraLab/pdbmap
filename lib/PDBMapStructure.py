@@ -13,7 +13,7 @@
 #                : requests for Structure attributes are deferred to the
 #                : Structure object.
 #=============================================================================#
-
+error lets not use this
 # See main check for cmd line parsing
 import sys,os,csv,copy,time,random,tempfile
 import logging
@@ -24,7 +24,6 @@ from Bio.PDB import Superimposer
 from Bio.PDB.PDBIO import PDBIO
 from Bio.PDB.PDBParser import PDBParser
 import lib.PDBMapIO
-from lib.PDBMapTranscript import PDBMapTranscript
 from lib.PDBMapAlignment import PDBMapAlignment
 from warnings import filterwarnings,resetwarnings
 from Bio.PDB.PDBExceptions import PDBConstructionWarning
@@ -165,7 +164,7 @@ class PDBMapStructure(Structure):
         logger.warn(msg)
         continue
       refdict = dict((i+1,(r,"NA",0,0,0)) for i,r in enumerate(refseq[c.id]))
-      c.transcript = PDBMapTranscript("ref","ref","ref",refdict)
+      c.transcript = "FIX ME OLD IDEA" PDBMapTranscript("ref","ref","ref",refdict)
       c.alignment  = PDBMapAlignment(c,c.transcript)
       self.transcripts.append(c.transcript)
       self.alignments.append(c.alignment)
