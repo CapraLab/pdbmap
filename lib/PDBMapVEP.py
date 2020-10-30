@@ -104,10 +104,11 @@ class PDBMapVEP():
     def launch_vep(self,
                 input_filename: str,
                 input_format: str = 'default',
-                generator_echo_filename: str = None) -> Iterator[str]:
+                vep_echo_filename: str = None) -> Iterator[str]:
 
         """1) Build a VEP ready command line,
         2) launch vep
+        3) If requested, all vep output echoed to optional vep_echo_filename
         3) yield strings for each vcf output line that passes filter for
            being consequential to protein sequence (have CSQ)"""
 
@@ -183,8 +184,8 @@ class PDBMapVEP():
         # Call VEP and capture stdout in realtime
         VEP_process = sp.Popen(vep_cmd, stdout=sp.PIPE, bufsize=1)
         echo_f = None
-        if generator_echo_filename:
-            echo_f = gzip.open(generator_echo_filename, 'wb') # Open cache for writing
+        if vep_echo_filename:
+            echo_f = gzip.open(vep_echo_filename, 'wb') # Open cache for writing
 
         def CSQ_in_INFO(vep_output_line):
             vcf_split_tabs = vep_output_line.split(b'\t')
@@ -196,12 +197,12 @@ class PDBMapVEP():
 
         vep_lines_yielded = 0
         for vep_output_line in iter(VEP_process.stdout.readline, b''):
+            # Echo to file, if caller requested, before yielding
+            if echo_f:
+                echo_f.write(vep_output_line)
             # print('VEP OUTPUT LINE IS %s'%vep_output_line.decode("utf-8"))
             # Filter variants without consequence (CSQ) annotations
             if vep_output_line.startswith(b'#') or CSQ_in_INFO(vep_output_line):
-                # Echo to file, if caller requested, before yielding
-                if echo_f:
-                    echo_f.write(vep_output_line)
                 vep_lines_yielded += 1
                 yield vep_output_line.decode('utf-8')
 
@@ -468,12 +469,12 @@ class PDBMapVEP():
         return record
 
     @staticmethod
-    def _my_vcf_file_Reader(vcf_filename):
+    def _my_vcf_file_Reader(vcf_filename,prepend_chr):
         vcf_file_compressed = None # <- This works great with vcf.Reader() calls involving .gz (compressed automatically) and all else (not compressed)
         if vcf_filename.endswith(".bgz"): # Why does Gnomad use .bgz for .gz files?  So irritating!  But, we override and all works out
             vcf_file_compressed = True
         return vcf.Reader(filename=vcf_filename,
-            prepend_chr=(not 'liftover' in vcf_filename),
+            prepend_chr=prepend_chr, # (not 'liftover' in vcf_filename),
             compressed=vcf_file_compressed,
             encoding='UTF-8')
         
@@ -500,7 +501,7 @@ class PDBMapVEP():
         #
         #  rameter prepend_chr=True, prepends the string 'chr' to all the chromosome
         #   values found (as in chr1/chrX/chrEtc)
-        vcf_reader = self._my_vcf_file_Reader(vcf_filename)
+        vcf_reader = self._my_vcf_file_Reader(vcf_filename,prepend_chr=(not 'liftover' in vcf_filename))
 
         # The first 7 mandatory vcf columns are consistent from vcf file to vcf file
         # var_header  = ["chr","start","name","ref","alt","qual","filter"]
@@ -634,8 +635,14 @@ class PDBMapVEP():
         # Return the number of rows uploaded
         return rows_inserted
 
-    def vcf_reader_from_file_supplemented_with_vep_outputs(self,vcf_filename,vep_echo_filename=None):
-        """ Pipe a VCF file into VEP and yield records suitable for additional to SQL """
+    def vcf_reader_from_file_supplemented_with_vep_outputs(self,vcf_filename,vep_echo_filename=None,prepend_chr=True):
+        """ Pipe a VCF file into VEP and yield records suitable for additional to SQL
+            vcf_filename:      The pre-VEP vcf filename with CHROM/POS/REF/ALT
+            vep_echo_filename: Optional place to store vep outputs, in addition to yieleding back inside the code
+            prepend_chr:       Passed directly to the vcf.Reader to allow for varying formats of source files and get 
+                               the final "chrnn" format right in the end.  If your final file has chrchrN, you need
+                               to try again with prepend_chr=False
+        """
         # vep_echo_filename  = '/tmp/VEP_stdout_%s'%os.path.basename(vcf_filename)
         # if vep_echo_filename.split('.')[-1] != 'gz':
         #     vep_echo_filename += '.gz'
@@ -643,7 +650,7 @@ class PDBMapVEP():
         if vep_echo_filename:
             LOGGER.info("Echoing VEP output to %s"%vep_echo_filename)
         # Launch the vep, and return a vcf reader that parses vep outputs
-        vcf_reader = vcf.Reader(self.launch_vep(vcf_filename,'vcf',vep_echo_filename),prepend_chr=True,encoding='UTF-8')
+        vcf_reader = vcf.Reader(self.launch_vep(vcf_filename,'vcf',vep_echo_filename),prepend_chr=prepend_chr,encoding='UTF-8')
         vcf_reader.CSQorVEP = None
         for key in ['CSQ','vep']:
             if key in vcf_reader.infos:
@@ -663,8 +670,10 @@ class PDBMapVEP():
     
 
 
-    def vcf_reader_from_file_without_vep(self,vcf_filename):
-        vcf_reader = self._my_vcf_file_Reader(vcf_filename)
+    def vcf_reader_from_file_without_vep(self,vcf_filename,prepend_chr=None):
+        if prepend_chr is None:
+            prepend_chr=(not 'liftover' in vcf_filename)
+        vcf_reader = self._my_vcf_file_Reader(vcf_filename,prepend_chr)
 
         vcf_reader.CSQorVEP = None
         for key in ['CSQ','vep']:
@@ -697,6 +706,11 @@ class PDBMapVEP():
             # This needs some thinking.  Today - we process everything with reasonable chr - and move on
             if True: # record.FILTER:
                 # If position refers to a haplotype chromosome, ignore
+                if record.CHROM.startswith('chrchr'):
+                    msg="You have a record that has a chrchr.  Fix your prepend_chr setting"
+                    LOGGER.critical(msg)
+                    sys.exit(msg)
+                       
                 if record.CHROM in ['chr1','chr2','chr3',
                                 'chr4','chr5','chr6','chr7','chr8',
                                 'chr9','chr10','chr11','chr12','chr13',
