@@ -28,30 +28,45 @@ class PDBMapTranscriptEnsembl(PDBMapTranscriptBase):
        and genomic locations"""
     # One global variable we'd like to tease out is the 
     # ENSEMBL_REGISTRY and specific dbname (containing Genome and Ensembl API version)
-    ensembl_registry = os.getenv("ENSEMBL_REGISTRY")
-    if not ensembl_registry:
-        LOGGER.critical("ENSEMBL_REGISTRY environment variable requried for PERL api configuration")
-        sys.exit(1)
-    ensembl_api_version = None
-    ensembl_genome_version = None
-    if ensembl_registry:
-        with open(ensembl_registry,'r') as file:
-            for line in file:
-                if '-dbname' in line and 'homo_sapiens_core_' in line and '=>' in line:
-                    # Tease out ensembl API and Genome from the 
-                    # dbname => homo_sapiens_core_API_GENOME   string in the registry file
-                    match_object = re.match(".*dbname.*homo_sapiens_core_(\\d*)_(\\d*).*",line)
-                    if match_object:
-                        ensembl_api_version = (int)(match_object.group(1))
-                        ensembl_genome_version = (int)(match_object.group(2))
 
-    if not (ensembl_api_version and ensembl_genome_version):
-        LOGGER.critical("registry file %s lacks a -dbname => 'homo_sapiens_core_API_GENOME' entry"%ensembl_registry)
-        sys.exit(1)
+    _ensembl_registry = None
+    _ensembl_api_version = None
+    _ensembl_genome_version = None
+
+    @classmethod
+    def __init__ensembl_registry__(cls):
+        if cls._ensembl_registry: # Don't re-initialize
+            return
+        # One global variable we'd like to tease out is the
+        # ENSEMBL_REGISTRY and specific dbname (containing Genome and Ensembl API version)
+        cls._ensembl_registry = os.getenv("ENSEMBL_REGISTRY")
+        if not cls._ensembl_registry:
+            fail_message="ENSEMBL_REGISTRY environment variable requried for PERL api configuration"
+            LOGGER.critical(fail_message)
+            sys.exit(fail_message)
+        cls._ensembl_api_version = None
+        cls._ensembl_genome_version = None
+        if cls._ensembl_registry:
+            with open(cls._ensembl_registry,'r') as file:
+                for line in file:
+                    if '-dbname' in line and 'homo_sapiens_core_' in line and '=>' in line:
+                        # Tease out ensembl API and Genome from the
+                        # dbname => homo_sapiens_core_API_GENOME   string in the registry file
+                        match_object = re.match(".*dbname.*homo_sapiens_core_(\\d*)_(\\d*).*",line)
+                        if match_object:
+                            cls._ensembl_api_version = (int)(match_object.group(1))
+                            cls._ensembl_genome_version = (int)(match_object.group(2))
+
+        if not (cls._ensembl_api_version and cls._ensembl_genome_version):
+            LOGGER.critical("registry file %s lacks a -dbname => 'homo_sapiens_core_API_GENOME' entry"%cls._ensembl_registry)
+            sys.exit(1)
 
     def __init__(self,ensembl_ENST):
         """An ENSTnnnnnn ENSEMBL transcript ID is required to instantiate"""
         # Define transcript, gene, and sequence
+        if not PDBMapTranscriptEnsembl._ensembl_registry:
+            PDBMapTranscriptEnsembl.__init__ensembl_registry__()
+
         self.ensembl_ENST = ensembl_ENST
         self.ensembl_ENSG = None       # ENSG* gene identifer mapped to this ENST transcript
         self.ensembl_ENSP = None       # ENSP* protein id mapped to this ENST transcript
@@ -123,20 +138,20 @@ class PDBMapTranscriptEnsembl(PDBMapTranscriptBase):
             return (True,self.aa_seq)
         completed_process = self._run_perl_script("transcript_to_AAseq.pl")
         if completed_process.returncode != 0:
-            return (False,completed_process.stderr.rstrip() + "(GRCh%s v %s)"%(PDBMapTranscriptEnsembl.ensembl_genome_version,PDBMapTranscriptEnsembl.ensembl_api_version))
+            return (False,completed_process.stderr.rstrip() + "(GRCh%s v %s)"%(PDBMapTranscriptEnsembl._ensembl_genome_version,PDBMapTranscriptEnsembl._ensembl_api_version))
         self._aa_seq = completed_process.stdout.rstrip()
         return self._aa_seq_check()
         
 
     def load_chromosome_location(self):
         """ Load genomic locations for the ensembl_ENST via the ENSEMBL PERL API """
-        if self.ensembl_sequence:
+        if self.ensembl_sequence and self.ensembl_chromosome:
             LOGGER.info("chromosome location already loaded.  Returning from load_chromosome_location immediately")
-            return (True,self.ensembl_sequence)
+            return (True,self.ensembl_chromosome,self.ensembl_sequence)
   
         completed_process = self._run_perl_script("transcript_to_genomic.pl")
         if completed_process.returncode != 0:
-            return (False,completed_process.stderr.rstrip())
+            return (False,completed_process.stderr.rstrip(),None)
         lineno = 1
         for line in completed_process.stdout.split('\n'):
             if len(line) < 1: continue # It's nothing 
@@ -182,16 +197,16 @@ class PDBMapTranscriptEnsembl(PDBMapTranscriptBase):
             self.ensembl_sequence[transcript_index] = (aa_letter,start,end)
 
         if not self.ensembl_sequence:
-            return (False,"No interpretable data returned from ENSEMBL PERL API transcript_to_genomic.pl: %s"%completed_process.stdout.rstrip())
+            return (False,"No interpretable data returned from ENSEMBL PERL API transcript_to_genomic.pl: %s"%completed_process.stdout.rstrip(),None)
         residue_numbers = sorted(self.ensembl_sequence.keys())
         if residue_numbers[0] != 1:
-            return (False,"Amino Acid for resdiue #1 was not returned by transcript_to_genomic.pl")
+            return (False,"Amino Acid for residue #1 was not returned by transcript_to_genomic.pl",None)
         if residue_numbers[-1] != len(residue_numbers):
-            return (False,"Last residue number returned by transcript_to_genomic.pl does not match residue count")
+            return (False,"Last residue number returned by transcript_to_genomic.pl does not match residue count",None)
 
         self._aa_seq = ''.join([self.ensembl_sequence[transcript_index][0] for transcript_index in residue_numbers])
 
-        return (True,self.ensembl_sequence)
+        return (True,self.ensembl_chromosome,self.ensembl_sequence)
 
     @classmethod
     def cache_transcript(cls,transid,transcript):

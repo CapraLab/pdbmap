@@ -36,6 +36,8 @@ rootdir_fh.setFormatter(formatter)
 rootdir_fh.setLevel(logging.INFO)
 LOGGER.addHandler(rootdir_fh)
 
+LOGGER.info("sys.argv=%s",str(sys.argv))
+
 if needRoll:
   rootdir_fh.doRollover()
 
@@ -83,11 +85,12 @@ parser.add_argument("-b","--best_isoforms",action='store_true',
   help="Load 'best' isoforms data from sifts rest api")
 parser.add_argument("-a","--all_isoforms",action='store_true',
   help="Load alignments for all isoforms from sifts rest api")
+parser.add_argument("-p","--pdb",
+  help="Load alignments for a single pdb for all isoforms in the sifts RESTapi")
 args = parser.parse_args(remaining_argv)
 args.conf_file = conf_file
 
 assert args.legacy_xml or args.best_isoforms or args.all_isoforms
-
 
 # Check that all parameters were specified
 if not all(vars(args)):
@@ -214,12 +217,18 @@ if args.best_isoforms or args.all_isoforms:
     # pdbs = ['6CES','1M6D']
 
     cursor = con.cursor()
-    pdbids_from_idmapping = load_idmapping_pdbids()
-    for pdbid in pdbids_from_idmapping:
-        LOGGER.info("Processing pdbid %d/%d %s"%(pdbs_processed_count+1,len(pdbids_from_idmapping),pdbid))
-        isoform_json = sifts_get_all_isoforms(pdbid[0]) if args.all_isoforms else sifts_get_best_isoforms(pdbid[0])
+    pdb_list=[]
+    if args.pdb:
+        pdb_list = args.pdb.split(',')
+    else:
+        pdbid_rows_from_idmapping = load_idmapping_pdbids()
+        pdb_list = [pdbid_row[0] for pdbid_row in pdbid_rows_from_idmapping]
+
+    for pdbid in pdb_list:
+        LOGGER.info("Processing pdbid %d/%d %s"%(pdbs_processed_count+1,len(pdb_list),pdbid))
+        isoform_json = sifts_get_all_isoforms(pdbid) if args.all_isoforms else sifts_get_best_isoforms(pdbid)
         if not isoform_json:
-            LOGGER.warning("NO SIFTS REPONSE FOR %s"%pdbid[0])
+            LOGGER.warning("NO SIFTS REPONSE FOR %s"%pdbid)
             continue
         # assert(pdb.lower() in isoform_json)
         # print(isoform_json)
@@ -243,12 +252,19 @@ if args.best_isoforms or args.all_isoforms:
  
     cursor.close()
 
-    print("Processing %d pdbids"%number_of_rows)
+    print("Processed %d pdbids"%len(pdb_list))
     sys.exit(1)
     
 if args.legacy_xml:
+    LOGGER.info("Converting *.xml.gz files to SQL in %s"%args.xmldir)
     # Parse the split XML files
-    for xmlfile in glob.glob("%s/*.xml.gz"%args.xmldir.rstrip('/')):
+    # for xmlfile in ["%s/1y97.xml.gz"%args.xmldir.rstrip('/')]:
+    if args.pdb:
+        xmlfile_list = [os.path.join(args.xmldir.rstrip('/'),pdbid.lower()+".xml.gz") for pdbid in args.pdb.split(',')]
+    else:
+        xmlfile_list = glob.glob("%s/*.xml.gz"%args.xmldir.rstrip('/'))
+
+    for xmlfile in xmlfile_list:
       print("Parsing %s..."%xmlfile)
       parser = etree.XMLParser(remove_blank_text=True)
       tree   = etree.parse(xmlfile,parser)
@@ -316,26 +332,42 @@ if args.legacy_xml:
               res["interpro"] = ','.join(res["interpro"])
               # Add residue to list of parsed residues
               rlist.append(res)
-    
-      ## Upload to database
-      c   = con.cursor()
-      sql = """insert ignore into sifts_legacy_xml
-        (PDBe_dbResNum,pdbid,pdb_chain,pdb_resnum,pdb_icode,pdb_resname,uniprot_acc,uniprot_resnum,
-         uniprot_resname,ncbi,pfam,cath,scop,interpro,sscode,ssname)
-        values 
-        (%(PDBe_dbResNum)s,%(pdbid)s,%(pdb_chain)s,%(pdb_resnum)s,%(pdb_icode)s,%(pdb_resname)s,
-         %(uniprot_acc)s,%(uniprot_resnum)s,%(uniprot_resname)s,
-         %(ncbi)s,%(pfam)s,%(cath)s,%(scop)s,%(interpro)s,
-         %(sscode)s,%(ssname)s);"""
-    
-      LOGGER.info(sql%rlist[0])
-    
-      try:
-        c.executemany(sql,rlist)
-        con.commit()
-        LOGGER.info("Uploaded and committed!")
-      except:
-        con.rollback()
-        LOGGER.exception("Failed to upload rows.\n%s",c._last_executed)
-        raise
+
+      if len(rlist) < 1:
+          LOGGER.warning("No alignments were parsed from %s"%xmlfile)
+      else: 
+          # Sanity check that the pdbid elements match the filename
+          assert rlist[0]['pdbid'] in xmlfile,"Crazy - xml file refers to a pdb not the filename %s"%xmlfile
+          ## Upload to database
+          c   = con.cursor()
+          sql = """DELETE FROM sifts_legacy_xml WHERE pdbid=%s"""
+          try:
+            rows_affected = c.execute(sql,(rlist[0]['pdbid'],))
+            con.commit()
+            if rows_affected > 0:
+                LOGGER.info("PDB %s.  Removed %d stale SIFTS xml rows",rlist[0]['pdbid'],rows_affected)
+          except:
+            con.rollback()
+            LOGGER.exception("Failure on attempt to DELETE old pdb values\n%s",c._last_executed)
+            raise
+
+          sql = """INSERT IGNORE INTO sifts_legacy_xml
+            (PDBe_dbResNum,pdbid,pdb_chain,pdb_resnum,pdb_icode,pdb_resname,uniprot_acc,uniprot_resnum,
+             uniprot_resname,ncbi,pfam,cath,scop,interpro,sscode,ssname)
+            values 
+            (%(PDBe_dbResNum)s,%(pdbid)s,%(pdb_chain)s,%(pdb_resnum)s,%(pdb_icode)s,%(pdb_resname)s,
+             %(uniprot_acc)s,%(uniprot_resnum)s,%(uniprot_resname)s,
+             %(ncbi)s,%(pfam)s,%(cath)s,%(scop)s,%(interpro)s,
+             %(sscode)s,%(ssname)s);"""
+        
+          LOGGER.debug(sql%rlist[0])
+        
+          try:
+            rows_affected = c.executemany(sql,rlist)
+            con.commit()
+            LOGGER.info("Uploaded and committed! %d rows affected"%rows_affected)
+          except:
+            con.rollback()
+            LOGGER.exception("Failed to upload rows.\n%s",c._last_executed)
+            raise
       c.close()

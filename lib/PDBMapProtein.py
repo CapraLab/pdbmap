@@ -16,9 +16,9 @@
 
 # See main check for cmd line parsing
 import sys,csv,gzip
+from collections import defaultdict
 import logging
 LOGGER = logging.getLogger(__name__)
-from collections import defaultdict
 
 class PDBMapProtein():
   # _sec2prim is initialized from an entirely different file
@@ -113,7 +113,14 @@ class PDBMapProtein():
   @classmethod
   def refseqNT2unp(cls,refseqNT):
     # Return UniProt IDs associated with RefSeqNT transcript
-    return [PDBMapProtein.best_unp(unp) for unp in PDBMapProtein._refseqNT2unp[refseqNT]]
+    if refseqNT in PDBMapProtein._refseqNT2unp:    
+        return [PDBMapProtein.best_unp(unp) for unp in PDBMapProtein._refseqNT2unp[refseqNT]]
+    # If the refseqNT has a .N version number at the end, then try a versionless refseq to get final result
+    version_location = refseqNT.find('.')
+    if version_location > -1:
+        return [PDBMapProtein.best_unp(unp) for unp in PDBMapProtein._refseqNT2unp[refseqNT[0:version_location]]]
+    return []  # No luck - no uniprot IDs match to this refseq ID
+        
   @classmethod
   def refseqNP2unp(cls,refseqNP):
     # Return UniProt IDs associated with RefSeqNP protein

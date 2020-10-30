@@ -13,29 +13,41 @@
 #=============================================================================#
 # Slurm Parameters
 #SBATCH -J Load_Cosmic
-#SBATCH --mail-user=mike.sivley@vanderbilt.edu
-#SBATCH --mail-type=end
+#SBATCH --mail-user=chris.moth@vanderbilt.edu
+#SBATCH --mail-type=all
 #SBATCH --ntasks=1
 #SBATCH --time=3-0
-#SBATCH --mem=50GB
-#SBATCH -o load_cosmic/load_cosmic.%A[%a].out
+#SBATCH --mem=32GB
+#SBATCH --array=1-25
+#SBATCH -o ../load_cosmic.slurm.out/load_cosmic.%A[%a].out
 #=============================================================================#
 
 cd .. # move into pdbmap main directory
 
-fbase="/dors/capra_lab/data/cosmic/CosmicCodingMuts.chr"
-ftail=".recode.vcf"
+fbase="/dors/capra_lab/data/cosmic/2019-12-13/CosmicCodingMuts.chr"
+ftail=".vcf.gz"
+
+mkdir -pv load_cosmic.slurm.out
+mkdir -pv load_cosmic.slurm.log
+
+if (( ${SLURM_ARRAY_TASK_ID} > 1000000 )); then
+echo "You must start this slurm array script with --array=1-25"
+exit 1
+fi
 
 # Syntax for autosomal chromosomes
-if ((${SLURM_ARRAY_TASK_ID} < 23 )); then
-  ./pdbmap.py -c config/v13.config --dlabel=cosmic load_data ${fbase}${SLURM_ARRAY_TASK_ID}${ftail}
-# Syntax for X chromosome
-elif ((${SLURM_ARRAY_TASK_ID} < 24)); then
-  ./pdbmap.py -c config/v13.config --dlabel=cosmic load_data ${fbase}X${ftail}
-# Syntax for Y chromosome
-elif ((${SLURM_ARRAY_TASK_ID} < 25)); then
-  ./pdbmap.py -c config/v13.config --dlabel=cosmic load_data ${fbase}Y${ftail}
-# Syntax for MT chromosome
-else
-  ./pdbmap.py -c config/v13.config --dlabel=cosmic load_data ${fbase}MT${ftail}
+# Launch this script with sbatch --array=1-25 to populate the SLURM_ARRAY_TASK_ID
+chr=${SLURM_ARRAY_TASK_ID}
+
+if (( $chr == 23 )); then
+chr='X'
+elif (( $chr == 24 )); then
+chr='Y'
+elif (( $chr == 25 )); then
+chr='MT'
 fi
+
+logfile="--logfile=load_cosmic.slurm.log/load_cosmic${chr}.log"
+runcmd="./pdbmap.py --debug ${logfile} load_vcf --dlabel=cosmic ${fbase}${chr}${ftail}"
+echo "Executing $runcmd"
+`$runcmd`

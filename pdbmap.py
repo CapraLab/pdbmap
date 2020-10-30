@@ -126,7 +126,6 @@ class PDBMap():
           print("  VALID (PDBMap) %s already in database."%pdbid)
           return 0
       # Load the PDB structure
-      # import pdb; pdb.set_trace()
       if not pdb_fname:
         pdb_fname = "%s/structures/pdb%s.ent.gz"%(self.pdb_dir,pdbid.lower())
         print("  # Fetching %s"%pdbid)
@@ -277,16 +276,19 @@ class PDBMap():
         pdbmap_vep = PDBMapVEP(self._config_dict) ## Need to specify vep_cache
         if args.novep:
             # The caller feels that the CSQs are adequence without adding vep annotations
+            LOGGER.info("Calling pdbmap_vep.vcf_reader_from_file_without_vep(%s)",vcf_filename)
             vcf_reader = pdbmap_vep.vcf_reader_from_file_without_vep(vcf_filename)
         else:
             # Feed the caller's file to VEP, and parse the file with added vep annotations
-            vcf_reader = pdbmap_vep.vcf_reader_from_file_supplemented_with_vep_outputs(vcf_filename)
+            vep_echo_filename = os.path.join(os.path.dirname(args.logfile),os.path.basename(vcf_filename) + ".vep.out")
+            LOGGER.info("Calling pdbmap_vep.vcf_reader_from_file_supplemented_with_vep_outputs(%s,%s)",vcf_filename,vep_echo_filename)
+            vcf_reader = pdbmap_vep.vcf_reader_from_file_supplemented_with_vep_outputs(vcf_filename,vep_echo_filename)
 
         completed_vep_records_generator = pdbmap_vep.yield_completed_vcf_records(vcf_reader)
 
+        LOGGER.info("Calling PDBMapVEP.vep_records_to_genomic_tables")
         uploaded_records_count = pdbmap_vep.vep_records_to_genomic_tables(completed_vep_records_generator,dlabel)
-        LOGGER.info("Calling PDBMapVEP.pipe_vcf_to_vep_and_yield_complete_records(%s)"%vcf_filename)
-        LOGGER.info("PDBMapVEP.pipe_vcf_to_vep_and_yield_complete_records(%s) returned %d (records uploaded)"%(vcf_filename,uploaded_records_count))
+        LOGGER.info("PDBMapVEP.pipe_vcf_to_vep_and_yield_complete_records returned %d (records uploaded)"%uploaded_records_count)
 
     def load_data(self,dname,dfile,indexing=None,usevep=True,upload=True):
       """ Loads a data file into the PDBMap database """
@@ -583,7 +585,7 @@ __  __  __
     LOGGER.info("Log will be echoed to file %s",args.logfile)
     needRoll = os.path.isfile(args.logfile)
 
-    fh = RotatingFileHandler(args.logfile, maxBytes=(1048576*5), backupCount=5)
+    fh = RotatingFileHandler(args.logfile, maxBytes=(1048576*10), backupCount=5)
 
     fh.setFormatter(log_formatter)
 
@@ -821,7 +823,6 @@ drwx------ 3 root   root             17 Oct 17 16:00 systemd-private-1461403187a
         msg = "WARNING (PDBMap) Uploading %d Human Swiss-Prot PDB structures.\n"%len(all_pdb_files)
         LOGGER.warning(msg)
         n = len(all_pdb_files)
-        # import pdb; pdb.set_trace()
         # If this is a parallel command with partition parameters
         if args.ppart != None and args.ppidx != None:
           psize = n / args.ppart # floor

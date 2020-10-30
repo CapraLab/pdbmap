@@ -9,8 +9,8 @@ import sys,os,glob,re,gzip
 import argparse,configparser
 cmdline_parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 cmdline_parser.add_argument("uniprot_filename",nargs="?",help="Large uniparc filename",default='/dors/capra_lab/data/uniprot/current/uniparc_active.fasta.gz')
-cmdline_parser.add_argument("-c","--conf_file",required=True,
-  help="Specify database config file",metavar="FILE")
+cmdline_parser.add_argument("no_per_insert",nargs="?",help="Count of uniparcs to pass to INSERT(IGNORE)",default=5000,type=int)
+cmdline_parser.add_argument("-c","--conf_file",required=True,help="Specify database config file",metavar="FILE")
 args = cmdline_parser.parse_args()
 
 config = configparser.ConfigParser()
@@ -35,12 +35,13 @@ def flush_uniparcs(uniparc_dict):
 
   ## Upload to database
   c   = con.cursor()
-  sql = "INSERT INTO pdbmap_v14.Uniparc (uniparc,md5sum,fasta) VALUES (%s, %s, %s)"
+  sql = "INSERT IGNORE INTO pdbmap_v14.Uniparc (uniparc,md5sum,fasta) VALUES (%s, %s, %s)"
 
   try:
-    c.executemany(sql,insert_list)
+    print("Uploading %d items ranging %s to %s"%(len(insert_list),insert_list[0][0],insert_list[-1][0]),end='   ')
+    rows_affected = c.executemany(sql,insert_list)
     con.commit()
-    print("Uploaded!")
+    print("Uploaded %d!"%rows_affected)
   except:
     con.rollback()
     print("Failed to upload rows.")
@@ -49,6 +50,7 @@ def flush_uniparcs(uniparc_dict):
   c.close()
 
 with gzip.open(args.uniprot_filename,"rt") as f:
+  print("File %s opened successfully"%args.uniprot_filename)
   cur_uniparc = ''
   cur_fasta = ''
   uniparc_dict = {}
@@ -56,7 +58,7 @@ with gzip.open(args.uniprot_filename,"rt") as f:
      if len(line) > 10 and line[0] == '>':
        if cur_fasta and cur_uniparc:
           uniparc_dict[cur_uniparc] = cur_fasta;
-          if len(uniparc_dict) > 1000:
+          if len(uniparc_dict) >= args.no_per_insert:
              flush_uniparcs(uniparc_dict)
              uniparc_dict = {}
           

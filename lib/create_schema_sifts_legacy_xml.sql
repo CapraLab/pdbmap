@@ -21,7 +21,7 @@
 
 CREATE TABLE IF NOT EXISTS sifts_legacy_xml (
   pdbid varchar(20) NOT NULL       COMMENT '4 character rcsb pdb ID',
-  pdb_chain varchar(20) NOT NULL   COMMENT 'chain.  Ex A/B/Z etc',
+  pdb_chain varchar(20)  NOT NULL  COMMENT 'chain.  Ex A/B/Z/1/d etc',
   PDBe_dbResNum int(11) NOT NULL   COMMENT 'The unique PDBe sourced incrementing dbResNum for indexing',
   pdb_resnum int(11) DEFAULT NULL  COMMENT 'pdb residue number, null if missing from .pdb',
   pdb_icode varchar(10) NOT NULL   COMMENT 'pdb insertion code, usually blank - sometimes single Alpha',
@@ -42,4 +42,5 @@ CREATE TABLE IF NOT EXISTS sifts_legacy_xml (
   KEY (sft_id),
   KEY (uniprot_acc,pdb_resnum,pdbid) -- This is NOT a unique key.  One uniprot ID can be represented in many pdbs
 )
+CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci
 

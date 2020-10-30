@@ -54,7 +54,7 @@ where Id_Type = 'UniParc' and unp = %(unp)s"""
                 sql_connection.execute(query,{'unp': self.uniprot_id})
                 row = sql_connection.fetchone()
                 if not row or len(row) != 3:
-                    return (False,"For bad unp %s, SQL query failed"%self.uniprot_id)
+                    return (False,"unp %s is invalid, or its UniParc ID sequence unavailable"%self.uniprot_id)
                 self._uniparc_id = str(row[1]).strip()
                 self._aa_seq = str(row[2]).strip()
         return (True,self.aa_seq)
