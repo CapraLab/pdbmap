@@ -19,6 +19,7 @@ from collections import OrderedDict
 from typing import Dict, List,Tuple
 import logging
 from Bio import pairwise2
+from Bio.Data import IUPACData
 from Bio.SubsMat import MatrixInfo as matlist
 from Bio.PDB import Structure
 from Bio.SeqUtils import seq1
@@ -50,6 +51,8 @@ class PDBMapAlignment():
         transcripts nor structures provided to the member functions - only the final
         seq_to_resid and resid_to_seq dictionaries are retained """
 
+    # _standard_amino_acids_set = {x[1] for x in IUPACData.protein_letters_1to3.items()} # protein_letters from IUPAC
+
     def __init__(self,structure:Structure =None,chain_id:str =None,model_id=None,align_method=None):
       """Arguments:
          ## transcript: any PDBMapTranscript-implementing object
@@ -77,6 +80,9 @@ class PDBMapAlignment():
   
       if structure:
           self._set_model_and_chain_ids(structure,chain_id,model_id)
+
+
+
   
     @property
     def seq_to_resid(self):
@@ -148,6 +154,8 @@ class PDBMapAlignment():
             chain_aa_code = 'XXX'
 
         if chain_aa_code == 'MSE':   # Seleno Methionine->Met
+            chain_aa_letter = 'U'
+        if chain_aa_code == 'SE7':   # 2-AMINO-3-SELENINO-PROPIONIC ACID
             chain_aa_letter = 'M'
         elif chain_aa_code == 'SEP': # PhosphoSerine->Ser
             chain_aa_letter = 'S'
@@ -195,9 +203,17 @@ class PDBMapAlignment():
 
         nUnresolvedResidues = float(len(self._seq_to_unresolved))
         self._perc_identity_including_unresolved = round(  min(float(exact_aa_matches + exact_aa_unresolved_matches)/(nResiduesInStructure + nUnresolvedResidues),1.0)   ,2)
+
+        # For purposes of scoring the alignment, we need to replace the SelenoMet with Met, because blosum matrix lacks SelenoMet
+        seleno_met_count = transcript.aa_seq.count('U')
+        if seleno_met_count > 0: # This is rare - but must be dealt with
+            LOGGER.warning("%d Seleno Methionine 'U's residues in transcript sequence.  Replacing with 'M' for alignment scoring"%seleno_met_count)
+            transcript_aa_seq_without_seleno_met = transcript.aa_seq.replace('U','M')
+        else:
+            transcript_aa_seq_without_seleno_met = transcript.aa_seq
   
-        aligned_transcript_structure_aa_pairs = [ (transcript.aa_seq[trans_seq-1],
-                              self._my_seq1(structure,resid,transcript.aa_seq[trans_seq-1],trans_seq))  for (trans_seq,resid) in self._seq_to_resid.items()]
+        aligned_transcript_structure_aa_pairs = [ (transcript_aa_seq_without_seleno_met[trans_seq-1],
+                              self._my_seq1(structure,resid,transcript_aa_seq_without_seleno_met[trans_seq-1],trans_seq))  for (trans_seq,resid) in self._seq_to_resid.items()]
   
         self._aln_score = sum([matlist.blosum62[aa_pair] if aa_pair in matlist.blosum62 else matlist.blosum62[(aa_pair[1],aa_pair[0])] for aa_pair in aligned_transcript_structure_aa_pairs])
         LOGGER.info("_calc_stats: perc_aligned = %f  perc_identity = %f  aln_score=%d"%(self._perc_aligned,self._perc_identity,self._aln_score))
@@ -360,11 +376,22 @@ class PDBMapAlignment():
         ins_code_key = '_pdbx_poly_seq_scheme.pdb_ins_code'
         seqres_key = '_pdbx_poly_seq_scheme.pdb_ins_code'
         pdb_mon_id = '_pdbx_poly_seq_scheme.mon_id'
+        chem_comp_id = '_chem_comp.id'
+        chem_comp_mon_nstd_flag = '_chem_comp.mon_nstd_flag'
 
-        for required_key in [chain_id_key, pdb_author_id, ins_code_key]:
+        for required_key in [chain_id_key, pdb_author_id, ins_code_key,chem_comp_id]:
             if required_key not in mmcif_dict:
                 LOGGER.critical("mmcif dicts lacks component '%s' which is critical for cross-referencing"%required_key)
                 sys.exit(1)
+
+        # The chem_comp_id seems to list all monomers in the deposition, as well as whether they are standard residues
+        # Biopython's parser takes the H_ hetero residue definition out of the PDB legacy area of the .cif. I don't like that 
+        # at all - but we need to match up to it
+        non_standard_residues = set()
+        for chem_comp_id,chem_comp_mon_nstd_flag in zip(mmcif_dict[chem_comp_id],mmcif_dict[chem_comp_mon_nstd_flag]):
+            if chem_comp_mon_nstd_flag != 'y':
+                non_standard_residues.add(chem_comp_id)
+
         for auth_seq_num,pdb_strand_id,auth_seq_num,pdb_ins_code,pdb_mon_id in zip(
                  mmcif_dict[auth_seq_num],mmcif_dict[chain_id_key],mmcif_dict[pdb_author_id],mmcif_dict[ins_code_key],mmcif_dict[pdb_mon_id]):
 
@@ -376,16 +403,16 @@ class PDBMapAlignment():
 
             if auth_seq_num == '?': # Then the residue is NOT resolved in the PDB structure and we record the single amino acid 
                seq_resid_xref[pdb_strand_id].append(pdb_mon_id)
-            elif pdb_mon_id == 'MSE': # Resolved Selno-met needs special treatment
-                seq_resid_xref[pdb_strand_id].append(
-                    ('H_MSE',int(auth_seq_num) if auth_seq_num != '?' else None,' ' if pdb_ins_code == '.' else pdb_ins_code))
-            elif pdb_mon_id == 'SEP': # phosphorylated Seriine
-                seq_resid_xref[pdb_strand_id].append(
-                    ('H_SEP',int(auth_seq_num) if auth_seq_num != '?' else None,' ' if pdb_ins_code == '.' else pdb_ins_code))
-            elif pdb_mon_id == 'SEC': # seleno-Cysteine
-                seq_resid_xref[pdb_strand_id].append(
-                    ('H_SEC',int(auth_seq_num) if auth_seq_num != '?' else None,' ' if pdb_ins_code == '.' else pdb_ins_code))
-            else:
+            # elif pdb_mon_id in [
+            #    'MSE', # Resolved Selno-met needs special treatment
+            #    'SEP', # phosphorylated Seriine
+            #    'SE7', # 2-AMINO-3-SELENINO-PROPIONIC ACID
+            #     'SEC'] # seleno-Cysteine \
+            elif (pdb_mon_id in non_standard_residues): #  or (pdb_mon_id not in PDBMapAlignment._standard_amino_acids_set):
+                nonstandard_residue_id = ('H_%s'%pdb_mon_id,int(auth_seq_num) if auth_seq_num != '?' else None,' ' if pdb_ins_code == '.' else pdb_ins_code)
+                seq_resid_xref[pdb_strand_id].append(nonstandard_residue_id)
+                LOGGER.warning("Retaining Hetero residue in structure xref with id %s"%str(nonstandard_residue_id))
+            else: # standard amino acids are easy
                 seq_resid_xref[pdb_strand_id].append(
                     (' ',int(auth_seq_num) if auth_seq_num != '?' else None,' ' if pdb_ins_code == '.' else pdb_ins_code))
 
@@ -437,8 +464,6 @@ class PDBMapAlignment():
                         sys.exit(1)
 
                     residue_id_or_unresolved_aa = seq_res_xref_this_chain[pdb_seq_number-1]
-                    # if self._chain_id == 'S' and residue_id_or_unresolved_aa == (' ',97, ' '):
-                    #    import pdb; pdb.set_trace()
                     if unp_resno > len(uniprot_transcript.aa_seq) or unp_resno < 1:
                         error_msg = 'Sifts aligns %s.%s.%s to uniprot %s:%d.  But transcript pos is outside of uniparc seq'%(
                             structure.id,self._chain_id,residue_id_or_unresolved_aa,
@@ -653,6 +678,7 @@ class PDBMapAlignment():
                 LOGGER.warning(error_msg)
                 return(False,error_msg)
             self._seq_to_resid = OrderedDict((trans_seq, chain_seq) for chain_seq, trans_seq in self._resid_to_seq.items())
+            LOGGER.info("canonical uniprot transcript is %s"%canonical_uniprot_transcript.aa_seq)
             self._calc_stats(canonical_uniprot_transcript,structure)
             self._generate_aln_str(canonical_uniprot_transcript,structure)
             if self._perc_identity > 0:
