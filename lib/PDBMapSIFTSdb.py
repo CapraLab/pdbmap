@@ -55,9 +55,48 @@ class PDBMapSIFTSdb():
         pdbs_chains = []
         with PDBMapSQLdb() as db:
             db.activate_row_cursor()
-            db.execute(query,('%' + unp.split('-')[0],))
+            db.execute(query,(unp.split('-')[0]+'%',))
             for row in db.fetchall():
                 pdbs_chains.append((row[0],row[1]))
     
+        return pdbs_chains
+
+    @staticmethod
+    def pdbs_chains_coverage_for_unp(
+        unp: str, 
+        unp_is_canonical: bool,
+        max_unp_start:int = 2000000000, 
+        min_unp_end:int = 1) -> List[Dict[str,str]]:
+        """Query sifts for pdb IDs and chains that are aligned to a uniprot identifer
+           unp:              Uniprot identifier.  Ideally supplied with a dash
+           unp_is_canonical: If True, both dashed and un-dashed unps will be searched
+           max_unp_start,min_unp_end: Change from defaults to restrict query to certain coverage"""
+
+        query = """
+SELECT * from 
+(SELECT 
+pdbid,mapping_pdb_chain,
+MIN(mapping_unp_start) AS min_unp_start,
+MAX(mapping_unp_end)  AS max_unp_end
+FROM pdbmap_v14.sifts_mappings_pdb_uniprot_all_isoforms WHERE """
+
+        if unp_is_canonical and '-' in unp: # Ask SIFTS to search for dashless canoncical unp form as well
+            query += "(uniprot_acc = %s OR uniprot_acc = %s)"
+            values_tuple = (unp,unp.split('-')[0],max_unp_start,min_unp_end)
+        else: # We have an isoform-specific unp with a dash, or canonical unp without a dash
+            query += "(uniprot_acc = %s)"
+            values_tuple = (unp,max_unp_start,min_unp_end)
+        query += """
+GROUP BY pdbid, mapping_pdb_chain
+) minMaxTranscriptResiduesCovered
+WHERE minMaxTranscriptResiduesCovered.min_unp_start <= %s and minMaxTranscriptResiduesCovered.max_unp_end >= %s
+ORDER BY pdbid, mapping_pdb_chain"""
+        pdbs_chains = []
+        with PDBMapSQLdb() as db:
+            db.activate_dict_cursor()
+            db.execute(query,values_tuple)
+            for row in db.fetchall():
+                pdbs_chains.append(row)
+
         return pdbs_chains
 

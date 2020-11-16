@@ -38,25 +38,25 @@ class PDBMapModbase2020():
             assert rows_selected == len(ensp_model_matches)
         return ensp_model_matches if ensp_model_matches else []
 
-    def transcript2modelids(self,transcript: PDBMapTranscriptBase) -> List[Tuple[str,str]]:
+    def transcript2modelids(self,transcript: PDBMapTranscriptBase, max_target_beg:int =2000000000, min_target_end:int = 1) -> List[Tuple[str,str]]:
         """Return a list of (model_id,database_id) tuples for any transcript, via its amino acid sequence"""
         transcript_model_matches = []
         with PDBMapSQLdb() as db:
-            rows_selected =  db.execute("SELECT model_id,database_id FROM Modbase2020 WHERE seq_id = %s",(transcript.md5sum + transcript.aa_seq[0:4] + transcript.aa_seq[-4:],))
+            rows_selected =  db.execute("SELECT model_id,database_id FROM Modbase2020 WHERE seq_id = %s and target_beg <= %s and target_end >= %s",(transcript.md5sum + transcript.aa_seq[0:4] + transcript.aa_seq[-4:],max_target_beg,min_target_end))
             if rows_selected:
                 row_tuples = db.fetchall()
                 transcript_model_matches = [(row[0],row[1]) for row in row_tuples]
             assert rows_selected == len(transcript_model_matches)
         return transcript_model_matches if transcript_model_matches else []
 
-    def transcript2summary_rows(self,transcript: PDBMapTranscriptBase) -> List[Dict]:
+    def transcript2summary_rows(self,transcript: PDBMapTranscriptBase,max_target_beg:int =2000000000, min_target_end:int = 1) -> List[Dict]:
         """Return a list of Dictionaries that contain the rows of the Modbase summary file that match a sequence of interest"""
         modbase2020_summary_rows = []
         with PDBMapSQLdb() as db:
             db.activate_dict_cursor()
             rows_selected_count =  db.execute(
-                "SELECT * FROM Modbase2020 WHERE seq_id = %s",
-                (transcript.md5sum + transcript.aa_seq[0:4] + transcript.aa_seq[-4:],))
+                "SELECT * FROM Modbase2020 WHERE seq_id = %s and target_beg <= %s and target_end >= %s",
+                (transcript.md5sum + transcript.aa_seq[0:4] + transcript.aa_seq[-4:],max_target_beg,min_target_end))
             if rows_selected_count:
                 summary_rows = db.fetchall()
                 # Convert the summary_rows Tuple of Dicts returned by SQL to a list of dicts
