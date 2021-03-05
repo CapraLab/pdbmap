@@ -109,6 +109,20 @@ where uniparc = %(uniparc_id)s"""
         return differences            
             
 
+    @staticmethod
+    def analyze_transcript_differences(t1,t2):
+        """Return # of single point variants, and percent of mismatches, between 2 PDBMapTranscripts"""
+        if len(t1.aa_seq) != len(t2.aa_seq):
+            # If transcripts are not the same length, return the longer length, and 100% mismatch
+            return max(len(t1.aa_seq),len(t2.aa_seq)),1.0
+
+        differences = 0
+        for tpos in range(len(t1.aa_seq)):
+            if t1.aa_seq[tpos] != t2.aa_seq[tpos]:
+                differences += 1
+        return differences,float(differences)/float(len(t1.aa_seq))            
+            
+
 # Main check
 if __name__== "__main__":
   LOGGER.critical("Class definition. Should not be called from command line.")
