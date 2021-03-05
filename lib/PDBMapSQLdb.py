@@ -247,11 +247,12 @@ class PDBMapSQLdb(object):
         return self
 
     def __close_cursor_and_connection__(self):
-        LOGGER.debug("Closing connection  (__close_cursor_and_connection)")
         if self._db_cursor is not None:
+            LOGGER.debug("Closing mysql cursor  (__close_cursor_and_connection)")
             self._db_cursor.close()
             self._db_cursor = None
         if self._db_connection is not None:
+            LOGGER.debug("Closing mysql connection  (__close_cursor_and_connection)")
             self._db_connection.commit()
             self._db_connection.close() 
             self._db_connection = None
