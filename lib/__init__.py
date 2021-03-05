@@ -18,5 +18,7 @@ from .PDBMapSIFTSdb import PDBMapSIFTSdb
 from .PDBMapGenomeVariants import PDBMapGenomeVariants
 from .PDBMapVEP import PDBMapVEP
 from .PDBMapGnomad import PDBMapGnomad
+from .PDB36Parser import PDB36Parser
 # from .PDBMapIntersect import PDBMapIntersect
 from .PDBMapVisualize import PDBMapVisualize
+from .hybrid36 import *

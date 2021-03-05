@@ -126,10 +126,13 @@ class PDBMapTranscriptEnsembl(PDBMapTranscriptBase):
         if not self._aa_seq: # MAjor fail of calling software
             LOGGER.critical("AAseq not yet loaded")
             sys.exit(1)
-        all_letters_ok = all(aa in IUPACData.protein_letters for aa in self.aa_seq)
+
+        valid_aa_letters = set(IUPACData.protein_letters) # Most standard 20
+        valid_aa_letters.add('U') # Deal with Selenomet
+        all_letters_ok = all(aa in valid_aa_letters for aa in self.aa_seq)
         if all_letters_ok:
             return (True,self.aa_seq)
-        return (False,"Bad AA letters are %s"%str([aa not in IUPACData.protein_letters for aa in self.aa_seq]))
+        return (False,"Bad AA letters are %s"%str([aa for aa in self.aa_seq if aa not in valid_aa_letters]))
 
     def load_aa_seq_from_ENSEMBL(self):
         """Run lib/transcript_to_AAseq.pl to retrieve aa_seq from ENST... id"""
