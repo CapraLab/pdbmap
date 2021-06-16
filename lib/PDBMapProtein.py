@@ -344,7 +344,7 @@ class PDBMapProtein():
                     hgnc = dbid  # for clarity
                     PDBMapProtein._unp2hgnc[unp] = hgnc
                     PDBMapProtein._hgnc2unp[hgnc] = unp
-                elif db == "Gene_ID":
+                elif db == "GeneID":
                     gene_id = dbid  # for clarity
                     PDBMapProtein._unp2gene_id[unp] = gene_id
                 elif db == "Ensembl_TRS":
