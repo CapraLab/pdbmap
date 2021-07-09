@@ -130,8 +130,26 @@ $ ./uniparc_parser.py -c /mylocation/config/global.config ...../somewhere/data/u
 
 See the available --help option for more information on how to run uniparc_parser.py
 
-### Sifts .xml files and 
+### Sifts .xml files 
+The 'legacy' Sifts .xml files provide explicit unambiguous mappings of canonical uniprot transcripts to PDB residues.
+The comments in lib/create_schema_sifts_legacy_xml.sql explain creating of the Table, and provides more details.
 
+After downloading the sifts xml, and creating the table, you will  load the table with:
+
+$ scripts/sifts_parser.py --legacy_xml -c /mylocation/UDNtests/config/global.config ..../somewhere/data/sifts/current/xml
+
+Only Human PDBs, referred to in the uniprot IDMapping file, are loaded into the table.
+
+### SIFTS REST-API alignments
+You will first create fresh TABLEs sifts_mappings_pdb_uniprot_best_isoforms and sifts_mappiings_pdb_uniprot_all_isoforms.
+Both tables are created by the one sql script   /lib/create_schema_sifts_pdb_uniprot_isoforms.sql
+
+You must load the tables with two separate script runs
+
+$ scripts/sifts_parser.py --all_isoforms -c /mylocation/UDNtests/config/global.config 
+$ scripts/sifts_parser.py --best_isoforms -c /mylocation/UDNtests/config/global.config 
+
+For non-canonical transcript alignment to pdbs, the same script is used, albeit with different options.
 
 
 
