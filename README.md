@@ -9,6 +9,11 @@ PDBMap is a python library which manages the intersection of
 
 The datasets which are integrated are a combination of SQL tables created by pdbmap.py, and a variety of raw data files downloaded to the filesystem.
 
+Typically PSB Pipeline users will download the various resources discussed at https://github.com/CapraLab/pipeline_download_scripts and point their .config
+files to the SQL Server at Vanderbilt.
+
+Therefore, the below documentation primarily targets PDBMap software maintainers, and those who wish to populate their own local SQL Server.
+
 The PDBMap library (lib/PDBMap*.py) is a critical component of the Personal Structural Biology (PSB) Pipeline.
 
 Loading of variant datasets into a SQL database is accomplished by the pdbmap.py command line.
@@ -30,37 +35,104 @@ A complete list of the packages are provided below:
 
 * [Python 3.x] (We recommend [Anaconda](https://www.anaconda.com/products/individual))
 * Biopython (pip install biopython after Python 3.x)
-* [MySQL](https://dev.mysql.com/downloads/os-linux.html)
+* A SQL database server, MySQL or MariaDB: [MySQL](https://dev.mysql.com/downloads/os-linux.html)
 * [Ensembl Core Database](http://www.ensembl.org/info/docs/webcode/mirror/install/ensembl-data.html) (use of the Ensembl public MySQL server is supported, but may result in slow runtimes)
 * [Ensembl Perl API](http://www.ensembl.org/info/docs/api/api_git.html)
 * [Ensembl Variant Effect Predictor (and cache)](https://github.com/Ensembl/ensembl-tools/tree/release/87/scripts) (a new beta version of VEP is now available on [github](https://github.com/Ensembl/ensembl-vep))
 * [UCSF Chimera (Headless)](https://www.cgl.ucsf.edu/chimera/cgi-bin/secure/chimera-get.py?file=alpha/chimera-alpha-linux_x86_64_osmesa.bin) (for visualization)
 * [DSSP](http://swift.cmbi.ru.nl/gv/dssp/) (for secondary structure and solvent accessibility)
 
-All of these resources must be installed prior to using PDBMap. Note that all Ensembl resources should use the same genome build and all versions should match. All genomic data loaded into the database must match the Ensembl genome build. All existing resources have been built and maintained using genome build **GRCh38**
+All of these resources must be installed prior to using PDBMap. Note that all Ensembl resources (PERL API, Variant Effect Predictor (VEP), and VEP cache files)
+must use the same genome build and all versions should match. All genomic data loaded into the database must match the Ensembl genome build. All existing resources have been built and maintained using genome build **GRCh38**
 
 
 It is helpful to install PDBMap on a SLURM cluster. Many PDBMap tasks, such as loading varaints from 24 separate .chrNN.vcf files, lend themselves well to parallelization. SLURM scripts for many common tasks are provided for convenience. Before launching many jobs to the cluster, check that your MySQL server is configured to manage the corresponding number of connections.
 
-## Instantiating the PDBMap Database
+## Instantiating the PDBMap MAriaDB/MySQL Database
 
-To instantiate the PDBMap database, users should create a copy of DEFAULT.config with their MySQL login information and the location of all necessary resources, and then run the following command:
-```
-./pdbmap.py -c config/<USER>.config --create_new_db
-```
+To instantiate the PDBMap database, a database of tables must be created in SQL.
 
-Once complete, PDBMap will prompt users to install all other requried databases and resources. If you would like to install these resources later, or bring the local copies up-to-date, use:
-```
-./pdbmap.py -c config/<USER>.config --refresh
-```
-This command will download or refresh a local mirror of and/or necessary files from the following databases:
-* RCSB Protein Data Bank (solved protein structures)
-* ModBase (computationally predicted homology models)
-* UniProt (Swiss-Prot, ID mapping, secondary-to-primary AC mapping)
-* SIFTS (residue-level functional annotation and pdb-to-reference sequence alignment)
-* PFAM (functional domain annotations)
+For routine usage, it is desirable to have a user id which lacks change priviledges.  But you will need extensive credentials 
+to CREATE a database, and then CREATE tables and insert data rows.
 
-The location of any of these resources may be changed. Users should update DEFAULT.config with location of all necessary resources. Note that existing copies of these datasets may be used, but the functionallity of `--refresh` may be affected. Parsing of the PDB and ModBase directory structures is also sensitive to change, so consider downloading the datasets with PDBMap and then moving the directories into a shared location; update the configuration file with the new location.
+If you are new to SQL, it could be helpful to install the ENSEMBL sql tables first, since these processes, while complex, 
+are more structured than the table installs for the PDBMap library.
+
+We strongly recommend using a full-feature interactive sql client, such as JetBrains DataGrip, or the MySqlWorkbench.  Because
+the mysql command line tool is universal, we give the example using mysql.  (It is also true that some operations are faster when run
+through mysql on the same compute node/PC that the SQL Server is instantiated on)
+
+Assuming you have extensive CREATE/DROP/INSERT credentials on the sql server, launch the mysql linux client, example:
+
+   $ mysql -h vgi01.accre.vanderbilt.edu -p
+
+You will enter your sql password and your screen will then like something like:
+
+    Enter password: 
+    Welcome to the MySQL monitor.  Commands end with ; or \g.
+    Your MySQL connection id is 277870
+    Server version: 5.5.68-MariaDB MariaDB Server
+
+    Copyright (c) 2000, 2016, Oracle and/or its affiliates. All rights reserved.
+
+    Oracle is a registered trademark of Oracle Corporation and/or its
+    affiliates. Other names may be trademarks of their respective
+    owners.
+
+    Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+    mysql> 
+    
+Continue with 
+   
+    mysql> CREATE DATABASE pdbmap_v15;
+    
+where pdbmap_v15 is the database name you are placing in your .config file(s).
+
+## Creating PDBMap Tables
+
+Most table creation is performed by the pdbmap/lib/create_schemea_*.sql scripts.  These critical scripts not only
+create initialized tables with well-commented SQL table schemas.  The text of the scripts often includes 
+comments about how to populate the scripts using other available utilities or scripts.
+
+A guiding principle of the PDBMap SQL database is that, whenever possible, the Table Rows should directly copy, untranslated, 
+source datafile rows as downloaded.  The mysqlimport utility is an excellent tool for this.  When mysqlimport is insufficient, 
+short, transparently written python scripts, bridge the gap.
+
+### Uniprot IDMapping File
+PDBMap and the pipeline make extensive use of the 3 column IDMapping file, The Download .bash script for data/uniprot
+
+https://github.com/CapraLab/pipeline_download_scripts/uniprot/DOWNLOAD_uniprot.bash
+
+includes a python module which creates HUMAN_9606_idmapping_sprot.dat.gz.  Importantly, this file is a reduced list of Swissprot curated
+uniprot IDs, and excludes general Trembl entries.
+
+Run lib/create_schema_Idmapping.sql, either as standard input to mysql, or by pasting into a GUI tool.  The note the instructions 
+in the file to load table rows
+
+$ cp data/HUMAN_9606_idmapping_sprot.dat.gz /tmp/Idmapping.gz
+$ gunzip /tmp/Idmapping.gz
+$ mysqlimport --ignore --verbose --fields-terminated-by='\t' --local -p  --columns=unp,ID_type,ID pdbmap_v15 /tmp/Idmapping
+
+### Uniparc Invariant sequence Idnetifiers
+Every uniprot protein identifier is cross-referenced to a uniparc ID which uniquely specifies an amino acid sequence.
+From Uniprot release to release, the cross-referecned uniparc ID might well change.  However, the amino acid sequence
+mapped to  a Uniprot ID (ex. UPI1234567890123) will NEVER change.
+
+Thus, it is never necessary to "DROP" the Uniparc table before loading.  The scripts/uniparc_parser.py program will always 
+add rows with the "ignore flag".
+
+For a true first time table create, the script scripts/create_schema_Uniprot.sql has the needed instructions.
+
+An example commandline to update (or initially populate) the table following a fresh uniprot download is:
+
+$ ./uniparc_parser.py -c /mylocation/config/global.config ...../somewhere/data/uniprot/current/uniparc_active.fasta.gz 100000
+
+See the available --help option for more information on how to run uniparc_parser.py
+
+### Sifts .xml files and 
+
+
 
 
 
@@ -115,6 +187,25 @@ as well as the ENSEMBL Human Genome, more involved.
 These datasets are then intersected using BEDTools or MySQL to create a direct mapping between each nucleotide and each associated amino acid in all associated protein structures. A schematic overview of the [PDBMap Pipeline](./docs/PDBMapPipeline.png) is provided.
 
 Once the PDBMap database has been loaded, the PDBMap library can be imported from other projects and used to interface with and analyze genetic data within solved structures and computational models of human proteins.
+
+### pdbmap.py used to be able to download all external databases.
+This is an ambitious feature, as external database file formats and download instructions tend to shift.
+For historical reference the old instructions to accomplish this were:
+
+
+Once complete, PDBMap will prompt users to install all other requried databases and resources. If you would like to install these resources later, or bring the local copies up-to-date, use:
+```
+./pdbmap.py -c config/<USER>.config --refresh
+```
+This command will download or refresh a local mirror of and/or necessary files from the following databases:
+* RCSB Protein Data Bank (solved protein structures)
+* ModBase (computationally predicted homology models)
+* UniProt (Swiss-Prot, ID mapping, secondary-to-primary AC mapping)
+* SIFTS (residue-level functional annotation and pdb-to-reference sequence alignment)
+* PFAM (functional domain annotations)
+
+The location of any of these resources may be changed. Users should update DEFAULT.config with location of all necessary resources. Note that existing copies of these datasets may be used, but the functionallity of `--refresh` may be affected. Parsing of the PDB and ModBase directory structures is also sensitive to change, so consider downloading the datasets with PDBMap and then moving the directories into a shared location; update the configuration file with the new location.
+
 
 ### Loading Structural Information into PDBMap
 To load **only** protein structures from the Protein Data Bank into PDBMap, use
