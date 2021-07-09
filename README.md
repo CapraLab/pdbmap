@@ -182,14 +182,26 @@ To load a genomic dataset into PDBMap, use
 OR
 ./pdbmap.py -c config/<USER>.config --dlabel=<data_name> load_data <data_file> [<data_file> ...]
 ```
-Genetic datasets are often distributed by-chromosome and are thus easily parallelizable. SLURM scripts for some of the default datasets are provided and may be used a templates for designing SLURM scripts for other datasets. To load data in parallel, use
+__________
+
+Genetic datasets are often distributed by-chromosome and are thus load-to-SQL is trivializably parallelizable. 
+SLURM scripts for some of the default datasets are provided and may be used a templates
+for designing SLURM scripts for other datasets.
+
+the slurm file for clinvar (slurm/load_clinvar.slurm) is perhaps most recently updated.
+
+Unfortunately, the nature of our source data, and variations in cluster architectures, means that customization of the .slurm
+files is most likely required with each download and SQL load.
+
+Once you have customized load_clinvar.slurm to include your user id, email address, the location of your .chrNN.vcf.gz files, and other paths etc....
+then you should be able to load data to SQL quickly in parallel, with
 ```
-sbatch --array=1-24 slurm/load_exac.slurm 
+sbatch slurm/load_clinvar.slurm 
 ```
 
 ____
 
-## Previous architecture: Historical footnote
+# Previous PDBMap architecture: Historical footnotes
 
 Prior to an overhaul by Chris Moth which was started in 2019, the library loaded structural information in SQL tables (chain/residue/etc) 
 and pre-aligned to ENSEMBL transcripts.
