@@ -53,7 +53,8 @@ An additional list of required packages are provided below:
 * [UCSF Chimera (Headless)](https://www.cgl.ucsf.edu/chimera/cgi-bin/secure/chimera-get.py?file=alpha/chimera-alpha-linux_x86_64_osmesa.bin) 
 (for visualization - chimera is a legacy python2 package that should be replaced with chimeraX as PDBMap evolves.)
 * [DSSP](http://swift.cmbi.ru.nl/gv/dssp/) (if secondary structure and solvent accessibility is desired)
-
+* ht5lib (for tabix application, which supports processing gnomad variant files from lib/PDBMapGnomad.py)
+* 
 All of these resources must be installed prior to using PDBMap. Note that all Ensembl resources (PERL API, Variant Effect Predictor (VEP), and VEP cache files)
 must use the same genome build and all versions should match. All genomic data loaded into the database must match the Ensembl genome build. All existing resources have been built and maintained using genome build **GRCh38**
 
@@ -184,7 +185,41 @@ OR
 ```
 __________
 
-Genetic datasets are often distributed by-chromosome and are thus load-to-SQL is trivializably parallelizable. 
+## Gnomad 2.1.1 exome variants are handled uniquely
+
+After much reflection, the lib/PDBMapGnmad.py was re-architected to break from SQL, and only query variants through the ultra-fast 
+"tabix" utility,  and the downloaded files directly.  See the source code for details.
+
+The .tbi b-tree indexes to the .bgz files can be reviewed with:
+
+$ ls -l your_data_dir/gnomad/2.1.1/liftover_grch38/vcf/exomes/exomes/
+
+For more reasoning as to why SQL was left for tabix, this was decided, and more information on strategies for possibly loading to SQL, read on.
+_______________
+
+
+
+The typical "pdbmap.py" to load Gnomad fails because
+1. Gnomad .vcf files have more than 4096 INFO columns of data defined in them.  This breaks the SQL limt
+2. The row counts are huge by comparison to predecessor EXAC.
+
+You may have success loading gnomad to SQL if you add two pdbmap.py flags
+
+```
+  --novep               Disables VEP consequence prediction
+  --noupload            Disables upload of the original data file to a supplementary database.
+```
+
+This 'works' because 
+1. --novep tells pdbmap.py to use VEP (Variant Effect Predictor) outputs already in the gnomad .vcf files
+2. --noupload causes pdbmap.py to not attempt to create a table called 'gnomad' with all 5,000 columns that break SQL.
+
+
+  
+
+### Slurm scripting to speed SQL loads.
+
+Genetic datasets are often distributed in 24 files, one per chromosome, and are thus load-to-SQL is trivializably parallelizable. 
 SLURM scripts for some of the default datasets are provided and may be used a templates
 for designing SLURM scripts for other datasets.
 
