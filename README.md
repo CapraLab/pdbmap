@@ -9,19 +9,28 @@ PDBMap is a python library which manages the intersection of
 
 The datasets which are integrated are a combination of SQL tables created by pdbmap.py, and a variety of raw data files downloaded to the filesystem.
 
-Typically PSB Pipeline users will download the various resources discussed at https://github.com/CapraLab/pipeline_download_scripts and point their .config
-files to the SQL Server at Vanderbilt.
+__Typically PSB Pipeline users will download the various resources discussed at https://github.com/CapraLab/pipeline_download_scripts and point their .config
+files to the SQL Server at Vanderbilt.__
 
-Therefore, the below documentation primarily targets PDBMap software maintainers, and those who wish to populate their own local SQL Server.
+__Therefore, the below documentation primarily targets PDBMap software maintainers, and those who wish to populate their own local SQL Server.__
+
+____
+
 
 The PDBMap library (lib/PDBMap*.py) is a critical component of the Personal Structural Biology (PSB) Pipeline.
 
-Loading of variant datasets into a SQL database is accomplished by the pdbmap.py command line.
+Creation of tables in the SQL database is accomplished mainly by scripts/create_schema*.sql scripts.
 
-Legacy features of the library included visualation and analysis of genomic features in context of protein structures.
+Loading of variant datasets into a SQL database is accomplished by the pdbmap.py command line, and notes for typical variant sets are found below.
 
-However, as the library has evolved, Protein structures (pdb/modbase/swiss) are no longer stored in the SQL database.
-Rather the lib/PDBMap{Protein,Modbase,Swiss}.py modules load these structures directly from the filesystem.
+An earlier design of the PDBMap library loaded Protein structures (chains/residues) into SQL tables and pre-aligned those data to genomic ENST* transcript sequences.  This enabled global analysis of proteomoe-geonome interplay, and automated visualization of variant positions.
+
+However, as the library has evolved, today Protein structures (pdb/modbase/swiss) are no longer stored in the SQL database.
+Rather the python lib/PDBMap{Protein,Modbase,Swiss}.py modules load these structures directly from the filesystem.  The hope in this change is that 
+the structural databases can be refreshed more easily, non-canonical transcript alignments can be more easily supported, and that some practicaility
+has been gained at the expense of theoretical elegance.
+
+I have left documentation of the prior design in a "historical" section at the end.
 
 
 ## PDBMap External Dependencies
@@ -29,9 +38,11 @@ Rather the lib/PDBMap{Protein,Modbase,Swiss}.py modules load these structures di
 PDBMap is a portal between the fields of genetics and structural biology, and as such it relies on several (free) software packages and databases. 
 Unfortunately, these cannot be distributed with PDBMap and must be installed separately.
 
-Typically, these dependencies are satisfied with the sequence of steps required to instantiate the Personal Structural Biology pipeline.
+__Typically, these dependencies are satisfied with the sequence of steps required to instantiate the Personal Structural Biology pipeline.__
 
-A complete list of the packages are provided below:
+See https://github.com/CapraLab/psbadmin/blob/master/Manifest.txt
+
+An additional list of required packages are provided below:
 
 * [Python 3.x] (We recommend [Anaconda](https://www.anaconda.com/products/individual))
 * Biopython (pip install biopython after Python 3.x)
@@ -39,8 +50,9 @@ A complete list of the packages are provided below:
 * [Ensembl Core Database](http://www.ensembl.org/info/docs/webcode/mirror/install/ensembl-data.html) (use of the Ensembl public MySQL server is supported, but may result in slow runtimes)
 * [Ensembl Perl API](http://www.ensembl.org/info/docs/api/api_git.html)
 * [Ensembl Variant Effect Predictor (and cache)](https://github.com/Ensembl/ensembl-tools/tree/release/87/scripts) (a new beta version of VEP is now available on [github](https://github.com/Ensembl/ensembl-vep))
-* [UCSF Chimera (Headless)](https://www.cgl.ucsf.edu/chimera/cgi-bin/secure/chimera-get.py?file=alpha/chimera-alpha-linux_x86_64_osmesa.bin) (for visualization)
-* [DSSP](http://swift.cmbi.ru.nl/gv/dssp/) (for secondary structure and solvent accessibility)
+* [UCSF Chimera (Headless)](https://www.cgl.ucsf.edu/chimera/cgi-bin/secure/chimera-get.py?file=alpha/chimera-alpha-linux_x86_64_osmesa.bin) 
+(for visualization - chimera is a legacy python2 package that should be replaced with chimeraX as PDBMap evolves.)
+* [DSSP](http://swift.cmbi.ru.nl/gv/dssp/) (if secondary structure and solvent accessibility is desired)
 
 All of these resources must be installed prior to using PDBMap. Note that all Ensembl resources (PERL API, Variant Effect Predictor (VEP), and VEP cache files)
 must use the same genome build and all versions should match. All genomic data loaded into the database must match the Ensembl genome build. All existing resources have been built and maintained using genome build **GRCh38**
@@ -175,7 +187,21 @@ Genetic datasets are often distributed by-chromosome and are thus easily paralle
 sbatch --array=1-24 slurm/load_exac.slurm 
 ```
 
-## Intersecting Structural and Genomic Information
+____
+
+## Previous architecture: Historical footnote
+
+Prior to an overhaul by Chris Moth which was started in 2019, the library loaded structural information in SQL tables (chain/residue/etc) 
+and pre-aligned to ENSEMBL transcripts.
+
+This ambitious architecture allowed for some advanced global analyses to be more easily performed.  However, it made updating the various structural sources, 
+as well as the ENSEMBL Human Genome, more involved.  
+
+These datasets are then intersected using BEDTools or MySQL to create a direct mapping between each nucleotide and each associated amino acid in all associated protein structures. A schematic overview of the [PDBMap Pipeline](./docs/PDBMapPipeline.png) is provided.
+
+Once the PDBMap database has been loaded, the PDBMap library can be imported from other projects and used to interface with and analyze genetic data within solved structures and computational models of human proteins.
+
+### Historical Note: Intersecting Structural and Genomic Information
 Once the structural and genomic datasets have each been loaded into PDBMap, they must be intersected to construct the direct mapping from nucleotide to amino acid. This can be a lengthy process, but it must only be performed once for each dataset. Once intersected, queries are very efficient, enabling large-scale, high-throughput analysis of genetic information within its protein structural context. To intersect two datasets, use
 ```
 ./pdbmap.py -c config/<USER>.config --slabel=pdb --dlabel=exac intersect
@@ -193,17 +219,8 @@ Most genetic datasets are uploaded in their original form to supplemental tables
 
 A detailed layout of the PDBMap database schema is provided **here**.
 
-## Previous architecture: Historical footnote
 
-Prior to an overhaul by Chris Moth which was started in 2019, the library loaded structural information in SQL tables (chain/residue/etc) 
-and pre-aligned to ENSEMBL transcripts.
 
-This ambitious architecture allowed for some advanced global analyses to be more easily performed.  However, it made updating the various structural sources, 
-as well as the ENSEMBL Human Genome, more involved.  
-
-These datasets are then intersected using BEDTools or MySQL to create a direct mapping between each nucleotide and each associated amino acid in all associated protein structures. A schematic overview of the [PDBMap Pipeline](./docs/PDBMapPipeline.png) is provided.
-
-Once the PDBMap database has been loaded, the PDBMap library can be imported from other projects and used to interface with and analyze genetic data within solved structures and computational models of human proteins.
 
 ### pdbmap.py used to be able to download all external databases.
 This is an ambitious feature, as external database file formats and download instructions tend to shift.
@@ -224,7 +241,7 @@ This command will download or refresh a local mirror of and/or necessary files f
 The location of any of these resources may be changed. Users should update DEFAULT.config with location of all necessary resources. Note that existing copies of these datasets may be used, but the functionallity of `--refresh` may be affected. Parsing of the PDB and ModBase directory structures is also sensitive to change, so consider downloading the datasets with PDBMap and then moving the directories into a shared location; update the configuration file with the new location.
 
 
-### Loading Structural Information into PDBMap
+### Historical Note: Loading Structural Information into PDBMap
 To load **only** protein structures from the Protein Data Bank into PDBMap, use
 ```
 ./pdbmap.py -c config/<USER>.config load_pdb all
@@ -244,7 +261,7 @@ To load the entire PDBMap structural database in parallel using `N` SLURM jobs, 
 sbatch --array=0-N slurm/load_pdbmap.slurm N
 ```
 
-### Visualizing Genomic Information in Structure
+### Historical Note: Visualizing Genomic Information in Structure
 The visualization capabilities of PDBMap are built around Chimera. Any property of a genomic dataset can be visualized by specifying the dataset and property name along with the specified gene, protein, or structure name. For example, to visualize the location of all ExAC missense variants in the first biological assembly of 2SHP, use
 ```
 ./pdbmap.py -c config/<USER>.config visualize 2SHP exac . 1
@@ -258,7 +275,7 @@ You can also compare the distribution to the synonymous distribution of minor al
 ./pdbmap.py -c config/<USER>.config visualize 2SHP exac maf.synonymous 1
 ```
 
-### Navigating the PDBMap MySQL Database
+### Historical Note:  Navigating the PDBMap MySQL Database
 The MySQL database is composed of several tables, generally organized into structural tables, genomic tables, the intersection table, and supplementary tables. 
 The join order for the structure tables is:
 ```
