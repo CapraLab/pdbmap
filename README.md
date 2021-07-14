@@ -203,7 +203,7 @@ The typical "pdbmap.py" to load Gnomad fails because
 1. Gnomad .vcf files have more than 4096 INFO columns of data defined in them.  This breaks the SQL limt
 2. The row counts are huge by comparison to predecessor EXAC.
 
-You may have success loading gnomad to SQL if you add two pdbmap.py flags
+You still must load Gnomad to SQL for pathprox to see neutral variants.  However, you must add the two flags below to the pdb_map.py command line.
 
 ```
   --novep               Disables VEP consequence prediction
@@ -214,7 +214,7 @@ This 'works' because
 1. --novep tells pdbmap.py to use VEP (Variant Effect Predictor) outputs already in the gnomad .vcf files
 2. --noupload causes pdbmap.py to not attempt to create a table called 'gnomad' with all 5,000 columns that break SQL.
 
-
+Be sure to use a .slurm script to load each chromosome independently.  The dataset is quite large.
   
 
 ### Slurm scripting to speed SQL loads.
