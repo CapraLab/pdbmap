@@ -43,11 +43,13 @@ class PDBMapSQLdb(object):
 
     @staticmethod
     def set_access_dictionary(global_config_dict):
-        """A dictionry with host, user, db, and passwd keys provides a
+        """A dictionary with host, user, db, and passwd keys provides a
            convenient global default for database access"""
         for key in ['dbhost','dbuser','dbname','dbpass']:
             assert global_config_dict[key],"Unable to open SQL until key %s defined in the access/config dictionary"%key
-        PDBMapSQLdb._static_access_dictionary = global_config_dict 
+        PDBMapSQLdb._static_access_dictionary = global_config_dict
+
+
 
     @staticmethod
     def open_global_connection(config_dict = None):
