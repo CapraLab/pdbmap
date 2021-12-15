@@ -20,14 +20,15 @@ from typing import Dict, List,Tuple
 import logging
 from Bio import pairwise2
 from Bio.Data import IUPACData
-from Bio.SubsMat import MatrixInfo as matlist
+from Bio.Align import substitution_matrices
 from Bio.PDB import Structure
 from Bio.SeqUtils import seq1
 from lib import PDBMapSQLdb
 from lib import PDBMapTranscriptBase
 from lib import PDBMapTranscriptUniprot
-LOGGER = logging.getLogger(__name__)
 
+LOGGER = logging.getLogger(__name__)
+BLOSUM62 = substitution_matrices.load("BLOSUM62")
 
 def sifts_best_unps(structure: Structure):
     """Return a dictionary mapping chain IDs to the uniprot identifiers that sifts 
@@ -214,8 +215,9 @@ class PDBMapAlignment():
   
         aligned_transcript_structure_aa_pairs = [ (transcript_aa_seq_without_seleno_met[trans_seq-1],
                               self._my_seq1(structure,resid,transcript_aa_seq_without_seleno_met[trans_seq-1],trans_seq))  for (trans_seq,resid) in self._seq_to_resid.items()]
-  
-        self._aln_score = sum([matlist.blosum62[aa_pair] if aa_pair in matlist.blosum62 else matlist.blosum62[(aa_pair[1],aa_pair[0])] for aa_pair in aligned_transcript_structure_aa_pairs])
+ 
+        # Becauase BLOSUM62 (see above) is a 2d ndarray, and it is symmetric, we can niidex using a tuple of AA letters
+        self._aln_score = sum(BLOSUM62[aa_pair] for aa_pair in aligned_transcript_structure_aa_pairs)
         LOGGER.info("_calc_stats: perc_aligned = %f  perc_identity = %f  aln_score=%d"%(self._perc_aligned,self._perc_identity,self._aln_score))
    
     def _generate_aln_str(self,transcript,structure):
