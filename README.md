@@ -135,7 +135,7 @@ mapped to  a Uniprot ID (ex. UPI1234567890123) will NEVER change.
 Thus, it is never necessary to "DROP" the Uniparc table before loading.  The scripts/uniparc_parser.py program will always 
 add rows with the "ignore flag".
 
-For a true first time table create, the script scripts/create_schema_Uniprot.sql has the needed instructions.
+For a true first time table create, the script lib/create_schema_Uniprot.sql has the needed instructions.
 
 An example commandline to update (or initially populate) the table following a fresh uniprot download is:
 
