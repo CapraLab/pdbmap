@@ -745,7 +745,7 @@ class PDBMapAlignment():
       # Define alignment parameters
       gap_open   = -10
       gap_extend = -0.5
-      matrix     = matlist.blosum62
+      # matrix     = matlist.blosum62
       
       # Begin a "denovo" sequence alignment of a chain with residue ID tuples to a sequence
       # Determine start indices
@@ -758,7 +758,7 @@ class PDBMapAlignment():
       # Perform pairwise alignment
       #
       LOGGER.debug("pairwise2.align.globalds(\n%s\n%s\ngap_open=%f,gap_extend=%f,one_alignment_only,not penalize_end_gaps   )"%(chain_aaseq,transcript.aa_seq,gap_open,gap_extend))
-      self._alignment = pairwise2.align.globalds(chain_aaseq,transcript.aa_seq,matrix,
+      self._alignment = pairwise2.align.globalds(chain_aaseq,transcript.aa_seq,BLOSUM62,
                       gap_open,gap_extend,one_alignment_only=True,penalize_end_gaps=False)
   
       # Pull apart the tuple returned by the alignment
@@ -798,7 +798,7 @@ class PDBMapAlignment():
   
       # old idea: aln_str   = "<biopython>\n%s\n%s"%(aln_chain,aln_trans)
       _aln_rescore = pairwise2.align.globalds(aln_chain.replace('-','-'),aln_trans.replace('-','-'),
-                                          matrix,gap_open,gap_extend,score_only=True,penalize_end_gaps=False)
+                                         BLOSUM62,gap_open,gap_extend,score_only=True,penalize_end_gaps=False)
  
       assert _aln_rescore == self._aln_score,"_calc_stats alignment score = %f but Biopython rescore is %d"%(self._aln_score,_aln_rescore)
         
@@ -861,7 +861,7 @@ class PDBMapAlignment():
   
           temp_aln_str = ''.join([t_seq[trans_seq] for trans_seq in seq_to_resid])
           aln_str = temp_aln_str + "\n" + temp_aln_str
-          aln_score = sum([matlist.blosum62[(t_seq[trans_seq],t_seq[trans_seq])] for trans_seq in seq_to_resid])
+          aln_score = sum([BLOSUM62[(t_seq[trans_seq],t_seq[trans_seq])] for trans_seq in seq_to_resid])
   
           perc_aligned = 100.0
           perc_identity = 1.0
