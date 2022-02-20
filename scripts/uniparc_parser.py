@@ -9,11 +9,12 @@ import sys, os, glob, re, gzip
 import argparse, configparser
 
 cmdline_parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-cmdline_parser.add_argument("uniprot_filename", nargs="?", help="Large uniparc filename",
+cmdline_parser.add_argument("uniparc_filename", nargs="?", help="Large uniparc filename",
                             default='/dors/capra_lab/data/uniprot/current/uniparc_active.fasta.gz')
 cmdline_parser.add_argument("no_per_insert", nargs="?", help="Count of uniparcs to pass to INSERT(IGNORE)",
                             default=5000, type=int)
 cmdline_parser.add_argument("-c", "--conf_file", required=True, help="Specify database config file", metavar="FILE")
+cmdline_parser.add_argument("--skip_until_id", required=False, help="To speed restarts, specify a 'known uploaded through' UNIPARC id", type=str, metavar="str")
 args = cmdline_parser.parse_args()
 
 config = configparser.ConfigParser()
@@ -57,23 +58,30 @@ def flush_uniparcs(uniparc_dict):
     c.close()
 
 
-with gzip.open(args.uniprot_filename, "rt") as f:
-    print("File %s opened successfully" % args.uniprot_filename)
+with gzip.open(args.uniparc_filename, "rt") as f:
+    print("File %s opened successfully" % args.uniparc_filename)
     cur_uniparc = ''  # The Uniparc UPI... identifier we are parsing sequence for
     cur_fasta = ''    # The amino acid letters associated with the Uniparc Id
     cur_is_active = False # True for most entries, where "status=active"
     uniparc_dict = {}
+    skipping = True if args.skip_until_id else False
+    print("Skipping until uniparc ID %s is encountered" % args.skip_until_id)
     for line in f:
         # When we get to the next >UPI... string
         if len(line) > 10 and line[0] == '>':
             if cur_fasta and cur_uniparc and cur_is_active:
                 # Add the UPI... we've been working on to our dict
-                uniparc_dict[cur_uniparc] = cur_fasta;
+                if skipping:
+                    if args.skip_until_id == cur_uniparc:
+                        skipping = False
+
+                if not skipping: # This is usual case - add the uniparc ID and sequence to SQL
+                    uniparc_dict[cur_uniparc] = cur_fasta;
                 
-                # Flush to SQL if we reach the buffer size limit
-                if len(uniparc_dict) >= args.no_per_insert:
-                    flush_uniparcs(uniparc_dict)
-                    uniparc_dict = {}
+                    # Flush to SQL if we reach the buffer size limit
+                    if len(uniparc_dict) >= args.no_per_insert:
+                        flush_uniparcs(uniparc_dict)
+                        uniparc_dict = {}
 
             assert (line[1:4] == "UPI")
             cur_uniparc = line[1:14]  # UPI + 10 character unique ID make the identifier
