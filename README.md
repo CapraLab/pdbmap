@@ -123,9 +123,11 @@ uniprot IDs, and excludes general Trembl entries.
 Run lib/create_schema_Idmapping.sql, either as standard input to mysql, or by pasting into a GUI tool.  The note the instructions 
 in the file to load table rows
 
+```
 $ cp data/HUMAN_9606_idmapping_sprot.dat.gz /tmp/Idmapping.gz
 $ gunzip /tmp/Idmapping.gz
 $ mysqlimport --ignore --verbose --fields-terminated-by='\t' --local -p  --columns=unp,ID_type,ID pdbmap_v15 /tmp/Idmapping
+```
 
 ### Uniparc Invariant sequence Idnetifiers
 Every uniprot protein identifier is cross-referenced to a uniparc ID which uniquely specifies an amino acid sequence.
