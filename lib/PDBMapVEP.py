@@ -99,6 +99,7 @@ class PDBMapVEP():
                 sys.exit("Terminating for now until VEP cahcing is better understood")
                 
         self.vep_assembly = self._config_dict['vep_assembly']
+        self.vep_db_version = self._config_dict['vep_db_version']
 
 
     def launch_vep(self,
@@ -168,11 +169,7 @@ class PDBMapVEP():
         #  output format
         vep_cmd.extend(['--vcf'])
 
-        #  SOMETHING IS WRONG WITH db_version
-        #  DO NOT CHECK THIS IN 
-        LOGGER.critical("*** REMOVE --db_version SOON ***")
-        vep_cmd.extend(['--db_version','100'])
-        LOGGER.critical("*** REMOVE --assembly OON ***")
+        vep_cmd.extend(['--db_version',self.vep_db_version)
         vep_cmd.extend(['--assembly',self.vep_assembly])
 
 
@@ -211,7 +208,6 @@ class PDBMapVEP():
         if echo_f:
             echo_f.close() # Close the cache
             del echo_f
-        LOGGER.critical("*** REMOVE --db_version SOON ***")
 
         """
         except KeyboardInterrupt:
