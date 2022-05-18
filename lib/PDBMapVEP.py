@@ -169,7 +169,7 @@ class PDBMapVEP():
         #  output format
         vep_cmd.extend(['--vcf'])
 
-        vep_cmd.extend(['--db_version',self.vep_db_version)
+        vep_cmd.extend(['--db_version',self.vep_db_version])
         vep_cmd.extend(['--assembly',self.vep_assembly])
 
 
