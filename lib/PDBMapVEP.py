@@ -179,7 +179,7 @@ class PDBMapVEP():
         LOGGER.info("Invoking VEP with commands: %s", ' '.join(vep_cmd))
 
         # Call VEP and capture stdout in realtime
-        VEP_process = sp.Popen(vep_cmd, stdout=sp.PIPE, bufsize=1)
+        VEP_process = sp.Popen(vep_cmd, stdout=sp.PIPE)
         echo_f = None
         if vep_echo_filename:
             echo_f = gzip.open(vep_echo_filename, 'wb') # Open cache for writing
