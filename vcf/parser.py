@@ -7,10 +7,7 @@ import os
 import re
 import sys
 
-try:
-    from collections import OrderedDict
-except ImportError:
-    from ordereddict import OrderedDict
+from collections import OrderedDict
 
 try:
     import pysam
@@ -78,37 +75,37 @@ _Contig = collections.namedtuple('Contig', ['id', 'length'])
 
 
 class _vcf_metadata_parser(object):
-    '''Parse the metadata in the header of a VCF file.'''
+    """Parse the metadata in the header of a VCF file."""
     def __init__(self):
         super(_vcf_metadata_parser, self).__init__()
-        self.info_pattern = re.compile(r'''\#\#INFO=<
+        self.info_pattern = re.compile(r"""\#\#INFO=<
             ID=(?P<id>[^,]+),\s*
             Number=(?P<number>-?\d+|\.|[AGR])?,\s*
             Type=(?P<type>Integer|Float|Flag|Character|String),\s*
             Description="(?P<desc>[^"]*)"
             (?:,\s*Source="(?P<source>[^"]*)")?
             (?:,\s*Version="?(?P<version>[^"]*)"?)?
-            >''', re.VERBOSE)
-        self.filter_pattern = re.compile(r'''\#\#FILTER=<
+            >""", re.VERBOSE)
+        self.filter_pattern = re.compile(r"""\#\#FILTER=<
             ID=(?P<id>[^,]+),\s*
             Description="(?P<desc>[^"]*)"
-            >''', re.VERBOSE)
-        self.alt_pattern = re.compile(r'''\#\#ALT=<
+            >""", re.VERBOSE)
+        self.alt_pattern = re.compile(r"""\#\#ALT=<
             ID=(?P<id>[^,]+),\s*
             Description="(?P<desc>[^"]*)"
-            >''', re.VERBOSE)
-        self.format_pattern = re.compile(r'''\#\#FORMAT=<
+            >""", re.VERBOSE)
+        self.format_pattern = re.compile(r"""\#\#FORMAT=<
             ID=(?P<id>.+),\s*
             Number=(?P<number>-?\d+|\.|[AGR]),\s*
             Type=(?P<type>.+),\s*
             Description="(?P<desc>.*)"
-            >''', re.VERBOSE)
-        self.contig_pattern = re.compile(r'''\#\#contig=<
+            >""", re.VERBOSE)
+        self.contig_pattern = re.compile(r"""\#\#contig=<
             ID=(?P<id>[^>,]+)
             (,.*length=(?P<length>-?\d+))?
             .*
-            >''', re.VERBOSE)
-        self.meta_pattern = re.compile(r'''##(?P<key>.+?)=(?P<val>.+)''')
+            >""", re.VERBOSE)
+        self.meta_pattern = re.compile(r"""##(?P<key>.+?)=(?P<val>.+)""")
 
     def vcf_field_count(self, num_str):
         """Cast vcf header numbers to integer or None"""
@@ -121,7 +118,7 @@ class _vcf_metadata_parser(object):
             return field_counts[num_str]
 
     def read_info(self, info_string):
-        '''Read a meta-information INFO line.'''
+        """Read a meta-information INFO line."""
         match = self.info_pattern.match(info_string)
         if not match:
             raise SyntaxError(
@@ -133,10 +130,10 @@ class _vcf_metadata_parser(object):
                      match.group('type'), match.group('desc'),
                      match.group('source'), match.group('version'))
 
-        return (match.group('id'), info)
+        return match.group('id'), info
 
     def read_filter(self, filter_string):
-        '''Read a meta-information FILTER line.'''
+        """Read a meta-information FILTER line."""
         match = self.filter_pattern.match(filter_string)
         if not match:
             raise SyntaxError(
@@ -147,7 +144,7 @@ class _vcf_metadata_parser(object):
         return (match.group('id'), filt)
 
     def read_alt(self, alt_string):
-        '''Read a meta-information ALTline.'''
+        """Read a meta-information ALTline."""
         match = self.alt_pattern.match(alt_string)
         if not match:
             raise SyntaxError(
@@ -158,7 +155,7 @@ class _vcf_metadata_parser(object):
         return (match.group('id'), alt)
 
     def read_format(self, format_string):
-        '''Read a meta-information FORMAT line.'''
+        """Read a meta-information FORMAT line."""
         match = self.format_pattern.match(format_string)
         if not match:
             raise SyntaxError(
@@ -172,7 +169,7 @@ class _vcf_metadata_parser(object):
         return (match.group('id'), form)
 
     def read_contig(self, contig_string):
-        '''Read a meta-contigrmation INFO line.'''
+        """Read a meta-contigrmation INFO line."""
         match = self.contig_pattern.match(contig_string)
         if not match:
             raise SyntaxError(
@@ -265,9 +262,8 @@ class Reader(object):
             self._reader = open(filename, 'rb' if compressed else 'rt')
         self.filename = filename
         if compressed:
-            self._reader = gzip.GzipFile(fileobj=self._reader)
-            if sys.version > '3':
-                self._reader = codecs.getreader(encoding)(self._reader)
+            self._reader = codecs.getreader(encoding)(self._reader)(
+                gzip.GzipFile(fileobj=self._reader))
 
         if strict_whitespace:
             self._separator = '\t'
@@ -305,10 +301,10 @@ class Reader(object):
         return self
 
     def _parse_metainfo(self):
-        '''Parse the information stored in the metainfo of the VCF.
+        """Parse the information stored in the metainfo of the VCF.
 
         The end user shouldn't have to use this.  She can access the metainfo
-        directly with ``self.metadata``.'''
+        directly with ``self.metadata``."""
         for attr in ('metadata', 'infos', 'filters', 'alts', 'contigs', 'formats'):
             setattr(self, attr, OrderedDict())
 
@@ -355,16 +351,16 @@ class Reader(object):
         self._sample_indexes = dict([(x,i) for (i,x) in enumerate(self.samples)])
 
     def _map(self, func, iterable, bad=['.', '']):
-        '''``map``, but make bad values None.'''
+        """``map``, but make bad values None."""
         return [func(x) if x not in bad else None
                 for x in iterable]
 
     def _parse_filter(self, filt_str):
-        '''Parse the FILTER field of a VCF entry into a Python list
+        """Parse the FILTER field of a VCF entry into a Python list
 
         NOTE: this method has a cython equivalent and care must be taken
         to keep the two methods equivalent
-        '''
+        """
         if filt_str == '.':
             return None
         elif filt_str == 'PASS':
@@ -373,10 +369,10 @@ class Reader(object):
             return filt_str.split(';')
 
     def _parse_info(self, info_str):
-        '''Parse the INFO field of a VCF entry into a dictionary of Python
+        """Parse the INFO field of a VCF entry into a dictionary of Python
         types.
 
-        '''
+        """
         if info_str == '.':
             return {}
 
@@ -447,12 +443,12 @@ class Reader(object):
         return samp_fmt
 
     def _parse_samples(self, samples, samp_fmt, site):
-        '''Parse a sample entry according to the format specified in the FORMAT
+        """Parse a sample entry according to the format specified in the FORMAT
         column.
 
         NOTE: this method has a cython equivalent and care must be taken
         to keep the two methods equivalent
-        '''
+        """
 
         # check whether we already know how to parse this format
         if samp_fmt not in self._format_cache:
@@ -549,7 +545,7 @@ class Reader(object):
             return _Substitution(str)
 
     def __next__(self):
-        '''Return the next record in the file.'''
+        """Return the next record in the file."""
         line = next(self.reader)
         row = self._row_pattern.split(line.rstrip())
         chrom = row[0]
@@ -567,22 +563,25 @@ class Reader(object):
 
         try:
             qual = int(row[5])
+        except IndexError:
+            qual = None
         except ValueError:
             try:
                 qual = float(row[5])
             except ValueError:
                 qual = None
 
-        filt = self._parse_filter(row[6])
-        info = self._parse_info(row[7])
-
-        try:
-            fmt = row[8]
-        except IndexError:
-            fmt = None
-        else:
-            if fmt == '.':
-                fmt = None
+        filt = None # None returned by _parse_filter if. in column
+        info = {}   # Empty dict is returned by _parse_info if . is in column
+        fmt = None  # Set if fmt is .
+        if len(row)>6:
+            filt = self._parse_filter(row[6])
+            if len(row) > 7:
+                info = self._parse_info(row[7])
+            if len(row) > 8:
+                fmt = row[8]
+                if fmt == '.':
+                    fmt = None
 
         record = _Record(chrom, pos, ID, ref, alt, qual, filt,
                 info, fmt, self._sample_indexes)
@@ -769,14 +768,15 @@ class Writer(object):
         return "%s=%s" % (str(x), self._stringify(y, none=none, delim=delim))
 
     def _map(self, func, iterable, none='.'):
-        '''``map``, but make None values none.'''
+        """``map``, but make None values none."""
         return [func(x) if x is not None else none
                 for x in iterable]
 
 
 def __update_readme():
     import sys, vcf
-    file('README.rst', 'w').write(vcf.__doc__)
+    with open ('README.rst', 'w') as f:
+        f.write(vcf.__doc__)
 
 
 # backwards compatibility
