@@ -21,7 +21,7 @@
 
 CREATE TABLE IF NOT EXISTS sifts_legacy_xml (
   pdbid varchar(20) NOT NULL       COMMENT '4 character rcsb pdb ID',
-  pdb_chain varchar(20)  NOT NULL  COMMENT 'chain.  Ex A/B/Z/1/d etc',
+  pdb_chain varchar(20)  NOT NULL  COLLATE utf8mb4_bin COMMENT 'case sensitive chain.  Ex A/B/Z/1/d etc',
   PDBe_dbResNum int(11) NOT NULL   COMMENT 'The unique PDBe sourced incrementing dbResNum for indexing',
   pdb_resnum int(11) DEFAULT NULL  COMMENT 'pdb residue number, null if missing from .pdb',
   pdb_icode varchar(10) NOT NULL   COMMENT 'pdb insertion code, usually blank - sometimes single Alpha',

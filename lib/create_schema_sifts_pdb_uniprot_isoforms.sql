@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS sifts_mappings_pdb_uniprot_all_isoforms (
 --            "pdb_end": 380, 
 --            "struct_asym_id": "A", 
 --            "identity": 1
-  mapping_pdb_chain varchar(20)       NOT NULL   COMMENT 'chain in pdb.  Ex A/B/Z etc',
+  mapping_pdb_chain varchar(20)  NOT NULL  COLLATE utf8mb4_bin COMMENT 'case sensitive chain.  Ex A/B/Z/1/d etc',
   mapping_struct_asym_id varchar(20)  NOT NULL   COMMENT 'chain in mmcif.',
 
   mapping_pdb_start int(11) NOT NULL  COMMENT 'First residue: pdb number',
