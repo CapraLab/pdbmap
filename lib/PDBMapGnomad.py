@@ -74,17 +74,29 @@ class PDBMapGnomad:
             LOGGER.warning("Unable to load chromosome locations for %s", transcript.id)
             return None
 
-        # The min and max coordinates fall out of the returned array from ENSEMBL PERL API
-        min_coordinate = genomic_coordinates[1][1]
-        max_coordinate = genomic_coordinates[len(genomic_coordinates)][2]
-        LOGGER.info("Chrom: %s Coordinate range [%d,%d].  Excerpting vcf segment next with tabix.",
-                    chrom, min_coordinate, max_coordinate)
-
         # The Gnomad supplied vcf filename omits chr in chrnn/chrX/chrY
         gnomad_vcf_file = os.path.join(
             self._config_dict['gnomad_dir'],
             self._config_dict['gnomad_filename_template'] % chrom[3:]
         )
+        if not os.path.exists(gnomad_vcf_file):
+            LOGGER.warning("Unable to open %s GNOMAD genomic coordinates for %s", gnomad_vcf_file, transcript.id)
+            return 0;
+
+
+        # The min and max coordinates fall out of the returned array from ENSEMBL PERL API
+        # Because of splice variants, I take care to NOT assume the coordinate range is
+        # always increases
+        min_coordinate = min(genomic_coordinates[1][1],genomic_coordinates[1][2])
+        max_coordinate = max(genomic_coordinates[1][1],genomic_coordinates[1][2])
+        for index in range(2,len(genomic_coordinates)+1):
+            min_coordinate = min(min_coordinate,genomic_coordinates[index][1],genomic_coordinates[index][2])
+            max_coordinate = max(max_coordinate,genomic_coordinates[index][1],genomic_coordinates[index][2])
+
+        LOGGER.info("Chrom: %s Coordinate range [%d,%d].  Excerpting vcf segment next with tabix.",
+                    chrom, min_coordinate, max_coordinate)
+
+
 
         # Excerpt the tiny (by comparison) chrom region referenced by the Ensembl transcript
         gnomad_vcf_excerpt_filename = "%s_%d_%d_tabix.vcf" % (chrom[3:], min_coordinate, max_coordinate)
@@ -132,7 +144,7 @@ class PDBMapGnomad:
             prepend_chr=False)
 
         # We now reduce the gnomad columns from over 4000 to these here:
-        df = pd.DataFrame(columns=['gene', 'chrom', 'pos', 'transcript', 'Ref_AminoAcid',
+        df_gnomad_missense = pd.DataFrame(columns=['gene', 'chrom', 'pos', 'transcript', 'Ref_AminoAcid',
                                    'Protein_position', 'Alt_AminoAcid', 'maf'])
 
         # Filter the VEP output records for missense variants, and build up a dataframe of all the collected
@@ -142,8 +154,8 @@ class PDBMapGnomad:
                 vep_transcript = CSQ['Feature']
                 if str(vep_transcript).strip() == transcript.id and str(CSQ['Consequence']).lower().find(
                         'missense') != -1:
-                    df = df.append(
-                        {'gene': CSQ['SYMBOL'],
+                    df_gnomad_missense = pd.concat([df_gnomad_missense,pd.DataFrame(
+                        [{'gene': CSQ['SYMBOL'],
                          'chrom': vcf_record.CHROM,
                          'pos': vcf_record.POS,
                          'transcript': CSQ['Feature'],
@@ -151,6 +163,7 @@ class PDBMapGnomad:
                          'Alt_AminoAcid': CSQ['Alt_AminoAcid'],
                          'Protein_position': CSQ['Protein_position'],
                          'maf': float(vcf_record.INFO['AF'])  # Minor allele frequency
-                         }, ignore_index=True)
-        LOGGER.info("%d raw missense variants excerpted from VCF fragment for %s" % (len(df), transcript.id))
-        return df
+                         }])], ignore_index=True)
+        LOGGER.info("%d raw Gnomad missense variants excerpted from VCF fragment for %s" ,
+                    len(df_gnomad_missense), transcript.id)
+        return df_gnomad_missense
