@@ -15,6 +15,7 @@
 import sys
 from typing import Tuple
 from typing import Optional
+from typing import Type
 from Bio.Data import IUPACData
 from lib import PDBMapSQLdb
 
@@ -110,17 +111,18 @@ where uniparc = %(uniparc_id)s"""
         return differences
 
     @staticmethod
-    def analyze_transcript_differences(t1, t2):
-        """Return # of single point variants, and percent of mismatches, between 2 PDBMapTranscripts"""
-        if len(t1.aa_seq) != len(t2.aa_seq):
+    def analyze_transcript_differences(transcript1: Type['PDBMapTranscriptBase'], transcript2: Type['PDBMapTranscriptBase']) -> Tuple[float, float]:
+        """Return # of single point variants, and percent of mismatches,
+        between 2 PDBMapTranscripts of same length"""
+        if len(transcript1.aa_seq) != len(transcript2.aa_seq):
             # If transcripts are not the same length, return the longer length, and 100% mismatch
-            return max(len(t1.aa_seq), len(t2.aa_seq)), 1.0
+            return max(len(transcript1.aa_seq), len(transcript2.aa_seq)), 1.0
 
         differences = 0
-        for tpos in range(len(t1.aa_seq)):
-            if t1.aa_seq[tpos] != t2.aa_seq[tpos]:
+        for tpos in range(len(transcript1.aa_seq)):
+            if transcript1.aa_seq[tpos] != transcript2.aa_seq[tpos]:
                 differences += 1
-        return differences, float(differences) / float(len(t1.aa_seq))
+        return differences, float(differences) / float(len(transcript1.aa_seq))
 
     # Main check
 
