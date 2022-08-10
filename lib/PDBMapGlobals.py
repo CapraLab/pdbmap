@@ -13,9 +13,19 @@ LOGGER = logging.getLogger(__name__)
 class _PDBMapGlobals_meta(type):
     """helper class allows class level properties - namely PDBMapGlobals.config"""
     _config = None
+    _exit_function = sys.exit
 
     def __init__(cls,*args, **kwargs):
         pass
+
+    @property
+    def exit(cls): 
+        return cls._exit_function
+
+    @exit.setter
+    def exit(cls, exit_function):
+        assert callable(exit_function)
+        cls._exit_function = exit_function
 
     @property 
     def config(cls):
