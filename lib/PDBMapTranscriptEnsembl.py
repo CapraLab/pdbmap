@@ -86,6 +86,12 @@ class PDBMapTranscriptEnsembl(PDBMapTranscriptBase):
     @property
     def id(self):
         return self._ensembl_ENST
+    @property
+    def unversioned_id(self) -> str:
+        """
+        @return: ENST ensemble transcript id with any trailing version suffix removed
+        """
+        return self._ensembl_ENST.split('.')[0]
 
     @property
     def aa_seq(self):
@@ -179,7 +185,8 @@ class PDBMapTranscriptEnsembl(PDBMapTranscriptBase):
 
             # The left column of returned values should match our requested ENST transcript id
             transcript = fields[0]
-            assert transcript == self._ensembl_ENST
+            # The transcript from ENSEMBL lack version numbers - so don't compare that bit.
+            assert transcript == self._ensembl_ENST.split('.')[0]
 
             # The ENSP Protein identifier shold be the same for all liness returned from the PERL API
             if self.ensembl_ENSP:
