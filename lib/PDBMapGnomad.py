@@ -71,7 +71,7 @@ class PDBMapGnomad:
         # Call the ENSEMBL PERL API to load genomic coordinates for the ensembl transcript
         (success, chrom, genomic_coordinates) = transcript.load_chromosome_location()
         if not success or len(genomic_coordinates) < 1:
-            LOGGER.warning("Unable to load chromosome locations for %s", transcript.id)
+            LOGGER.warning("Unable to load chromosome locations for %s", transcript.unversioned_id)
             return None
 
         # The Gnomad supplied vcf filename omits chr in chrnn/chrX/chrY
@@ -80,7 +80,8 @@ class PDBMapGnomad:
             self._config_dict['gnomad_filename_template'] % chrom[3:]
         )
         if not os.path.exists(gnomad_vcf_file):
-            LOGGER.warning("Unable to open %s GNOMAD genomic coordinates for %s", gnomad_vcf_file, transcript.id)
+            LOGGER.warning("Unable to open %s GNOMAD genomic coordinates for %s",
+                           gnomad_vcf_file, transcript.unversioned_id)
             return 0;
 
 
@@ -135,7 +136,7 @@ class PDBMapGnomad:
         #             'maf': float(vcf_record.INFO['AF']) # Minor allele frequency
         #             }, ignore_index=True)
 
-        LOGGER.info("Running VEP to update transcript annotations. Will filter for %s" % transcript.id)
+        LOGGER.info("Running VEP to update transcript annotations. Will filter for %s", transcript.unversioned_id)
         pdbmap_vep = PDBMapVEP(self._config_dict)
 
         vcf_reader = pdbmap_vep.vcf_reader_from_file_supplemented_with_vep_outputs(
@@ -152,7 +153,7 @@ class PDBMapGnomad:
         for vcf_record in pdbmap_vep.yield_completed_vcf_records(vcf_reader):
             for CSQ in vcf_record.CSQ:
                 vep_transcript = CSQ['Feature']
-                if str(vep_transcript).strip() == transcript.id and str(CSQ['Consequence']).lower().find(
+                if str(vep_transcript).strip() == transcript.unversioned_id and str(CSQ['Consequence']).lower().find(
                         'missense') != -1:
                     df_gnomad_missense = pd.concat([df_gnomad_missense,pd.DataFrame(
                         [{'gene': CSQ['SYMBOL'],
@@ -165,5 +166,5 @@ class PDBMapGnomad:
                          'maf': float(vcf_record.INFO['AF'])  # Minor allele frequency
                          }])], ignore_index=True)
         LOGGER.info("%d raw Gnomad missense variants excerpted from VCF fragment for %s" ,
-                    len(df_gnomad_missense), transcript.id)
+                    len(df_gnomad_missense), transcript.unversioned_id)
         return df_gnomad_missense
