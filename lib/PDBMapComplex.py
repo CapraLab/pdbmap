@@ -7,19 +7,20 @@
 #                : Vanderbilt University Medical Center
 # Email          : chris.moth@vanderbilt.edu
 # Date           : 2022-08-08
-# Description    : Manage loading of multi-chain complexes, alignments to transcripts, variant hooks
+# Description    : Manage loading of multichain complexes, alignments to transcripts, variant hooks
 #                  Excerpted/factored out of - pathprox3.py
 
 import os
 import re
 import sys
 import gzip
+import lzma
 import string
 import json
 import pandas as pd
 import numpy as np
 import subprocess as sp
-
+import warnings
 import platform
 
 from typing import Dict
@@ -42,7 +43,6 @@ from Bio.PDB.PDBExceptions import PDBConstructionWarning
 
 import warnings
 
-
 from lib import PDBMapTranscriptBase
 from lib import PDBMapTranscriptUniprot
 from lib import PDBMapTranscriptFasta
@@ -53,9 +53,14 @@ from lib import PDBMapSwiss
 from lib import PDBMapModbase2020
 from lib import PDBMapProtein
 from lib import PDBMapGlobals
+from lib import PDB36Parser
 
 import logging
+
+from pdbmap.lib.PDBMapAlignment import sifts_best_unps
+
 LOGGER = logging.getLogger(__name__)
+
 
 class PDBMapComplex:
     """
@@ -105,12 +110,13 @@ class PDBMapComplex:
         self.structure_type = structure_type
         self.structure_id = structure_id
         self.single_chain = single_chain
-        self.structure = None
-        self.renumbered_structure = None
+        self.structure: Structure = None
+        self.renumbered_structure: Structure = None
         self.source_coordinates_filename = ""
         self.info_func = info_func
+        self.usermodel_filename = usermodel_filename
 
-        self._label = self.structure_id # Typicaly a complex user will override this at a later point
+        self._label = self.structure_id  # Typicaly a complex user will override this at a later point
 
         if self.structure_type == 'biounit' or self.structure_id == 'pdb':
             self._load_pdb()
@@ -192,7 +198,7 @@ class PDBMapComplex:
 
         with self._open_for_extension(self.source_coordinates_filename) as fin:
             warnings.filterwarnings('ignore', category=PDBConstructionWarning)
-            source_coordinates_filename_pieces = self.source_coordinates_filename.split('.')
+            # source_coordinates_filename_pieces = self.source_coordinates_filename.split('.')
             if is_cif_format:
                 _mmcif_parser = MMCIFParser(QUIET=True)
                 self.structure = _mmcif_parser.get_structure(self.structure_id, fin)
@@ -207,10 +213,10 @@ class PDBMapComplex:
 
         if try_parser_36:
             LOGGER.critical("Attempting Hybrid36 PDB Parser for %s" % self.source_coordinates_filename)
-            with self._open_function_for_extension(self.source_coordinates_filename, ) as fin:
-                filterwarnings('ignore', category=PDBConstructionWarning)
+            with self._open_for_extension(self.source_coordinates_filename) as fin:
+                warnings.filterwarnings('ignore', category=PDBConstructionWarning)
                 self.structure = PDB36Parser().get_structure(self.structure_id, fin)
-                resetwarnings()
+                warnings.resetwarnings()
 
     def _load_pdb(self) -> None:
         """From the pdb ID (previously set as self.structure_id,
@@ -309,7 +315,7 @@ class PDBMapComplex:
                             next(iter(alignment.seq_to_resid)),  # First alignment
                             next(reversed(alignment.seq_to_resid)),  # Last alignment
                             alignment.aln_str)
-            elif self.structure_type == 'usermodel':  # Not remembering why, but apparently we are OK with a user-model doing this call
+            elif self.structure_type == 'usermodel':  # Hmm...  Apparently we are OK with a user-model doing this call
                 (success, message) = alignment.align_biopython(self.chain_to_transcript[chain_letter], self.structure,
                                                                chain_id=chain_letter)
                 if success:
@@ -387,11 +393,12 @@ class PDBMapComplex:
                 if not success:
                     # Then we have to attempt a PDB alignment using the sequence info embedded in the .cif file
 
-                    # If we started from a pdb or an incomplete biounit dict, then we fetch the full mmCIF file here..
+                    # If we started from a pdb or an incomplete biounit dict, then we fetch the full mmCIF file here
                     if self.mmcif_dict and PDBMapAlignment.seq_resid_required_keys_present(self.mmcif_dict):
                         _mmcif_dict = self.mmcif_dict
                     else:
-                        mmcif_structure_filename = os.path.join(PDBMapGlobals.config['pdb_dir'], 'structures', 'divided',
+                        mmcif_structure_filename = os.path.join(PDBMapGlobals.config['pdb_dir'], 'structures',
+                                                                'divided',
                                                                 'mmCIF',
                                                                 self.structure_id.lower()[1:3],
                                                                 "%s.cif.gz" % self.structure_id)
@@ -404,13 +411,13 @@ class PDBMapComplex:
                                 _temp_mmcif_structure = mmCIF_parser.get_structure(self.structure_id.lower(),
                                                                                    structure_fin)
                                 _mmcif_dict = mmCIF_parser._mmcif_dict
-                            pdb_seq_resid_xref = PDBMapAlignment.create_pdb_seq_resid_xref(_mmcif_dict)
+                            pdb_seq_residue_id_xref = PDBMapAlignment.create_pdb_seq_resid_xref(_mmcif_dict)
 
-                        (success, message) = alignment.align_sifts_isoform_specific(best_unp_transcript,
-                                                                                    _temp_mmcif_structure,
-                                                                                    pdb_seq_resid_xref,
-                                                                                    chain_id=chain_letter,
-                                                                                    is_canonical=is_canonical)
+                            (success, message) = alignment.align_sifts_isoform_specific(best_unp_transcript,
+                                                                                        _temp_mmcif_structure,
+                                                                                        pdb_seq_residue_id_xref,
+                                                                                        chain_id=chain_letter,
+                                                                                        is_canonical=is_canonical)
                     if not success:
                         LOGGER.warning("Unable to align with sifts: %s", message)
                         LOGGER.warning("Attempting to align chain %s with biopython call", chain_letter)
@@ -453,7 +460,8 @@ class PDBMapComplex:
                         if residue.id in alignment.resid_to_seq:
                             renumbered_residue = residue.copy()
                             renumbered_residue.id = (' ', alignment.resid_to_seq[residue.id], ' ')
-                            # The above copy routines fail to copy disorder properly - so just wipe out all notion of disorder
+                            # The above copy routines fail to copy disorder properly
+                            # - so just wipe out all notion of disorder
                             for atom in renumbered_residue:
                                 atom.disordered_flag = 0
                             renumbered_residue.disordered = 0
@@ -461,6 +469,42 @@ class PDBMapComplex:
                     renumbered_model.add(renumbered_chain)
 
             self.renumbered_structure.add(renumbered_model)
+
+    @staticmethod
+    def uniprot_and_ensembl_close_enough(
+            uniprot_transcript: PDBMapTranscriptUniprot,
+            ensembl_transcript: PDBMapTranscriptEnsembl) -> bool:
+        """
+        Uniprot and Ensembl transcripts can drift.  That's OK if only in a few positions.
+        Here we isolate the "are two transcripts close enough?" logic so that we can share the code easily
+        between initial pipeline planning and later pathprox transcript acquisition
+        """
+        if not ensembl_transcript.aa_seq:
+            LOGGER.warning("Ensembl transcript %s mapped to %s has no associated aa_seq.  Skipping",
+                           ensembl_transcript.id,
+                           uniprot_transcript.id)
+            return False
+
+        differences, pct_different = PDBMapTranscriptBase.analyze_transcript_differences(
+            uniprot_transcript, ensembl_transcript)
+
+        if differences == 0:  # Awesome - the usual case where uniprot and ENST match
+            LOGGER.info("Ensembl transcript %s has same aa_seq as transcript %s", ensembl_transcript.id,
+                        uniprot_transcript.id)
+        elif differences == 1:  # Let's not kill pathprox if only one variant between uniprot and ENST
+            LOGGER.warning(
+                "Transcripts vary in one position: %s" % PDBMapTranscriptBase.describe_transcript_differences(
+                    uniprot_transcript, ensembl_transcript))
+        elif pct_different < 0.01:  # Similarly let Pathprox continue if we have a few variants off - but less than 1% of the sequence
+            LOGGER.warning(
+                "Transcripts vary in multiple positions: %s" % PDBMapTranscriptBase.describe_transcript_differences(
+                    uniprot_transcript, ensembl_transcript))
+        else:
+            LOGGER.warning("%s and %s AA sequences differ markedly:\n%s" % (
+                uniprot_transcript.id, ensembl_transcript.id,
+                PDBMapTranscriptBase.describe_transcript_differences(uniprot_transcript, ensembl_transcript)))
+            return False
+        return True
 
     def uniprot_to_ENST_transcripts(self, uniprot_transcript: PDBMapTranscriptUniprot) -> List[PDBMapTranscriptEnsembl]:
         """
@@ -491,27 +535,7 @@ class PDBMapComplex:
 
         for ensembl_transcript_id in unfiltered_ensemble_transcript_ids:
             ensembl_transcript = PDBMapTranscriptEnsembl(ensembl_transcript_id)
-            if not ensembl_transcript.aa_seq:
-                LOGGER.warning("Ensembl transcript %s mapped to %s has no associated aa_seq.  Skipping" % \
-                               ensembl_transcript_id, uniprot_transcript.id)
-                continue
-            differences, pct_different = PDBMapTranscriptBase.analyze_transcript_differences(uniprot_transcript,
-                                                                                             ensembl_transcript)
-            if differences == 0:  # Awesome - the usual case where uniprot and ENST match
-                LOGGER.info("Ensembl transcript %s has same aa_seq as transcript %s", ensembl_transcript.id,
-                            uniprot_transcript.id)
-            elif differences == 1:  # Let's not kill pathprox if only one variant between uniprot and ENST
-                LOGGER.warning(
-                    "Transcripts vary in one position: %s" % PDBMapTranscriptBase.describe_transcript_differences(
-                        uniprot_transcript, ensembl_transcript))
-            elif pct_different < 0.01:  # Similarly let Pathprox continue if we have a few variants off - but less than 1% of the sequence
-                LOGGER.warning(
-                    "Transcripts vary in multiple positions: %s" % PDBMapTranscriptBase.describe_transcript_differences(
-                        uniprot_transcript, ensembl_transcript))
-            else:
-                LOGGER.warning("%s and %s AA sequences differ markedly:\n%s" % (
-                    uniprot_transcript.id, ensembl_transcript.id,
-                    PDBMapTranscriptBase.describe_transcript_differences(uniprot_transcript, ensembl_transcript)))
+            if not PDBMapComplex.uniprot_and_ensembl_close_enough(uniprot_transcript, ensembl_transcript):
                 continue
 
             # To arrive here we have reasonably matching AA sequences between the uniprot and ENST ensembl transcript
@@ -536,20 +560,16 @@ class PDBMapComplex:
         self.source_coordinates_filename = PDBMapSwiss.get_coord_file(self.structure_id)
         self._load_structure_and_mmcif_dict(is_cif_format=False)
 
-    def _load_modbase(self, modbase_id: str, user_chain_to_transcript: Dict[str, PDBMapTranscriptBase]):
+    def _load_modbase(self):
         assert self.structure_type == 'modbase'
         modbase20 = PDBMapModbase2020(PDBMapGlobals.config)
-        self.source_coordinates_filename = modbase20.get_coord_file(modbase_id)
+        self.source_coordinates_filename = modbase20.get_coord_file(self.structure_id)
         if os.path.exists(self.source_coordinates_filename):
             self._load_structure_and_mmcif_dict(is_cif_format=False)
         else:
-            msg = "Modbase model %s not found in %s" % (modbase_id, self.source_coordinates_filename)
+            msg = "Modbase model %s not found in %s" % (self.structure_id, self.source_coordinates_filename)
             LOGGER.critical(msg)
             PDBMapGlobals.exit(msg)
-
-        # With modbase, these are single chain models, at it is ok to just point to the command line
-        # user provided
-        self.chain_to_transcript = user_chain_to_transcript
 
     def _load_alphafold(self):
         assert self.structure_type == 'alphafold'
@@ -557,9 +577,9 @@ class PDBMapComplex:
         self.source_coordinates_filename = alpha_fold.get_coord_filename(self.structure_id)
         if os.path.exists(self.source_coordinates_filename):
             self._load_structure_and_mmcif_dict(is_cif_format=True)
-            self.alpha_fold_local_metrics = alpha_fold.pLDDTs(self.mmcif_dict);
-            # If we are dealing with not a -F1-... but a -F2- or higher, then we need to renumber the 1..N by the window*200
-            structure = alpha_fold.renumber_windowed_model(self.structure, self.mmcif_dict)
+            self.alpha_fold_local_metrics = alpha_fold.pLDDTs(self.mmcif_dict)
+            # If we are dealing with not a -F1-... but a -F2- or higher, then we need to reumber the 1..N by the window*200
+            self.structure = alpha_fold.renumber_windowed_model(self.structure, self.mmcif_dict)
         else:
             msg = "Alpha fold model %s not found in %s" % (self.structure_id, self.source_coordinates_filename)
             LOGGER.critical(msg)
@@ -586,33 +606,30 @@ class PDBMapComplex:
         """
         user_chain_to_transcript: Dict[str, str] = {}
 
-        chain_X_unp_re = re.compile('^--chain(.{1,3})unp=(.*)$')
-        chain_X_enst_re = re.compile('^--chain(.{1,3})enst=(.*)$')
-        chain_X_fasta_re = re.compile('^--chain(.{1,3})fasta=(.*)$')
+        chain_x_unp_re = re.compile('^--chain(.{1,3})unp=(.*)$')
+        chain_x_enst_re = re.compile('^--chain(.{1,3})enst=(.*)$')
+        chain_x_fasta_re = re.compile('^--chain(.{1,3})fasta=(.*)$')
         transcript = None
         for arg in args_remaining:
-            re_match = chain_X_unp_re.match(arg)
-            unp = None
-            enst = None
-            fasta = None
+            re_match = chain_x_unp_re.match(arg)
             chain_letter = None
 
             if re_match:  # A uniprot ID transcript ID was explicitly assigned to the chain
                 chain_letter = re_match.group(1)
-                unp = re_match.group(2)
-                transcript = PDBMapTranscriptUniprot(unp)
+                uniprot_id = re_match.group(2)
+                transcript = PDBMapTranscriptUniprot(uniprot_id)
                 # if chain_letter in chain_to_transcript and transcript.id == chain_to_transcript[chain_letter].id:
                 #    LOGGER.warning("argument %s is redundant.  Pathprox automatically assigned/aligned")
-                LOGGER.info("Successful load of Uniprot transcript %s" % unp)
+                LOGGER.info("Successful load of Uniprot transcript %s", uniprot_id)
             else:
-                re_match = chain_X_enst_re.match(arg)
+                re_match = chain_x_enst_re.match(arg)
                 if re_match:  # An ENSEMBL transcript ID was explicitly assigned to the chain
                     chain_letter = re_match.group(1)
-                    enst = re_match.group(2)
-                    transcript = PDBMapTranscriptEnsembl(enst)
-                    LOGGER.info("Successful load of Ensembl transcript %s" % enst)
+                    ensembl_transcript_id = re_match.group(2)
+                    transcript = PDBMapTranscriptEnsembl(ensembl_transcript_id)
+                    LOGGER.info("Successful load of Ensembl transcript %s", ensembl_transcript_id)
                 else:
-                    re_match = chain_X_fasta_re.match(arg)
+                    re_match = chain_x_fasta_re.match(arg)
                     if re_match:  # A fasta amino acid string was explicitly assigned to the chain
                         chain_letter = re_match.group(1)
                         fasta = re_match.group(2)
@@ -624,30 +641,8 @@ class PDBMapComplex:
                         PDBMapGlobals.exit(exit_message)
 
             if transcript:
-                """alignment = PDBMapAlignment()
-                (success,message) = alignment.align_trivial(transcript,structure,chain_id=chain_letter)
-                if success:
-                    LOGGER.info("%s to chain %s Trivial align successful for residues in [%d,%d]\n%s"%(transcript.id,chain_letter,next(iter(alignment.seq_to_resid)),next(reversed(alignment.seq_to_resid)),alignment.aln_str))
-                else:
-                    LOGGER.warning("Unable to trivially align transcript %s to %s.%s"%(transcript.id,structure.id,chain_letter))
-                    if args.pdb or args.biounit and unp: # Then user is mapping a deposited chain to a unp
-                       if PDBMapProtein.isCanonicalByUniparc(transcript.id):
-                           success,errormsg = alignment.align_sifts_canonical(transcript,structure,chain_id=chain_letter)
-                       else:
-                           success,errormsg = alignment.align_sifts_isoform_specific(transcript,structure,chain_id=chain_letter)
-
-                    if success:
-                        LOGGER.info("Sifts alignment identity %f.  Align str:\n%s"%(alignment.perc_identity,alignment.aln_str))
-                    else:
-                        (success,message) = alignment.align_biopython(transcript,structure,chain_id=chain_letter)
-                        assert success,statusdir_info(message)
-                        LOGGER.info("Biopython identity %f.  Align str:\n%s"%(alignment.perc_identity,alignment.aln_str))"""
-
-                # chain_to_alignment[chain_letter] = alignment
                 user_chain_to_transcript[chain_letter] = transcript
         return user_chain_to_transcript
-
-
 
     def assign_chain_letters_where_blank(self) -> None:
         """
@@ -679,17 +674,17 @@ class PDBMapComplex:
         @return: The x/y/z mean of the heavy atom coordinates inside the residue
         """
         if residue is None:
-            return np.array([np.NaN,np.Nan,np.Nan])
+            return np.array([np.NaN, np.Nan, np.Nan])
 
         # 2022 August 5.  I have reworked this to avoid counting hydrogens  (nmr/high res PDBs)
         # and I also am averaging coordinates of heavy atoms which are disorded instead of simply recounting them
         residue_atoms_xyzs = []
         for atom in residue.get_list():
-            if atom.element == 'H': # Skip Hydrogen
+            if atom.element == 'H':  # Skip Hydrogen
                 continue
 
             if atom.is_disordered():
-                disordered_atom_xyzs = [np.array(disordered_atom.get_coord()) \
+                disordered_atom_xyzs = [np.array(disordered_atom.get_coord())
                                         for disordered_atom in atom.disordered_get_list()]
                 atom_mean_xyz = np.array(disordered_atom_xyzs).mean(axis=0)
             else:
@@ -698,32 +693,42 @@ class PDBMapComplex:
             residue_atoms_xyzs.append(atom_mean_xyz)
         return np.array(residue_atoms_xyzs).mean(axis=0)
 
-
     # Construct a dataframe from the coordinate file
     def unp_pos_if_aligned(self, chain_id: str, residue_id: Tuple) -> int:
         """
+        Given a Chain ID, and residue ID in the chain, return the 1..n amino acide number of the transcript
+        that was aligned to the chain and the residue
 
-        Given a Chain ID, and residue ID in the chain, return the 1..n
+        It is often the case (with PDB files) that resolved amino acids are not aligned to transcript postions
+        In those cases, return 0
 
         @param chain_id:
         @param residue_id:
         @return:
         """
+
+        # If chain 'X' is not aligned to a transcript at all, then return 0
         if chain_id not in self.chain_to_alignment:
-            return None
+            return 0
+
         _alignment = self.chain_to_alignment[chain_id]
+
+        # If the Biopython residue ID triple was never aligned to a transcript
+        # position, return 0
         if residue_id not in _alignment.resid_to_seq:
-            return None
+            return 0
+
+        # Success, we can say that a particular PDB residue is aligned to a transcript position
         return int(_alignment.resid_to_seq[residue_id])
 
     def create_residue_centroids_dataframe_from_aligned_chains(self) -> pd.DataFrame:
         """
         In one iteration through all the residues the entire loaded comple, we create a new dataframe consisting of
         6 columns
-        1) 'chain'. The chain ID of the residue, found via residue.get_parent().id
-        2) 'resid'.  The residue ID Tuple of the residue
-        3) 'unp_pos' The amino acid position in the uniprot transcript, determined by prior alignment of chain
-        4-6) the x/y/z center of mass of the residue
+        1: 'chain'. The chain ID of the residue, found via residue.get_parent().id
+        2: 'resid'.  The residue ID Tuple of the residue
+        3: 'unp_pos' The amino acid position in the uniprot transcript, determined by prior alignment of chain
+        4-6: the x/y/z center of mass of the residue
         @return:
         """
         # The "for r..." list comprehension includes only non-hetero residues with (blank,#,insert code) i.e. (not r.id(0).strip())
@@ -734,18 +739,19 @@ class PDBMapComplex:
                 continue
             for residue in chain:
                 if len(residue.id[0].strip()) == 0:  # Ignore Hetero residues (len != 0)
-                    _uniprot_transcript_pos = self.unp_pos_if_aligned(chain.id,residue.id)
+                    _uniprot_transcript_pos = self.unp_pos_if_aligned(chain.id, residue.id)
                     if _uniprot_transcript_pos:
                         _dataframe_rows.append(
-                            [chain.id,        # 1
-                             residue.id,      # 2
-                             _uniprot_transcript_pos #3
-                             ] + list(PDBMapComplex.residue_center_of_mass(residue)) #456
+                            [chain.id,  # 1
+                             residue.id,  # 2
+                             _uniprot_transcript_pos  # 3
+                             ] + list(PDBMapComplex.residue_center_of_mass(residue))  # 456
                         )
 
-        return pd.DataFrame(_dataframe_rows,columns=["chain", "resid", "unp_pos", "x", "y", "z"])
+        return pd.DataFrame(_dataframe_rows, columns=["chain", "resid", "unp_pos", "x", "y", "z"])
 
-    def _load_one_cosmis_file(self, cosmis_filename: str) -> Tuple[pd.DataFrame, float, float, float]:
+    @staticmethod
+    def _load_one_cosmis_file(cosmis_filename: str) -> Tuple[pd.DataFrame, float, float, float]:
         """
 
         @param cosmis_filename:
@@ -760,8 +766,8 @@ class PDBMapComplex:
             '^' + spaces + int_regex +  # POS
             spaces + '([A-Z])' +  # SEQ
             spaces + float_regex +  # SCORE
-            spaces + '\[' + spaces + float_regex +  # QQ-INTERVAL_low
-            ',' + spaces + float_regex + '\]' +  # QQ-INTERVAL_high
+            spaces + '[' + spaces + float_regex +  # QQ-INTERVAL_low
+            ',' + spaces + float_regex + ']' +  # QQ-INTERVAL_high
             spaces + float_regex +  # STD
             spaces + int_regex +  # MSA
             '/100[ \n]*$'
@@ -795,14 +801,13 @@ class PDBMapComplex:
                     else:  # Parse out the components of what s likely s data line
                         m = cosmis_data_re.match(line)
                         if m:
-                            cosmis_dict = {}
-                            cosmis_dict['pos'] = int(m.group(1))
-                            cosmis_dict['seq'] = str(m.group(2))
-                            cosmis_dict['score'] = float(m.group(3))
-                            cosmis_dict['qq-interval_low'] = float(m.group(4))
-                            cosmis_dict['qq-interval_high'] = float(m.group(5))
-                            cosmis_dict['std'] = float(m.group(6))
-                            cosmis_dict['msa'] = int(m.group(7))
+                            cosmis_dict = {'pos': int(m.group(1)),
+                                           'seq': str(m.group(2)),
+                                           'score': float(m.group(3)),
+                                           'qq-interval_low': float(m.group(4)),
+                                           'qq-interval_high': float(m.group(5)),
+                                           'std': float(m.group(6)),
+                                           'msa': int(m.group(7))}
                             cosmis_line_list.append(cosmis_dict)
                         else:
                             m = average_re.match(line)
@@ -830,16 +835,16 @@ class PDBMapComplex:
                 # We kiad Bian Li's normalized cosmis scores (average-0, stddev=1)
                 if ensembl_transcript.id not in self.ensembl_transcript_to_cosmis:
                     cosmis_norm_rates_filename = os.path.join(PDBMapGlobals.config['cosmis_dir'],
-                                                          "%s_norm_rates.txt" % ensembl_transcript.id)
+                                                              "%s_norm_rates.txt" % ensembl_transcript.id)
                     df_cosmis_scores, cosmis_alpha_parameter, cosmis_average, cosmis_stddev = \
                         self._load_one_cosmis_file(cosmis_norm_rates_filename)
                     self.ensembl_transcript_to_cosmis[ensembl_transcript.id] = df_cosmis_scores
                     # df_cosmis_scores, cosmis_alpha_parameter, cosmis_average, cosmis_stddev
 
+                # cosmis_orig_rates_filename = os.path.join(PDBMapGlobals.config['cosmis_dir'],
+                # "%s_orig_rates.txt" % ensembl_transcript.id)
 
-                # cosmis_orig_rates_filename = os.path.join(PDBMapGlobals.config['cosmis_dir'],"%s_orig_rates.txt" % ensembl_transcript.id)
-
-    def write_cosmis_scores(self,cosmis_scores_json_filename:str):
+    def write_cosmis_scores(self, cosmis_scores_json_filename: str):
         cosmis_scores_output_dict = {}
         for chain in self.structure[0]:
             if chain.id not in self.chain_to_transcript:
@@ -853,10 +858,9 @@ class PDBMapComplex:
                 cosmis_scores_output_dict[chain.id] = df_cosmis_scores.set_index('pos').T.to_dict('dict')
                 break
         # cosmis_scores_json_filename ="cosmis_scores.json"
-        with open(cosmis_scores_json_filename,'w') as f:
+        with open(cosmis_scores_json_filename, 'w') as f:
             json.dump(cosmis_scores_output_dict, f)
         LOGGER.info("Cosmis scores written to %s", cosmis_scores_json_filename)
-
 
     # Supplement with any requested variant datasets from SQL
     # 2019 October - loop over chain_to_transcript
@@ -871,25 +875,24 @@ class PDBMapComplex:
 
         if chain_id not in self.chain_to_transcript:
             LOGGER.critical(
-                "Chain %s is not associated with any transcript ID.  Variants cannot be loaded from SQL for chain %s" % (
-                    chain_id, chain_id))
+                "Chain %s is not associated with any transcript ID.  Variants cannot be loaded from SQL for chain %s",
+                chain_id, chain_id)
             return []
 
         transcript = self.chain_to_transcript[chain_id]
 
         # Uniprot identifiers are needed to query the PDBMapProtein idmapping file
-        unps = []  # Empty list of uniprot identifiers
+        uniprot_ids = []  # Empty list of uniprot identifiers
 
         enst_transcripts = []
         if type(transcript) == PDBMapTranscriptUniprot:
-            unps = [transcript.id]
+            uniprot_ids = [transcript.id]
         elif type(transcript) == PDBMapTranscriptEnsembl:
             enst_transcripts = [transcript]
-            unps = PDBMapProtein.enst2unp(transcript.id)
-        else:
-            unps = []
+            uniprot_ids = PDBMapProtein.enst2unp(transcript.id)
 
-        for unp in unps:
+        for unp in uniprot_ids:
+            uniprot_transcript = PDBMapTranscriptUniprot(unp)
             ensemble_transcript_ids = PDBMapProtein.unp2enst(unp)
             # Let's now iterate through all the possible ENST associated with the unp
             # and bin them for exact matches
@@ -899,33 +902,13 @@ class PDBMapComplex:
 
             for ensembl_transcript_id in ensemble_transcript_ids:
                 ensembl_transcript = PDBMapTranscriptEnsembl(ensembl_transcript_id)
-                if not ensembl_transcript.aa_seq:
-                    LOGGER.warning("Ensembl transcript %s has no associated aa_seq.  Skipping" % ensembl_transcript_id)
-                    continue
-                differences, pct_different = PDBMapTranscriptBase.analyze_transcript_differences(transcript,
-                                                                                                 ensembl_transcript)
-                if differences == 0:  # Awesome - the usual case where uniprot and ENST match
-                    LOGGER.info("Ensembl transcript %s has same aa_seq as transcript %s", ensembl_transcript.id,
-                                transcript.id)
-                elif differences == 1:  # Let's not kill pathprox if only one variant between uniprot and ENST
-                    LOGGER.warning(
-                        "Transcripts vary in one position: %s" % PDBMapTranscriptBase.describe_transcript_differences(
-                            transcript, ensembl_transcript))
-                elif pct_different < 0.01:  # Similarly let Pathprox continue if we have a few variants off - but less than 1% of the sequence
-                    LOGGER.warning(
-                        "Transcripts vary in multiple positions: %s" % PDBMapTranscriptBase.describe_transcript_differences(
-                            transcript, ensembl_transcript))
-                else:
-                    termination_info = "%s and %s AA sequences differ markedly:\n%s" % (
-                        transcript.id, ensembl_transcript.id,
-                        PDBMapTranscriptBase.describe_transcript_differences(transcript, ensembl_transcript))
-                    PDBMapGlobals.exit(termination_info)
-
                 if ensembl_transcript not in enst_transcripts:
-                    enst_transcripts.append(ensembl_transcript)
+                    if PDBMapComplex.uniprot_and_ensembl_close_enough(uniprot_transcript, ensembl_transcript):
+                        enst_transcripts.append(ensembl_transcript)
 
         if not enst_transcripts:
-            LOGGER.critical("No ENSMBL transcripts were referenced to chain %s transcripts %s", chain_id, str(unps))
+            LOGGER.critical("No ENSMBL transcripts were referenced to chain %s transcripts %s",
+                            chain_id, str(uniprot_ids))
         return enst_transcripts
 
     @property
@@ -933,87 +916,86 @@ class PDBMapComplex:
         return self._label
 
     @label.setter
-    def label(self,label) ->None:
+    def label(self, label) -> None:
         self._label = label
 
-
     @property
-    def _basePDBfilename(self) -> str:
+    def _base_pdb_filename(self) -> str:
         return "%s_%s_%s" % (
             self.label, self.structure.id, 1 if self.is_biounit else 0)
 
     @property
-    def renumberedPDBfilename(self) -> str:
-        return "%s_renum.pdb" % self._basePDBfilename
+    def renumbered_pdb_filename(self) -> str:
+        return "%s_renum.pdb" % self._base_pdb_filename
 
     @property
-    def renumberedCIFfilename(self) -> str:
-        return "%s_renum.cif" % self._basePDBfilename
+    def renumbered_cif_filename(self) -> str:
+        return "%s_renum.cif" % self._base_pdb_filename
 
     @property
-    def renumberedPDBfilenameSS(self) ->str:
-        return "%s_renumSS.pdb" % self._basePDBfilename  # Renumbered + chimera HELIX/SHEET notations
+    def renumbered_pdb_filenameSS(self) -> str:
+        return "%s_renumSS.pdb" % self._base_pdb_filename  # Renumbered + chimera HELIX/SHEET notations
 
     @property
-    def renumberedCIFfilenameSS(self) ->str:
-        return "%s_renumSS.cif" % self._basePDBfilename  # Renumbered + chimera HELIX/SHEET notations
+    def renumbered_cif_filenameSS(self) -> str:
+        return "%s_renumSS.cif" % self._base_pdb_filename  # Renumbered + chimera HELIX/SHEET notations
 
     @property
-    def originalPDBfilename(self) -> str:
-        return "%s.pdb" % self._basePDBfilename
+    def original_pdb_filename(self) -> str:
+        return "%s.pdb" % self._base_pdb_filename
 
     @property
-    def originalCIFfilename(self) -> str:
-        return "%s.cif" % self._basePDBfilename
+    def original_cif_filename(self) -> str:
+        return "%s.cif" % self._base_pdb_filename
 
-    def write_renumbered(self,format: str):
-        if format == 'mmCIF':
-            LOGGER.info("Writing renumbered CIF to file %s" % self.renumberedPDBfilename)
+    def write_renumbered(self, file_format: str):
+        if file_format == 'mmCIF':
+            LOGGER.info("Writing renumbered CIF to file %s", self.renumbered_pdb_filename)
             cifio = MMCIFIO()
             cifio.set_structure(self.renumbered_structure)
-            cifio.save(self.renumberedCIFfilename)
-        elif format == 'pdb':
-            LOGGER.info("Writing renumbered PDB to file %s" % self.renumberedPDBfilename)
+            cifio.save(self.renumbered_cif_filename)
+        elif file_format == 'pdb':
+            LOGGER.info("Writing renumbered PDB to file %s", self.renumbered_pdb_filename)
             pdbio = PDBIO()
             pdbio.set_structure(self.renumbered_structure)
-            pdbio.save(self.renumberedPDBfilename)
-        elif format == 'chimera2':
+            pdbio.save(self.renumbered_pdb_filename)
+        elif file_format == 'chimera2':
             # We now have a "clean" renumbered PDB - but for improved ngl visualization, helps to
             # let chimera add some secondary structure annotation
             script_dir = "%s/bin" % os.path.dirname(os.path.abspath(sys.argv[0]))
 
             script = '"%s/writePdbWithSecondary.py %s %s"' % (
-            script_dir, self.renumberedPDBfilename, self.renumberedPDBfilenameSS)
+                script_dir, self.renumbered_pdb_filename, self.renumbered_pdb_filenameSS)
             cmd = "TEMP=$PYTHONPATH; unset PYTHONPATH; %s --nogui --silent --script %s; export PYTHONPATH=$TEMP" % (
                 PDBMapGlobals.config['chimera_headless'], script)
             # Allow Mac OSX to use the GUI window
             if platform.system() == 'Darwin':
-                cmd = "TEMP=$PYTHONPATH; unset PYTHONPATH; chimera --silent --script %s; export PYTHONPATH=$TEMP" % script
+                cmd = "TEMP=$PYTHONPATH; unset PYTHONPATH; chimera --silent --script %s; export PYTHONPATH=$TEMP" % \
+                      script
             try:
-                LOGGER.info("Running Chimera script: %s" % cmd)
+                LOGGER.info("Running Chimera script: %s", cmd)
                 # status  = os.system(cmd)
                 completed_process = sp.run(cmd, capture_output=True, shell=True, text=True)
 
                 if completed_process.stdout and len(completed_process.stdout) > 0:
-                    LOGGER.info("chimera stdout: %s" % completed_process.stdout)
+                    LOGGER.info("chimera stdout: %s", completed_process.stdout)
                 if completed_process.stderr and len(completed_process.stderr) > 0:
-                    LOGGER.info("chimera stderr: %s" % str(completed_process.stderr))
+                    LOGGER.info("chimera stderr: %s", str(completed_process.stderr))
                 if completed_process.returncode != 0:
                     raise Exception("Chimera process returned non-zero exit status.")
             except Exception as e:
                 LOGGER.exception("Chimera failed")
                 raise
         else:
-            PDBMapGlobals.exit("write_renumbered format=%s unrecognized" % format)
+            PDBMapGlobals.exit("write_renumbered format=%s unrecognized" % file_format)
 
-
-    def write_original(self,format = 'mmCIF') ->None:
-        assert format == 'mmCIF', "Only mmCIF supported for write_original at the moment"
+    def write_original(self, file_format='mmCIF') -> None:
+        assert file_format == 'mmCIF', "Only mmCIF supported for write_original at the moment"
         #
         # Write the original structure to the output directory
         #
-        LOGGER.info("Writing original structure to file %s" % self.originalCIFfilename)
+        LOGGER.info("Writing original structure to file %s", self.original_cif_filename)
         cifio = MMCIFIO()
 
         cifio.set_structure(self.structure)
-        cifio.save(self.originalCIFfilename)
+        cifio.save(self.original_cif_filename)
