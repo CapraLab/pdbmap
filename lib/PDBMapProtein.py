@@ -2,12 +2,12 @@
 #
 # Project        : PDBMap
 # Filename       : PDBMapProtein.py
-# Author         : R. Michael Sivley
+# Author         : Chris Moth (2017-2022) and R. Michael Sivley before that
 # Organization   : Center for Human Genetics Research,
 #                : Department of Biomedical Informatics,
 #                : Vanderbilt University Medical Center
-# Email          : mike.sivley@vanderbilt.edu
-# Date           : 2014-02-27
+# Email          : chris.moth@vanderbilt.edu
+# Date           : 2022-08-25
 # Description    : Provides protein-related utilities, primarily external
 #                : database ID matching to UniProt IDs. At this time, the
 #                : class only provides services, and should not be
@@ -15,14 +15,25 @@
 # =============================================================================#
 
 # See main check for cmd line parsing
-import sys, csv, gzip
-from collections import defaultdict
+import sys
+import csv
+import gzip
+from typing import Dict, List, Union
 import logging
 
 LOGGER = logging.getLogger(__name__)
 
 
-class PDBMapProtein():
+class PDBMapProtein:
+    """
+    Loads the tab-delimited HUMAN_9606_idmapping_sprot.dat.gz file from the filesystem and provides a set of
+    class member functions (not object instance functions!) to cross-reference between different types of
+    identifiers associated with proteins and transcripts.
+
+    HUMAN_9606_idmapping_sprot.dat.gz is prepared by the DOWNLOAD_uniprot.bash script found in the
+    pipeline_download_scripts/ repo at the GitHub site.
+    """
+
     # _sec2prim is initialized from an entirely different file
     # uniprot_sec2prim_ac.txt which is a simple 2 column format
     # derived from Uniprot's source sec_ac.txt file
@@ -32,290 +43,475 @@ class PDBMapProtein():
     # map to non isoform unps
     _sec2prim = {}  # Each retired/secondary Uniprot AC maps to a single current Uniprot AC
 
-    # A myriad of dictionaries are initialized from parsing of Uniprot's
-    # 3 column HUMAN_9606_idmapping.dat file
-    _unp2uniprotKB = defaultdict(lambda: None)  # If we know _anything_ about any Uniprot AC, we know it's KB identifier
+    # These dictionaries of dictionaries map between uniprot IDs in column 1
+    # and IDs of type 'UD_type' in column 3.
+    # For example, to find all the ENST000 Ensembl transcript IDs mapped to uniprot ID 'ABC123', you would look
+    # at the list returned by:
+    # _uniprot_to_ID['ABC123']['Ensembl_TRS']  To find the uniprot ID associated with an ENST000 Ensembl transcript
+    # you would retrieve a matching list of uniprot IDs with:   _ID_to_uniprot['Ensembl_TRS']['ENST00000390362']
+    # There are many type of cross-references in the ID mapping file
+    # On initial load, we skip anywhere column 2 is not in this set here
+    ID_TYPES_OF_INTEREST = {
+        "UniProtKB-ID",
+        "UniParc",
+        "Gene_Name",  # One uniprot canonical ID may have multiple Gene_Name entries, but usually only 1
+        "GeneID",
+        "Ensembl_TRS",
+        "Ensembl_PRO",
+        "PDB",
+        "RefSeq",
+        "RefSeq_NT"
+    }
 
-    _unp2uniparc = defaultdict(
-        lambda: None)  # A UniParc AC may map to one UniParc, which can help us determine caonical/non-canonical
-    _uniparc2unp = defaultdict(
-        lambda: [])  # Given a UniParc , it is likely to reference both canonical and non-canonical Uniprot AC
+    _uniprot_to_ID: Dict[str, Dict[str, list[str]]] = {}
 
-    _refseqNP2unp = defaultdict(lambda: [])  # NP_nnnn refseq identifiers
-    _unp2refseqNP = defaultdict(lambda: [])  # NP_nnnn refseq identifiers
+    # Initialize the reverse lookups with empty entries for the ID_TYPES_OF_INTEREST
+    _ID_to_uniprot: Dict[str, Dict[str, list[str]]] = {
+        id_type: {} for id_type in ID_TYPES_OF_INTEREST
+    }
 
-    _refseqNT2unp = defaultdict(lambda: [])  # NT_nnnn refseq identifiers
-    _unp2refseqNT = defaultdict(lambda: [])  # NT_nnnn refseq identifiers
+    # I also need a dictionary to deal with user-supplied ENST transcript sequences
+    # which lack version numbers .N appended.  In only a very  few cases
+    # does the uniprot IDMapping file map an ENST123456 id to two IDs like
+    # ENST123456,2  and ENST124356.3
+    _unversioned_ensembl_ID_to_versioned_ensembl_ID: Dict[str, str] = {}
 
-    _unp2pdb = defaultdict(lambda: [])
-    _pdb2unp = defaultdict(lambda: [])
+    # Refseq IDs can have .N suffixes, with the same challenges
+    # as ensembl IDs
 
-    # In the case of uniprot AC isoforms (dash in uniprot AC)
-    # We add the Ensembl_TRS and Ensembl_PRO entries to the dictionary
-    # for BOTH the isoform uniprot AC and the base (dash-stripped) uniprot AC
-    # because some callers of PDBMapProtein do not know the isoform of interest
-    _unp2ensp = defaultdict(lambda: [])  # Ensembl_PRO entries for a Uniprot AC
-    _unp2enst = defaultdict(lambda: [])  # Ensembl_TRS entries for a Uniprot AC.
-    _ensp2unp = defaultdict(lambda: [])
-    _enst2unp = defaultdict(lambda: [])  #
-
-    _enst2ensp = {}  # 1:1 Map Ensembl_PRO to Ensembl_TRS
-    _ensp2enst = {}  # 1:1 Map Ensembl_TRS to Ensembl_PRO
-
-    _unp2hgnc = {}  # Each Uniprot AC may map to a single Gene Name
-    _hgnc2unp = {}  # Each Gene Name uniquely maps to a single Uniprot AC
-
-    _unp2gene_id = {}  # Each Uniprot AC may map to a gene ID # for URL
+    _unversioned_refseq_ID_to_versioned_refseq_ID: Dict[str, str] = {}
 
     def __init__(self):
         msg = "ERROR (PDBMapProtein) This class should not be instantiated."
         raise Exception(msg)
 
     @classmethod
-    def unp2uniparc(cls, unp):
+    def unp2uniparc(cls, uniprot_id: str):
         # Return UniParc associated with Uniprot AC
-        return PDBMapProtein._unp2uniparc[unp]
+        # The pre-August-2022 versions would throw KeyError if uniprot_id was missing.
+        # Here I just assert.
+        assert uniprot_id in PDBMapProtein._uniprot_to_ID, \
+            "Uniprot ID %s was not seen in the load of the idmapping file" % uniprot_id
+
+        assert 'UniParc' in PDBMapProtein._uniprot_to_ID[uniprot_id], \
+            "No UniParc cross reference was seen for uniprot id %s in the idmapping file " % uniprot_id
+
+        return PDBMapProtein._uniprot_to_ID[uniprot_id]['UniParc']
 
     @classmethod
-    def isCanonicalByUniparc(cls, unp):
-        split_unp = unp.split('-')
+    def isCanonicalByUniparc(cls, uniprot_id: str):
+        split_unp = uniprot_id.split('-')
         # unps without dashes are always canonical
         if len(split_unp) == 1:
             return True
         base_unp = split_unp[0]
         # If we lack a uniparc entry, then we can't claim canonical
-        if not PDBMapProtein._unp2uniparc[unp]:
-            return False
-        return PDBMapProtein._unp2uniparc[unp] == PDBMapProtein._unp2uniparc[base_unp]
+        # if not PDBMapProtein.unp2uniparc(unp):
+        #    return False
+
+        return PDBMapProtein.unp2uniparc(uniprot_id) == PDBMapProtein.unp2uniparc(base_unp)
 
     @classmethod
     def all_unps(cls):
-        for unp in PDBMapProtein._unp2uniprotKB:
+        for unp in PDBMapProtein._uniprot_to_ID.keys():
             yield unp
 
     @classmethod
-    def best_unp(cls, unp):
-        if not unp:  # We cannot improve on a unp if it's None
-            return unp
-        if '-' in unp:  # If we already have a full '-' isoform, go with that
-            return unp
+    def best_unp(cls, uniprot_id: str) -> str:
+        """
+        Return an isoform-specific uniprot ID if one exists for a given uniprot ID
 
-        unpbase = unp
+        Typical usage: Given uniprot ID 124356, return 124356-7 if that isoform specific, suffixed, ID has the
+        same aminio acid sequence.  'samesness' is determined if both uniprot IDs have the same UniParc sequence IDs
+
+        @param uniprot_id:  A uniprot ID.  Typically lacking an isoform specific -N suffix.
+        @return: The isoform-specific uniprot_id with same Amino Acid sequence as the provided uniprot_id
+        """
+
+        # Caller has goofed if they sent us a None
+        assert uniprot_id is not None
+
+        if '-' in uniprot_id:  # If we already have a full '-' isoform specific uniprot ID, we cannot improve that
+            return uniprot_id
 
         # If we can identify a canonical full unp isoform with dash return that
-        uniparc = PDBMapProtein._unp2uniparc[unpbase]
-        if not uniparc:  # If no uniparc ID for this unp, then we really are stuck
-            return unpbase
-        unps = PDBMapProtein._uniparc2unp[uniparc]
-        if len(unps) == 0:  # Go with what we've got
-            return unpbase
-        for unp in unps:
-            if '-' in unp:  # Great - you found a full isoform with dash for the base isoform
-                return unp
+        uniparc_id_for_base_uniprot_id = PDBMapProtein.unp2uniparc(uniprot_id)[0]
+        assert uniparc_id_for_base_uniprot_id
 
-        return unpbase
+        # Given a uniparc ID, we now grab all the renated uniprot IDs
+        # If there is an isoform-specific uniprot ID that matches the Uniparc ID of the uniprot_id
+        # then _that_ one (with the dash) is the "best" one
+        all_uniprot_ids_for_uniparc = PDBMapProtein._ID_to_uniprot['UniParc'].get(uniparc_id_for_base_uniprot_id, [])
+
+        assert len(all_uniprot_ids_for_uniparc) > 0  # Total fail if the reverse cross-reference is missing somehow
+
+        for possible_isoform_specific_uniprot_id in all_uniprot_ids_for_uniparc:
+            if '-' in possible_isoform_specific_uniprot_id:  # Success: full isoform with dash for the base isoform
+                return possible_isoform_specific_uniprot_id
+
+        return uniprot_id
 
     @classmethod
-    def refseqNT2unp(cls, refseqNT):
-        # Return UniProt IDs associated with RefSeqNT transcript
-        if refseqNT in PDBMapProtein._refseqNT2unp:
-            return [PDBMapProtein.best_unp(unp) for unp in PDBMapProtein._refseqNT2unp[refseqNT]]
-        # If the refseqNT has a .N version number at the end, then try a versionless refseq to get final result
-        version_location = refseqNT.find('.')
+    def best_unps(cls, uniprot_ids: List[str]) -> List[str]:
+        return [PDBMapProtein.best_unp(uniprot_id) for uniprot_id in uniprot_ids]
+
+    @classmethod
+    def _refseq_id_2unp(cls, refseq_id: str, idmapping_refseq_key: str) -> List[str]:
+        """
+
+        @param refseq_id:
+        @param idmapping_refseq_key:  Must be 'RefSeq_NT' or 'RefSeq_NP'
+        @return:
+        """
+
+        # Make sure that the caller knows that transcript and protein keys are all that is allowed from
+        # source column 2 for this query.
+        assert idmapping_refseq_key in ['RefSeq_NT', 'RefSeq']
+        # Return UniProt IDs associated with a refseq ID transcript
+
+        # If this refseq_id_ has no version number, or a version unknown to the idmaping file, then proceed
+        if refseq_id not in PDBMapProtein._ID_to_uniprot[idmapping_refseq_key]:
+            refseq_id = PDBMapProtein._unversioned_refseq_ID_to_versioned_refseq_ID[refseq_id.split('.')[0]]
+
+        if refseq_id in PDBMapProtein._ID_to_uniprot[idmapping_refseq_key]:
+            return PDBMapProtein.best_unps(
+                PDBMapProtein._ID_to_uniprot[idmapping_refseq_key].get(refseq_id, []))
+
+        # If the refseq_id_ has a .N version number at the end, then search for a versionless
+        # RefSeq ID to hopefully match to uniprot ID(s)
+        version_location = refseq_id.find('.')
         if version_location > -1:
-            return [PDBMapProtein.best_unp(unp) for unp in PDBMapProtein._refseqNT2unp[refseqNT[0:version_location]]]
+            refseq_versionless = refseq_id[0:version_location]
+            return PDBMapProtein.best_unps(
+                PDBMapProtein._ID_to_uniprot[idmapping_refseq_key].get(refseq_versionless, []))
+
         return []  # No luck - no uniprot IDs match to this refseq ID
 
     @classmethod
-    def refseqNP2unp(cls, refseqNP):
+    def refseqNT2unp(cls, refseq_transcript_id: str):
+        """
+        Return a list of uniprot IDs that cross-reference to a RefSeq ID in the IDMapping file.
+        If the refseq ID has .NN version number and that is found in idmapping, then exact uniprot ID Xrefs will be 
+        returned
+
+        If no matches are found, then the version suffix is tripped off, and the cross references is searched fr again.  
+
+        @param refseq_transcript_id: NM_1234... or XM_1234
+        @return: 
+        """
+        return PDBMapProtein._refseq_id_2unp(refseq_transcript_id, idmapping_refseq_key='RefSeq_NT')
+
+    @classmethod
+    def refseqNP2unp(cls, refseq_protein_id: str):
         # Return UniProt IDs associated with RefSeqNP protein
-        return [PDBMapProtein.best_unp(unp) for unp in PDBMapProtein._refseqNP2unp[refseqNP]]
+        return PDBMapProtein._refseq_id_2unp(refseq_protein_id, idmapping_refseq_key='RefSeq')
 
     @classmethod
-    def unp2refseqNT(cls, unp):
-        # Return RefSeq protein associatied with UniProt ID
-        return PDBMapProtein._unp2refseqNT[unp]
+    def unp2refseqNT(cls, uniprot_id: str) -> List[str]:
+        """
+        Given a uniprot ID, return the entire list of refseq transcripts cross-referenced in the uniprot file
+        We _try_ to use an isoform specific id first...because those refseq mapppings tend to be hgher quality
+        sequence matches
+
+        @param uniprot_id:
+        @return: list of refseq IDs
+        """
+        best_refseq_ids = PDBMapProtein._uniprot_to_ID.get(
+            PDBMapProtein.best_unp(uniprot_id), {}).get('RefSeq_NT', [])
+
+        # If we can't get any refseqID(s) with the passeed-in uniprot ID.
+        # But the isoform specific uniprot ID passed in is  cananonical
+        # Then, grab a refseq ID from the canonical uniprot ID (no '-')
+        # This is likely wrong - but at least you get something...
+        # The uniprot refseq mappings are very strange...
+        if not best_refseq_ids and '-' in uniprot_id and PDBMapProtein.isCanonicalByUniparc(uniprot_id):
+            best_refseq_ids = PDBMapProtein._uniprot_to_ID.get(
+                uniprot_id[0:6], {}).get('RefSeq_NT', [])
+
+        # We want an XM_ to sort to the end if there are multiples
+        # This could easily be an empty list we are returning.
+        best_refseq_ids.sort()
+        return best_refseq_ids
 
     @classmethod
-    def unp2refseqNP(cls, unp):
-        # Return RefSeq protein associatied with UniProt ID
-        return PDBMapProtein._unp2refseqNP[unp]
+    def unp2refseqNP(cls, uniprot_id: str) -> List[str]:
+        """
+        Given a uniprot ID, return the entire list of refseq proteins cross-referenced in the uniprot file
+        We _try_ to use an isoform specific id first...because those refseq mapppings tend to be hgher quality
+        sequence matches
+
+        @param uniprot_id:
+        @return: list of refseq IDs
+        """
+        best_refseq_ids = PDBMapProtein._uniprot_to_ID.get(
+            PDBMapProtein.best_unp(uniprot_id), {}).get('RefSeq', [])
+
+        # We want an XM_ to sort to the end if there are multiples
+        # This could easily be an empty list we are returning.
+        best_refseq_ids.sort()
+        return best_refseq_ids
 
     @classmethod
-    def unp2uniprotKB(cls, unp):
+    def unp2uniprotKB(cls, uniprot_id: str):
         # Return  the UNIPROTKB entry for this protein RefSeq protein associatied with UniProt ID
-        return PDBMapProtein._unp2uniprotKB[unp]
+        uniprot_knowledgebase_id_list = PDBMapProtein._uniprot_to_ID.get(uniprot_id, {}).get('UniProtKB-ID', [])
+        return uniprot_knowledgebase_id_list[0] if uniprot_knowledgebase_id_list else ''
 
     @classmethod
-    def unp2enst(cls, unp):
+    def unp2enst(cls, uniprot_id: str):
         # Return Ensembl Transcript IDs associated with UniProt ID
-        ensembl_transcripts = PDBMapProtein._unp2enst.get(unp, [])
+        ensembl_transcripts = PDBMapProtein._uniprot_to_ID.get(uniprot_id, {}).get('Ensembl_TRS', [])
 
-        # If - in unp name it is canonical, append new canonical ENST Transcript IDs
-        if '-' in unp:
-            if PDBMapProtein.isCanonicalByUniparc(unp):
-                additional_transcripts = PDBMapProtein._unp2enst.get(unp.split('-')[0], [])
-                for t in additional_transcripts:
-                    if not t in ensembl_transcripts:
-                        ensembl_transcripts.append(t)
+        # If - in unp name it is isform specific, If also canonical, append  canonical ENST Transcript ID from base
+        # uniprot ID
+        additional_uniprot_id_to_mine = None
+
+        if '-' in uniprot_id:
+            if PDBMapProtein.isCanonicalByUniparc(uniprot_id):
+                additional_uniprot_id_to_mine = uniprot_id.split('-')[0]
         else:  # If a base unp is given, then see add transcripts associated wtih canonical unp
-            unp_canonical_isoform = PDBMapProtein.best_unp(unp)
+            unp_canonical_isoform = PDBMapProtein.best_unp(uniprot_id)
             if '-' in unp_canonical_isoform:
-                additional_transcripts = PDBMapProtein._unp2enst.get(unp_canonical_isoform, [])
-                for t in additional_transcripts:
-                    if not t in ensembl_transcripts:
-                        ensembl_transcripts.append(t)
+                additional_uniprot_id_to_mine = unp_canonical_isoform
 
-        if ensembl_transcripts:
-            return ensembl_transcripts
-        # import pdb; pdb.set_trace()
+        if additional_uniprot_id_to_mine:
+            additional_transcripts = PDBMapProtein._uniprot_to_ID.get(
+                additional_uniprot_id_to_mine, {}).get('Ensembl_TRS', [])
+            for additional_transcript in additional_transcripts:
+                if additional_transcript not in ensembl_transcripts:
+                    ensembl_transcripts.append(additional_transcript)
+
+        # if ensembl_transcripts:
+        return ensembl_transcripts
 
         # else Could this unp be secondary somehow?
-
-        unpbase = unp.split('-')[0]
-        if unpbase in PDBMapProtein._sec2prim:
-            return PDBMapProtein._unp2enst.get(PDBMapProtein._sec2prim[unpbase], [])
-
-        return []
+        # 2022-August-29  Chris Moth removed all secondary uniprot untangling
+        # unpbase = unp.split('-')[0]
+        # if unpbase in PDBMapProtein._sec2prim:
+        #    return PDBMapProtein._unp2enst.get(PDBMapProtein._sec2prim[unpbase], [])
+        #
+        # return []
 
     @classmethod
-    def unp2hgnc(cls, unp):
+    def unp2hgnc(cls, uniprot_id: str) -> Union[str, None]:
         # Return HGNC gene name associated with UniProt ID
-        # import pdb; pdb.set_trace()
         # For this lookup, always truncate off isoform information
-        unpbase = unp.split('-')[0]
-        if unpbase in PDBMapProtein._unp2hgnc:
-            return PDBMapProtein._unp2hgnc[unpbase]
-        if unpbase in PDBMapProtein._sec2prim:
-            if PDBMapProtein._sec2prim[unpbase] in PDBMapProtein._unp2hgnc:
-                return PDBMapProtein._unp2hgnc[PDBMapProtein._sec2prim[unpbase]]
-        LOGGER.warn("unp of %s not found in PDBMapProtein._unp2hgnc or _sec2prim\n" % unpbase)
-        return None
+        uniprot_id_base = uniprot_id.split('-')[0]
+        gene_name_list = PDBMapProtein._uniprot_to_ID.get(uniprot_id_base, {}).get('Gene_Name', [])
+        return gene_name_list[0] if gene_name_list else None
+        # Removing all secondary references
+        # if unpbase in PDBMapProtein._sec2prim:
+        #     if PDBMapProtein._sec2prim[unpbase] in PDBMapProtein._unp2hgnc:
+        #        return PDBMapProtein._unp2hgnc[PDBMapProtein._sec2prim[unpbase]]
+        # LOGGER.warning("unp of %s not found in PDBMapProtein._unp2hgnc or _sec2prim\n" % unpbase)
+        # return None
 
     @classmethod
-    def hgnc2unp(cls, hgnc):
+    def hgnc2unp(cls, gene_name: str) -> Union[List[str], None]:
+        """
+        @param gene_name: Example KCNC1
+        @return: a corresponding List[] of uniprot identiferss, usually with only one element,
+                 with isoform appended if possible.  Example for PCNC1: ['P48547-1']
+        """
         # Uniprot identifier for a HGNC gene name
-        unpbase = PDBMapProtein._hgnc2unp[hgnc]
+        #
+        uniprot_id_list = PDBMapProtein._ID_to_uniprot['Gene_Name'].get(gene_name, [])
 
-        return PDBMapProtein.best_unp(unpbase)
+        return PDBMapProtein.best_unp(uniprot_id_list[0]) if uniprot_id_list else None
 
     @classmethod
-    def unp2gene_id(cls, unp):
+    def unp2gene_id(cls, uniprot_id: str) -> int:
         # Return the gene ID number from the IDMapping File
         # This is useful for forming direct-access gene
         # information URLs
         # For this lookup, always truncate off isoform information
-        unpbase = unp.split('-')[0]
-        if unpbase in PDBMapProtein._unp2gene_id:
-            return PDBMapProtein._unp2gene_id[unpbase]
-        LOGGER.warn("unp of %s not found in PDBMapProtein._unp2gene_id\n" % unpbase)
-        return None
+        uniprot_id_base = uniprot_id.split('-')[0]
+        gene_id_list = PDBMapProtein._uniprot_to_ID.get(uniprot_id_base, {}).get('GeneID', [])
+        if gene_id_list:
+            return int(gene_id_list[0])
+        LOGGER.warning("unp of %s not found in PDBMapProtein._unp2gene_id\n" % uniprot_id_base)
+        return 0  # No gene ID found
 
     @classmethod
-    def gene2gene_id(cls, gene):
+    def gene2gene_id(cls, gene_name: str) -> Union[int, None]:
         # Return the gene ID number from the IDMapping File
         # This is useful for forming direct-access gene
         # information URLs
         # For this lookup, always truncate off isoform information
-        unp = PDBMapProtein._hgnc2unp[gene]
-        if unp:
-            unpbase = unp.split('-')[0]
-            if unpbase in PDBMapProtein._unp2gene_id:
-                return PDBMapProtein._unp2gene_id[unpbase]
-            else:
-                LOGGER.warn("unp of %s not found in PDBMapProtein._unp2gene_id\n" % unpbase)
+        uniprot_id = PDBMapProtein._ID_to_uniprot.get('Gene_Name', {}).get(gene_name, [])
+        if uniprot_id:
+            uniprot_id_base = uniprot_id[0].split('-')[0]
+            return PDBMapProtein.unp2gene_id(uniprot_id_base)
         else:
-            LOGGER.warn("gene %s not found in PDBMapProtein._hgnc2unp\n" % unpbase)
+            LOGGER.warning("gene_name %s not found in IDMapping file", gene_name)
         return None
 
     @classmethod
-    def unp2ensp(cls, unp):
-        # Return Ensembl Protein ID associated with UniProt ID
-        ensembl_proteins = PDBMapProtein._unp2ensp.get(unp, [])
+    def unp2ensp(cls, uniprot_id: str):
+        # Return Ensembl Transcript IDs associated with UniProt ID
+        ensembl_proteins = PDBMapProtein._uniprot_to_ID.get(uniprot_id, {}).get('Ensembl_PRO', [])
 
-        # If - in unp name it is canonical, attend new canonical ENST Transcript IDs
-        if '-' in unp:
-            if PDBMapProtein.isCanonicalByUniparc(unp):
-                additional_proteins = PDBMapProtein._unp2ensp.get(unp.split('-')[0], [])
-                for t in additional_proteins:
-                    if not t in ensembl_proteins:
-                        ensembl_proteins.append(t)
+        # If - in unp name it is isform specific, If also canonical, append  canonical ENST Transcript ID from base
+        # uniprot ID
+        additional_uniprot_id_to_mine = None
+        if '-' in uniprot_id:
+            if PDBMapProtein.isCanonicalByUniparc(uniprot_id):
+                additional_uniprot_id_to_mine = uniprot_id.split('-')[0]
         else:  # If a base unp is given, then see add proteins associated wtih canonical unp
-            unp_canonical_isoform = PDBMapProtein.best_unp(unp)
+            unp_canonical_isoform = PDBMapProtein.best_unp(uniprot_id)
             if '-' in unp_canonical_isoform:
-                additional_proteins = PDBMapProtein._unp2ensp.get(unp_canonical_isoform, [])
-                for t in additional_proteins:
-                    if not t in ensembl_proteins:
-                        ensembl_proteins.append(t)
+                additional_uniprot_id_to_mine = unp_canonical_isoform
 
-        if ensembl_proteins:
-            return ensembl_proteins
+        if additional_uniprot_id_to_mine:
+            additional_proteins = PDBMapProtein._uniprot_to_ID.get(
+                additional_uniprot_id_to_mine, {}).get('Ensembl_PRO', [])
+            for additional_protein in additional_proteins:
+                if additional_protein not in ensembl_proteins:
+                    ensembl_proteins.append(additional_protein)
 
-        unpbase = unp.split('-')[0]
-        if unpbase in PDBMapProtein._sec2prim:
-            return PDBMapProtein._unp2ensp.get(PDBMapProtein._sec2prim[unpbase], [])
-        return []
-
-    @classmethod
-    def ensp2unp(cls, ensp):
-        # Return UniProt ID associated with Ensembl Protein ID
-        return [PDBMapProtein.best_unp(unp) for unp in PDBMapProtein._ensp2unp[ensp]]
+        # if ensembl_proteins:
+        return ensembl_proteins
 
     @classmethod
-    def enst2ensp(cls, enst):
-        # Return Ensembl Protein ID associated with Ensembl Transcript ID
-        return PDBMapProtein._enst2ensp.get(enst, '')
+    def versioned_ensembl_transcript(cls, ensembl_transcript_or_protein_id: str) -> str:
+        """
+        Given an ensembl ID without a version suffix, such as:
+        ENST00000646695
+        _IF_ this ID is mentioned in the uniprot IDmapping file, then return the same ID
+        but with the version appended as in ENST00000646695.2
+
+        @param ensembl_transcript_or_protein_id: An ensembl transcript or protein identifier
+        @return: the same identifier, but with a suffix added if known to the uniprot idmapping file
+        """
+
+        if ensembl_transcript_or_protein_id in PDBMapProtein._unversioned_ensembl_ID_to_versioned_ensembl_ID:
+            return PDBMapProtein._unversioned_ensembl_ID_to_versioned_ensembl_ID[ensembl_transcript_or_protein_id]
+        else:
+            return ensembl_transcript_or_protein_id
 
     @classmethod
-    def enst2unp(cls, enst):
-        # Return Ensembl Protein ID associated with Ensembl Transcript ID
-        return PDBMapProtein._enst2unp.get(enst, '')
+    def ensp2unp(cls, ensembl_transcript_id: str) -> List[str]:
+        """
+        Return the uniprot ID(s) cross-referenced to an ensembl transcript ID
+        Versionless ensembl transcript IDs (lacking a .N suffix) will be converted
+        to versioned.
+
+        @param ensembl_transcript_id: ENST0000124356 etc or with .N suffix
+        @return: The cross-referenced uniprot IDs, isoform-specific when available
+                 It should never happen that the list has more than one element
+                 But often, an empty list is returned
+        """
+        if '.' not in ensembl_transcript_id:
+            # We must try to "up convert" the versionless ensembl ID to a versioned ID
+            # because only versioned Ensembl IDs are in the uniprot IDMapping files
+            # Yet we encountered non-versioned ENST0000124356 identifiers often in the pipeline
+            # HOWEVER, there are a very few cases where non-versioned ENST transcript IDs are
+            # in the Idmapping file
+            if ensembl_transcript_id in PDBMapProtein._unversioned_ensembl_ID_to_versioned_ensembl_ID:
+                ensembl_transcript_id = PDBMapProtein._unversioned_ensembl_ID_to_versioned_ensembl_ID[
+                    ensembl_transcript_id
+                ]
+
+            # At this point, ensembl_transcript_id is most likely "versioned" but that does not mean
+            # we have a cross-reference for it in the IdMapping file
+            return PDBMapProtein.best_unps(
+                PDBMapProtein._ID_to_uniprot['Ensembl_TRS'].get(ensembl_transcript_id, []))
 
     @classmethod
-    def unp2pdb(cls, unp):
-        # Return Protein Data Bank ID associated with UniProt ID
-        # PDBs never have transcript identifiers in their depositions
-        # So use base_unp.
+    def enst2unp(cls, ensembl_protein_id: str) -> List[str]:
+        """
+        Return the uniprot ID(s) cross-referenced to an ensembl protein ID
+        Versionless ensembl protein IDs (lacking a .N suffix) will be converted
+        to versioned.
 
-        pdbs = PDBMapProtein._unp2pdb[unp]
-        if (not pdbs):
-            base_unp = unp.split('-')[0]
-            pdbs = PDBMapProtein._unp2pdb[base_unp]
+        @param ensembl_protein_id: ENST0000124356 etc or with .N suffix
+        @return: The cross-referenced uniprot IDs, isoform-specific when available
+                 It should never happen that the list has more than one element
+                 But often, an empty list is returned
+        """
+        if '.' not in ensembl_protein_id:
+            # We must try to "up convert" the versionless ensembl ID to a versioned ID
+            # because only versioned Ensembl IDs are in the uniprot IDMapping files
+            # Yet we encountered non-versioned ENST0000124356 identifiers often in the pipeline
+            # HOWEVER, there are a very few cases where non-versioned ENST protein IDs are
+            # in the Idmapping file
+            if ensembl_protein_id in PDBMapProtein._unversioned_ensembl_ID_to_versioned_ensembl_ID:
+                ensembl_protein_id = PDBMapProtein._unversioned_ensembl_ID_to_versioned_ensembl_ID[
+                    ensembl_protein_id
+                ]
 
+        # At this point, ensembl_protein_id is most likely "versioned" but that does not mean
+        # we have a cross-reference for it in
+        return PDBMapProtein.best_unps(
+            PDBMapProtein._ID_to_uniprot['Ensembl_TRS'].get(ensembl_protein_id, []))
+
+    @classmethod
+    def unp2pdb(cls, uniprot_id: str):
+        """
+        Return Protein Data Bank ID associated with UniProt ID
+        PDBs never have transcript identifiers in their depositions
+        So we tend to find PDB lists from the canonical uniprot ID.
+
+        @param uniprot_id:
+        @return:
+        """
+
+        pdb_list = PDBMapProtein._uniprot_to_ID.get(uniprot_id, {}).get('PDB', [])
+        if not pdb_list:
+            base_unp = uniprot_id.split('-')[0]
+            pdb_list = PDBMapProtein._uniprot_to_ID.get(base_unp, {}).get('PDB', [])
+
+        # Chris Moth notes that on 2022-August the sec2prim seems hopelessly broken
+        # We need to look at it again - but uniprot seems to not keep t going.
+        # For PDB list, we probably should go directly to SIFTS API.
         # If still no joy - try to get a pdb based on a retired UniProt ID
         # (RCSB does NOT update .pdbs as uniprot IDentifiers change)
-        if not pdbs:
-            currentUnp = PDBMapProtein._sec2prim.get(base_unp, None)
-            if currentUnp:
-                pdbs = PDBMapProtein._unp2pdb[currentUnp]
+        # if not pdbs:
+        #    currentUnp = PDBMapProtein._sec2prim.get(base_unp, None)
+        #    if currentUnp:
+        #        pdbs = PDBMapProtein._unp2pdb[currentUnp]
 
-        return pdbs
+        return pdb_list
 
     @classmethod
     def isunp(cls, unp):
         # Return True if the provided ID is a UNP ID
-        return unp in PDBMapProtein._unp2hgnc \
-               or unp in PDBMapProtein._sec2prim
+        return unp in PDBMapProtein._uniprot_to_ID
+        #
+        # 2022-08-30 - Chris Moth, again, removing all these secondary uniprot ID lookups
+        # or unp in PDBMapProtein._sec2prim
 
     @classmethod
-    def ishgnc(cls, hgncid):
-        # Return True if the provided ID is an HGNC ID
-        return hgncid in PDBMapProtein._hgnc2unp
+    def ishgnc(cls, gene_name):
+        # Return True if the provided ID is a known gene name
+        return bool(PDBMapProtein._ID_to_uniprot.get('Gene_Name', {}).get(gene_name, []))
 
     @classmethod
-    def load_idmapping(cls, idmapping_fname):
-        baseMappingFileName = "HUMAN_9606_idmapping_sprot.dat.gz"
-        if not baseMappingFileName in idmapping_fname:
-            LOGGER.critical("idmapping_fname %s does not include: %s" % (idmapping_fname, baseMappingFileName));
+    def load_idmapping(cls, id_mapping_file_name: str) -> None:
+        # We check that ONLY our special HUMAN uniprot idmapping file
+        # is included.  This is the special, swiss-curated-only file
+        # that we made from the DOWNLOAD_uniprot.bash script
+        #
+        human_id_mapping_swiss_curated_filename = "HUMAN_9606_idmapping_sprot.dat.gz"
+        if human_id_mapping_swiss_curated_filename not in id_mapping_file_name:
+            LOGGER.critical("id_mapping_file_name %s does not include: %s",
+                            id_mapping_file_name, human_id_mapping_swiss_curated_filename)
             sys.exit()
 
-        LOGGER.info("Opening idmapping file: %s", idmapping_fname)
+        LOGGER.info("Opening idmapping file: %s", id_mapping_file_name)
         # Load UniProt crossreferences, keyed on UniProt
-        with gzip.open(idmapping_fname, 'rt', encoding='ascii') as fin:
+        # I adopt the column header names
+        # 'unp', 'ID_type', and 'ID' because these are used in
+        _unp: str
+        _id_type: str
+        _id: str
+        # our SQL load of the IDMapping file triples
+        with gzip.open(id_mapping_file_name, 'rt', encoding='ascii') as fin:
             reader = csv.reader(fin, delimiter='\t')
             # Parse the comprehensive UniProt ID mapping resource
             # and extract all necessary information from the 3 columns
-            for unp, db, dbid in reader:
+            for _unp, _id_type, _id in reader:
+                """
                 # Extract the UniProt isoform identifier (unpN), if present
                 unpN = None
                 if '-' in unp:
@@ -325,6 +521,7 @@ class PDBMapProtein():
                 else:
                     # Proteins with a single (thus canonical) isoform have no identifier
                     unpBest = unp
+                """
                 # This is necessary to avoid an unnecessary GRCh37/GRCh38 version mismatch
                 # e.g. Some canonical isoforms in UniProt map to transcripts that only exist
                 # in GRCh38. However, -002+ isoforms sometimes match previous transcripts
@@ -335,82 +532,86 @@ class PDBMapProtein():
                 # # Only record EnsEMBL transcripts/proteins matching the UniProt canonical isoform
                 # if iso != "1":
                 #   continue
-                if db == "UniProtKB-ID":
-                    PDBMapProtein._unp2uniprotKB[unp] = dbid
-                if db == "UniParc":
-                    PDBMapProtein._unp2uniparc[unpBest] = dbid
-                    PDBMapProtein._uniparc2unp[dbid].append(unpBest)
-                elif db == "Gene_Name":
-                    hgnc = dbid  # for clarity
-                    PDBMapProtein._unp2hgnc[unp] = hgnc
-                    PDBMapProtein._hgnc2unp[hgnc] = unp
-                elif db == "GeneID":
-                    gene_id = dbid  # for clarity
-                    PDBMapProtein._unp2gene_id[unp] = gene_id
-                elif db == "Ensembl_TRS":
-                    enst = dbid  # save for re-use on following Ensembl_PRO line read
-                    if unpN:
-                        PDBMapProtein._unp2enst[unpN].append(enst)
-                        PDBMapProtein._enst2unp[enst].append(unpN)
-                    else:
-                        PDBMapProtein._unp2enst[unp].append(enst)
-                        PDBMapProtein._enst2unp[enst].append(unp)
-                    # Each Ensembl_TRS is entry is immediately followed by its corresponding ENSP (Ensembl_PRO)
-                elif db == "Ensembl_PRO":
-                    ensp = dbid  # for clarity
-                    if unpN:
-                        PDBMapProtein._unp2ensp[unpN].append(ensp)
-                        PDBMapProtein._ensp2unp[ensp].append(unpN)
-                    else:
-                        PDBMapProtein._unp2ensp[unp].append(ensp)
-                        PDBMapProtein._ensp2unp[ensp].append(unp)
-                    # Each Ensembl_TRS is entry is immediately followed by its corresponding ENSP (Ensembl_PRO)
-                    # This entry was immediately preceded by its corresponding ENST which set enst
-                    PDBMapProtein._ensp2enst[ensp] = enst
-                    PDBMapProtein._enst2ensp[enst] = ensp
-                elif db == "PDB":
-                    pdb = dbid  # for clarity
-                    PDBMapProtein._unp2pdb[unp].append(pdb)
-                    PDBMapProtein._pdb2unp[pdb].append(unp)
-                elif db == "RefSeq":  # This is a mapping of NP_... refseq protein to uniprot
-                    refseqNP = dbid  # for clarity
-                    PDBMapProtein._unp2refseqNP[unpBest].append(refseqNP)
-                    PDBMapProtein._refseqNP2unp[refseqNP].append(unpBest)
-                    refseqNP_split = refseqNP.split('.')
-                    if (len(refseqNP_split) > 1):  # Then this refseqNP was versioned - add unversioned
-                        PDBMapProtein._unp2refseqNP[unpBest].append(refseqNP_split[0])
-                        PDBMapProtein._refseqNP2unp[refseqNP_split[0]].append(unpBest)
-                elif db == "RefSeq_NT":  # Mapping of refseq NT_... transcript to uniprot
-                    refseqNT = dbid  # for clarity
-                    PDBMapProtein._unp2refseqNT[unpBest].append(refseqNT)
-                    PDBMapProtein._refseqNT2unp[refseqNT].append(unpBest)
-                    refseqNT_split = refseqNT.split('.')
-                    if (len(refseqNT_split) > 1):  # Then this refseqNT was versioned - add unversioned
-                        PDBMapProtein._unp2refseqNT[unpBest].append(refseqNT_split[0])
-                        PDBMapProtein._refseqNT2unp[refseqNT_split[0]].append(unpBest)
 
-                # There are MANY other db values in the file we are parsing
-                # However, those are ignored for our purposes
-        LOGGER.info("Cross-references for %d human genes loaded into RAM" % len(PDBMapProtein._hgnc2unp))
+                # RESUME WORKING HERE
+                if _id_type in PDBMapProtein.ID_TYPES_OF_INTEREST:
+                    if _unp not in PDBMapProtein._uniprot_to_ID:
+                        PDBMapProtein._uniprot_to_ID[_unp] = {}
+                    _ids_list = PDBMapProtein._uniprot_to_ID[_unp].get(_id_type, [])
+                    _ids_list.append(_id)
+                    PDBMapProtein._uniprot_to_ID[_unp][_id_type] = _ids_list
+
+                    _uniprot_id_list = PDBMapProtein._ID_to_uniprot[_id_type].get(_id, [])
+                    _uniprot_id_list.append(_unp)
+                    PDBMapProtein._ID_to_uniprot[_id_type][_id] = _uniprot_id_list
+
+                    # In the subcase where the third column is a versioned ENSEMBL ID, we need to
+                    # additionally create a map with the unversioned ID
+                    # Note we are still in a block retaining only ID_TYPES_OF_INTEREST
+                    if _id_type.startswith('Ensembl'):
+                        _unversioned_ensembl_ID = _id.split('.')[0]  # Strip off the trailing version number
+                        _existing_versioned_ensembl_ID = PDBMapProtein.\
+                            _unversioned_ensembl_ID_to_versioned_ensembl_ID.get(
+                                _unversioned_ensembl_ID, None)
+
+                        # if we have already created a cross-ref from ENST1234 to ENST1234.9, then this is a second
+                        # and that merits a warning about the idmapping file
+                        if not _existing_versioned_ensembl_ID:
+                            PDBMapProtein._unversioned_ensembl_ID_to_versioned_ensembl_ID[
+                                _unversioned_ensembl_ID] = _id
+                        else:  # We need to crash if we see 2 different versions of ID mapping to our base ENST
+                            if _existing_versioned_ensembl_ID != _id:
+                                LOGGER.critical("Ensembl ID %s is not uniquely cross-referenced in uniprot",
+                                                _unversioned_ensembl_ID)
+                                sys.exit("Parsing halted due to ambiguous Ensembl versionless->Versioned xref")
+
+                    # In the subcase where the third column is a versioned ENSEMBL ID, we need to
+                    # additionally create a map with the unversioned ID
+                    # Note we are still in a block retaining only ID_TYPES_OF_INTEREST
+                    if _id_type.startswith('RefSeq'):
+                        _unversioned_refseq_ID = _id.split('.')[0]  # Strip off the trailing version number
+                        _existing_versioned_refseq_ID = PDBMapProtein._unversioned_refseq_ID_to_versioned_refseq_ID.get(
+                            _unversioned_refseq_ID, None)
+
+                        # if we have already created a cross-ref from ENST1234 to ENST1234.9, then this is a second
+                        # and that merits a warning about the idmapping file
+                        if not _existing_versioned_refseq_ID:
+                            PDBMapProtein._unversioned_refseq_ID_to_versioned_refseq_ID[
+                                _unversioned_refseq_ID] = _id
+                        else:  # We need to crash if we see 2 different versions of ID mapping to our base RefSeq
+                            if _existing_versioned_refseq_ID != _id:
+                                LOGGER.critical("RefSeq ID %s is not uniquely cross-referenced in uniprot",
+                                                _unversioned_refseq_ID)
+                                _id_version = int(_id.split('.')[1])
+                                _existing_version = int(_existing_versioned_refseq_ID.split('.')[1])
+                                # If we encounter NP_057260.3 after NO_057260.2, then install the larger one
+                                if _id_version > _existing_version:
+                                    PDBMapProtein._unversioned_refseq_ID_to_versioned_refseq_ID[
+                                        _unversioned_refseq_ID] = _id
+                                # sys.exit("Parsing halted due to ambiguous RefSeq versionless->Versioned xref")
+
+        LOGGER.info("Cross-references for %d uniprot IDs loaded into RAM" % len(PDBMapProtein._uniprot_to_ID))
 
     @classmethod
-    def load_sec2prim(cls, sec2prim_fname):
+    def load_sec2prim(cls, sec2prim_fname: str):
         # Method to load the UniProt secondary -> primary AC mapping
         # load_idmapping MUST be called before calling this function
-        if not PDBMapProtein._unp2enst:
+        # I believe this secondary protein ID database is not longe rused anywhere.
+        if not PDBMapProtein._uniprot_to_ID:
             raise Exception("ERROR (PDBMapProtein) load_sec2prim cannot be called before load_idmapping")
         with open(sec2prim_fname) as fin:
             reader = csv.reader(fin, delimiter='\t')
             sec2prim = {}
             for (sec, prim) in reader:
                 # Ensure that this primary AC is human and mappable
-                if prim in PDBMapProtein._unp2enst:
+                if prim in PDBMapProtein._uniprot_to_ID:
                     sec2prim[sec] = prim
         PDBMapProtein._sec2prim = sec2prim
 
     @classmethod
     def load_sprot(cls, sprot_fname):
         # Method to load all SwissProt IDs
+        # I do not believe this is used anywhere in the pipeline
         with open(sprot_fname) as fin:
             sprot = []
             unp2species = {}
@@ -432,73 +633,13 @@ class PDBMapProtein():
     @classmethod
     def check_loaded(cls):
         # Checks if external database ID mapping has been loaded
-        if not PDBMapProtein._unp2pdb or \
-                not PDBMapProtein._unp2enst or \
-                not PDBMapProtein._unp2ensp:
+        if not PDBMapProtein._uniprot_to_ID or not PDBMapProtein._ID_to_uniprot:
             msg = "ERROR (UniProt) ID Mapping must be loaded before use."
             raise Exception(msg)
         # Checks if secondary to primary UniProt ID mapping has been loaded
-        if not PDBMapProtein._sec2prim:
-            return False
-        return True
+        # Probably should remove this one.
+        return bool(PDBMapProtein._sec2prim)
 
-
-# Main check
-if __name__ == "__main__":
-    sys.stderr.write("Class definition. Should not be called from command line.\n")
-    sys.exit(1)
-
-
-    @classmethod
-    def load_sec2prim(cls, sec2prim_fname):
-        # Method to load the UniProt secondary -> primary AC mapping
-        # load_idmapping MUST be called before calling this function
-        if not PDBMapProtein._unp2enst:
-            raise Exception("ERROR (PDBMapProtein) load_sec2prim cannot be called before load_idmapping")
-        with open(sec2prim_fname) as fin:
-            reader = csv.reader(fin, delimiter='\t')
-            sec2prim = {}
-            for (sec, prim) in reader:
-                # Ensure that this primary AC is human and mappable
-                if prim in PDBMapProtein._unp2enst:
-                    sec2prim[sec] = prim
-        PDBMapProtein._sec2prim = sec2prim
-
-
-    @classmethod
-    def load_sprot(cls, sprot_fname):
-        # Method to load all SwissProt IDs
-        with open(sprot_fname) as fin:
-            sprot = []
-            unp2species = {}
-            for line in fin:
-                # Extract the field ID, always [0:2]
-                # Trim to AC list (AC field assumed)
-                row = [line[0:2], line.rstrip()[2:-1].lstrip()]
-                if row[0] == 'ID':
-                    species = row[1].split()[0].split('_')[-1]
-                elif row[0] == 'AC':
-                    ac_list = row[1].split('; ')
-                    sprot.append(ac_list[0])  # Most up to date AC
-                    for ac in ac_list:
-                        unp2species[ac] = species
-        sprot.sort()
-        PDBMapProtein.sprot = sprot
-        PDBMapProtein.unp2species = unp2species
-
-
-    @classmethod
-    def check_loaded(cls):
-        # Checks if external database ID mapping has been loaded
-        if not PDBMapProtein._unp2pdb or \
-                not PDBMapProtein._unp2enst or \
-                not PDBMapProtein._unp2ensp:
-            msg = "ERROR (UniProt) ID Mapping must be loaded before use."
-            raise Exception(msg)
-        # Checks if secondary to primary UniProt ID mapping has been loaded
-        if not PDBMapProtein._sec2prim:
-            return False
-        return True
 
 # Main check
 if __name__ == "__main__":
