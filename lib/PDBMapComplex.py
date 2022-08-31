@@ -57,7 +57,7 @@ from lib import PDB36Parser
 
 import logging
 
-from pdbmap.lib.PDBMapAlignment import sifts_best_unps
+from lib.PDBMapAlignment import sifts_best_unps
 
 LOGGER = logging.getLogger(__name__)
 
@@ -762,16 +762,17 @@ class PDBMapComplex:
         float_regex = '([-+]?[0-9]*\.?[0-9]*)'
         spaces = ' *'
         int_regex = '([0-9]*)'
-        cosmis_data_re = re.compile(
+
+        cosmis_data_regular_expression = (
             '^' + spaces + int_regex +  # POS
             spaces + '([A-Z])' +  # SEQ
             spaces + float_regex +  # SCORE
-            spaces + '[' + spaces + float_regex +  # QQ-INTERVAL_low
-            ',' + spaces + float_regex + ']' +  # QQ-INTERVAL_high
+            spaces + '\[' + spaces + float_regex +  # QQ-INTERVAL_low
+            ',' + spaces + float_regex + '\]' +  # QQ-INTERVAL_high
             spaces + float_regex +  # STD
             spaces + int_regex +  # MSA
-            '/100[ \n]*$'
-        )
+            '/100[ \n]*$')
+        cosmis_data_re = re.compile(cosmis_data_regular_expression)
 
         alpha_parameter = None
         average = None
@@ -835,7 +836,7 @@ class PDBMapComplex:
                 # We kiad Bian Li's normalized cosmis scores (average-0, stddev=1)
                 if ensembl_transcript.id not in self.ensembl_transcript_to_cosmis:
                     cosmis_norm_rates_filename = os.path.join(PDBMapGlobals.config['cosmis_dir'],
-                                                              "%s_norm_rates.txt" % ensembl_transcript.id)
+                                                              "%s_norm_rates.txt" % ensembl_transcript.id.split('.')[0])
                     df_cosmis_scores, cosmis_alpha_parameter, cosmis_average, cosmis_stddev = \
                         self._load_one_cosmis_file(cosmis_norm_rates_filename)
                     self.ensembl_transcript_to_cosmis[ensembl_transcript.id] = df_cosmis_scores
