@@ -105,7 +105,7 @@ class PDBMapComplex:
         self.transcript_to_chains = {}  # A reverse dictionary where a uniprot transcript ID maps to a list of chains
         self.chain_to_alignment = {}
         self._unp_to_ENST_transcripts = {}  # For the specific uniprot IDs in the complex, match to list of ENST
-        self.ensembl_transcript_to_cosmis: Dict[str, pd.DataFrame] = {}
+        self.ensembl_transcript_to_rate4site: Dict[str, pd.DataFrame] = {}
         self.is_biounit = False
         self.structure_type = structure_type
         self.structure_id = structure_id
@@ -751,11 +751,11 @@ class PDBMapComplex:
         return pd.DataFrame(_dataframe_rows, columns=["chain", "resid", "unp_pos", "x", "y", "z"])
 
     @staticmethod
-    def _load_one_cosmis_file(cosmis_filename: str) -> Tuple[pd.DataFrame, float, float, float]:
+    def _load_one_rate4site_file(rate4site_filename: str) -> Tuple[pd.DataFrame, float, float, float]:
         """
 
-        @param cosmis_filename:
-        @return: Dataframe of the COSMIS scores from the file,  alpha_parameter, average, stddev
+        @param rate4site_filename:
+        @return: Dataframe of the Rate4Site scores from the file,  alpha_parameter, average, stddev
         """
         # you have to see thees files - lots of COMMENTS at top, blank lines
         headers_re = re.compile('^#POS *SEQ *SCORE *QQ-INTERVAL *STD *MSA *DATA *$')
@@ -763,7 +763,7 @@ class PDBMapComplex:
         spaces = ' *'
         int_regex = '([0-9]*)'
 
-        cosmis_data_regular_expression = (
+        rate4site_data_regular_expression = (
             '^' + spaces + int_regex +  # POS
             spaces + '([A-Z])' +  # SEQ
             spaces + float_regex +  # SCORE
@@ -772,7 +772,7 @@ class PDBMapComplex:
             spaces + float_regex +  # STD
             spaces + int_regex +  # MSA
             '/100[ \n]*$')
-        cosmis_data_re = re.compile(cosmis_data_regular_expression)
+        rate4site_data_re = re.compile(rate4site_data_regular_expression)
 
         alpha_parameter = None
         average = None
@@ -782,16 +782,16 @@ class PDBMapComplex:
         average_re = re.compile('^#Average = ' + float_regex + '$')
         standard_deviation_re = re.compile('^#Standard Deviation = ' + float_regex + '$')
 
-        cosmis_line_list = []
-        LOGGER.info('Attempting load of cosmis scores from %s', cosmis_filename)
-        with open(cosmis_filename) as cosmis_f:
+        rate4site_line_list = []
+        LOGGER.info('Attempting load of rate4site scores from %s', rate4site_filename)
+        with open(rate4site_filename) as rate4site_f:
             headers_seen = False
-            for line in cosmis_f.readlines():
+            for line in rate4site_f.readlines():
                 # The data format is a bit ill-defined.  Let's not start parsing lines until we know
                 # we have mostly gone through the headers.
                 if not headers_seen:  # this is a comment in Bian's output format
                     if line.startswith('#') and headers_re.match(
-                            line):  # Then wcosmis_line_liste've match the #POS SEQ etc next-to=last header
+                            line):  # Then wrate4site_line_liste've match the #POS SEQ etc next-to=last header
                         headers_seen = True
                 else:
                     if alpha_parameter is None:
@@ -800,16 +800,16 @@ class PDBMapComplex:
                             alpha_parameter = float(m.group(1))
 
                     else:  # Parse out the components of what s likely s data line
-                        m = cosmis_data_re.match(line)
+                        m = rate4site_data_re.match(line)
                         if m:
-                            cosmis_dict = {'pos': int(m.group(1)),
+                            rate4site_dict = {'pos': int(m.group(1)),
                                            'seq': str(m.group(2)),
                                            'score': float(m.group(3)),
                                            'qq-interval_low': float(m.group(4)),
                                            'qq-interval_high': float(m.group(5)),
                                            'std': float(m.group(6)),
                                            'msa': int(m.group(7))}
-                            cosmis_line_list.append(cosmis_dict)
+                            rate4site_line_list.append(rate4site_dict)
                         else:
                             m = average_re.match(line)
                             if m:
@@ -819,49 +819,59 @@ class PDBMapComplex:
                                 if m:
                                     std = float(m.group(1))
 
-        assert alpha_parameter, "Alpha Parameter was not found in in %s" % cosmis_filename
-        assert average is not None, "Average was not found in %s" % cosmis_filename
-        assert std, "Standard Deviation was not found in %s" % cosmis_filename
-        assert len(cosmis_line_list) == cosmis_line_list[-1]['pos']
-        cosmis_df = pd.DataFrame(cosmis_line_list)
-        return cosmis_df, alpha_parameter, average, std
+        assert alpha_parameter, "Alpha Parameter was not found in in %s" % rate4site_filename
+        assert average is not None, "Average was not found in %s" % rate4site_filename
+        assert std, "Standard Deviation was not found in %s" % rate4site_filename
+        assert len(rate4site_line_list) == rate4site_line_list[-1]['pos']
+        rate4site_df = pd.DataFrame(rate4site_line_list)
+        return rate4site_df, alpha_parameter, average, std
 
-    def load_cosmis_scores(self):
+    def load_rate4site_scores(self):
         for chain in self.structure[0]:
             if chain.id not in self.chain_to_transcript:
-                LOGGER.warning("Chain %s does not represent a Human uniprot ID.  Skipping COSMIS load", chain.id)
+                LOGGER.warning("Chain %s does not represent a Human uniprot ID.  Skipping Rate4Site load", chain.id)
                 continue
             ensembl_transcripts = self.uniprot_to_ENST_transcripts(self.chain_to_transcript[chain.id])
             for ensembl_transcript in ensembl_transcripts:
-                # We kiad Bian Li's normalized cosmis scores (average-0, stddev=1)
-                if ensembl_transcript.id not in self.ensembl_transcript_to_cosmis:
-                    cosmis_norm_rates_filename = os.path.join(PDBMapGlobals.config['cosmis_dir'],
+                # We kiad Bian Li's normalized rate4site scores (average-0, stddev=1)
+                if ensembl_transcript.id not in self.ensembl_transcript_to_rate4site:
+                    rate4site_norm_rates_filename = os.path.join(PDBMapGlobals.config['rate4site_dir'],
                                                               "%s_norm_rates.txt" % ensembl_transcript.id.split('.')[0])
-                    df_cosmis_scores, cosmis_alpha_parameter, cosmis_average, cosmis_stddev = \
-                        self._load_one_cosmis_file(cosmis_norm_rates_filename)
-                    self.ensembl_transcript_to_cosmis[ensembl_transcript.id] = df_cosmis_scores
-                    # df_cosmis_scores, cosmis_alpha_parameter, cosmis_average, cosmis_stddev
+                    # Often a transcript won't have a pre-computed file - so we can't do anything for those.
+                    if os.path.exists(rate4site_norm_rates_filename):
+                        df_rate4site_scores, rate4site_alpha_parameter, rate4site_average, rate4site_stddev = \
+                            self._load_one_rate4site_file(rate4site_norm_rates_filename)
+                        self.ensembl_transcript_to_rate4site[ensembl_transcript.id] = df_rate4site_scores
+                        # df_rate4site_scores, rate4site_alpha_parameter, rate4site_average, rate4site_stddev
 
-                # cosmis_orig_rates_filename = os.path.join(PDBMapGlobals.config['cosmis_dir'],
+                # rate4site_orig_rates_filename = os.path.join(PDBMapGlobals.config['rate4site_dir'],
                 # "%s_orig_rates.txt" % ensembl_transcript.id)
 
-    def write_cosmis_scores(self, cosmis_scores_json_filename: str):
-        cosmis_scores_output_dict = {}
+    def write_rate4site_scores(self, rate4site_scores_json_filename: str):
+        rate4site_scores_output_dict = {}
         for chain in self.structure[0]:
             if chain.id not in self.chain_to_transcript:
-                LOGGER.warning("Chain %s does not represent a Human uniprot ID.  Skipping COSMIS load", chain.id)
+                LOGGER.warning("Chain %s does not represent a Human uniprot ID.  Skipping Rate4Site load", chain.id)
                 continue
             ensembl_transcripts = self.uniprot_to_ENST_transcripts(self.chain_to_transcript[chain.id])
-            for ensembl_transcript in ensembl_transcripts:
-                df_cosmis_scores = self.ensembl_transcript_to_cosmis[ensembl_transcript.id]
-                # Each chain will now point to a dictionary which maps the residue numbers to a dictionary of
-                # cosmis values (seq/score/qq-interval_low and _high, std, msa
-                cosmis_scores_output_dict[chain.id] = df_cosmis_scores.set_index('pos').T.to_dict('dict')
+            for ensembl_transcript_id in ensembl_transcripts:
+                # Often, there will not be a rate4site data set - so skip when missing.
+                if ensembl_transcript_id in self.ensembl_transcript_to_rate4site:
+                    df_rate4site_scores = self.ensembl_transcript_to_rate4site[ensembl_transcript_id]
+                    # Each chain will now point to a dictionary which maps the residue numbers to a dictionary of
+                    # rate4site values (seq/score/qq-interval_low and _high, std, msa
+                    rate4site_scores_output_dict[chain.id] = df_rate4site_scores.set_index('pos').T.to_dict('dict')
                 break
-        # cosmis_scores_json_filename ="cosmis_scores.json"
-        with open(cosmis_scores_json_filename, 'w') as f:
-            json.dump(cosmis_scores_output_dict, f)
-        LOGGER.info("Cosmis scores written to %s", cosmis_scores_json_filename)
+
+        if len(rate4site_scores_output_dict) > 0:
+            # rate4site_scores_json_filename ="rate4site_scores.json"
+            with open(rate4site_scores_json_filename, 'w') as f:
+                json.dump(rate4site_scores_output_dict, f)
+            LOGGER.info("Rate4site scores written to %s for %d chains",
+                        rate4site_scores_json_filename,
+                        len(rate4site_scores_output_dict))
+        else:
+            LOGGER.warning("No chain(s) in the complex were mapped to rate4site scores")
 
     # Supplement with any requested variant datasets from SQL
     # 2019 October - loop over chain_to_transcript
