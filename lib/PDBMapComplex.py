@@ -819,6 +819,9 @@ class PDBMapComplex:
                                 if m:
                                     std = float(m.group(1))
 
+        LOGGER.info("%d data lines read from %s successfully",
+                    len(rate4site_line_list),
+                    rate4site_filename)
         assert alpha_parameter, "Alpha Parameter was not found in in %s" % rate4site_filename
         assert average is not None, "Average was not found in %s" % rate4site_filename
         assert std, "Standard Deviation was not found in %s" % rate4site_filename
@@ -834,14 +837,14 @@ class PDBMapComplex:
             ensembl_transcripts = self.uniprot_to_ENST_transcripts(self.chain_to_transcript[chain.id])
             for ensembl_transcript in ensembl_transcripts:
                 # We kiad Bian Li's normalized rate4site scores (average-0, stddev=1)
-                if ensembl_transcript.id not in self.ensembl_transcript_to_rate4site:
+                if ensembl_transcript.unversioned_id not in self.ensembl_transcript_to_rate4site:
                     rate4site_norm_rates_filename = os.path.join(PDBMapGlobals.config['rate4site_dir'],
-                                                              "%s_norm_rates.txt" % ensembl_transcript.id.split('.')[0])
+                                                              "%s_norm_rates.txt" % ensembl_transcript.unversioned_id)
                     # Often a transcript won't have a pre-computed file - so we can't do anything for those.
                     if os.path.exists(rate4site_norm_rates_filename):
                         df_rate4site_scores, rate4site_alpha_parameter, rate4site_average, rate4site_stddev = \
                             self._load_one_rate4site_file(rate4site_norm_rates_filename)
-                        self.ensembl_transcript_to_rate4site[ensembl_transcript.id] = df_rate4site_scores
+                        self.ensembl_transcript_to_rate4site[ensembl_transcript.unversioned_id] = df_rate4site_scores
                         # df_rate4site_scores, rate4site_alpha_parameter, rate4site_average, rate4site_stddev
 
                 # rate4site_orig_rates_filename = os.path.join(PDBMapGlobals.config['rate4site_dir'],
@@ -854,10 +857,10 @@ class PDBMapComplex:
                 LOGGER.warning("Chain %s does not represent a Human uniprot ID.  Skipping Rate4Site load", chain.id)
                 continue
             ensembl_transcripts = self.uniprot_to_ENST_transcripts(self.chain_to_transcript[chain.id])
-            for ensembl_transcript_id in ensembl_transcripts:
+            for ensembl_transcript in ensembl_transcripts:
                 # Often, there will not be a rate4site data set - so skip when missing.
-                if ensembl_transcript_id in self.ensembl_transcript_to_rate4site:
-                    df_rate4site_scores = self.ensembl_transcript_to_rate4site[ensembl_transcript_id]
+                if ensembl_transcript.unversioned_id in self.ensembl_transcript_to_rate4site:
+                    df_rate4site_scores = self.ensembl_transcript_to_rate4site[ensembl_transcript.unversioned_id]
                     # Each chain will now point to a dictionary which maps the residue numbers to a dictionary of
                     # rate4site values (seq/score/qq-interval_low and _high, std, msa
                     rate4site_scores_output_dict[chain.id] = df_rate4site_scores.set_index('pos').T.to_dict('dict')
