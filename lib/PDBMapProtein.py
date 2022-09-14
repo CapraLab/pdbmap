@@ -164,14 +164,21 @@ class PDBMapProtein:
         @return:
         """
 
+        # Sorry about nonsense cases - but dismiss them right away.
+        if not refseq_id or refseq_id.startswith("NA"):
+            return []
+
         # Make sure that the caller knows that transcript and protein keys are all that is allowed from
         # source column 2 for this query.
         assert idmapping_refseq_key in ['RefSeq_NT', 'RefSeq']
         # Return UniProt IDs associated with a refseq ID transcript
 
-        # If this refseq_id_ has no version number, or a version unknown to the idmaping file, then proceed
+        # If this refseq_id_ has no version number, or a version unknown to the idmaping file, then try
+        # to convert it to a current versioned refseq ID
         if refseq_id not in PDBMapProtein._ID_to_uniprot[idmapping_refseq_key]:
-            refseq_id = PDBMapProtein._unversioned_refseq_ID_to_versioned_refseq_ID[refseq_id.split('.')[0]]
+            unversioned_refseq_id = refseq_id.split('.')[0]
+            if unversioned_refseq_id in PDBMapProtein._unversioned_refseq_ID_to_versioned_refseq_ID:
+                refseq_id = PDBMapProtein._unversioned_refseq_ID_to_versioned_refseq_ID[unversioned_refseq_id]
 
         if refseq_id in PDBMapProtein._ID_to_uniprot[idmapping_refseq_key]:
             return PDBMapProtein.best_unps(
