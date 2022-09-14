@@ -53,7 +53,7 @@ xml_input_file = os.path.join(defaults['interpro_dir'], 'match_complete.xml.gz')
 xml_output_file = os.path.join(defaults['interpro_dir'], 'match_humanonly.xml')
 
 LOGGER.info("Writing hard-coded header to output file: %s", xml_output_file)
-xml_output = open(xml_output_file, "w+")
+xml_output = open(xml_output_file, "w")
 xml_output.write('<?xml version="1.0" encoding="ISO-8859-1"?>\n')
 xml_output.write('<!DOCTYPE interpromatch SYSTEM "match_complete.dtd">\n')
 xml_output.write('<interpromatch>\n')
@@ -68,7 +68,7 @@ last_added = 0
 last_skipped = 0
 
 
-def iterate_xml() -> Generator[etree._Element, None, None]:
+def iterate_xml():
     """
     With each iteration of this generator
     we return a depth=1 subtree of the XML for exanimation by the caller.
@@ -96,19 +96,21 @@ def iterate_xml() -> Generator[etree._Element, None, None]:
 
 for element in iterate_xml():
     if element.tag == 'protein':
-        # import pdb; pdb.set_trace()
         unp = element.get('id')
         # If the base part of the uniprot identifier is in the KB based on our load of idmapping, then this is human
         isHumanUnp = PDBMapProtein.unp2uniprotKB(unp.split('-')[0])
         if isHumanUnp:
-            xml_output.write(etree.tostring(element).decode('utf-8'))
+            protein_xml_string = etree.tostring(element)
+            xml_output.write(protein_xml_string.decode('utf-8'))
             LOGGER.info("Added human unp %s to xml", unp)
+            # LOGGER.info("xml=\n%s", protein_xml_string)
             xml_added += 1
         else:
             xml_skipped += 1
     else:
-        xml_output.write(etree.tostring(element).decode('utf-8'))
-        LOGGER.info("Added non-protein XML %s" % etree.tostring(element))
+        non_protein_xml_string = etree.tostring(element).decode('utf-8')
+        xml_output.write(non_protein_xml_string)
+        LOGGER.info("Added non-protein XML %s" % non_protein_xml_string)
         xml_added += 1
 
     # Provide an update every 100,000 or so so user sees progress
