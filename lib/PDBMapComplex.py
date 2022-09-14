@@ -10,7 +10,6 @@
 # Description    : Manage loading of multichain complexes, alignments to transcripts, variant hooks
 #                  Excerpted/factored out of - pathprox3.py
 
-import os
 import re
 import sys
 import gzip
@@ -20,20 +19,19 @@ import json
 import pandas as pd
 import numpy as np
 import subprocess as sp
-import warnings
 import platform
+from io import StringIO
 
 from typing import Dict
 from typing import List
 from typing import Tuple
+from typing import Optional
 
 from Bio.PDB.Structure import Structure
 from Bio.PDB.Model import Model
 from Bio.PDB.Chain import Chain
 from Bio.PDB.Residue import Residue
 
-from Bio import PDB
-from Bio.PDB import PDBParser
 from Bio.PDB.PDBIO import PDBIO
 from Bio.PDB import MMCIFParser
 from Bio.PDB.mmcifio import MMCIFIO
@@ -106,11 +104,12 @@ class PDBMapComplex:
         self.chain_to_alignment = {}
         self._unp_to_ENST_transcripts = {}  # For the specific uniprot IDs in the complex, match to list of ENST
         self.ensembl_transcript_to_rate4site: Dict[str, pd.DataFrame] = {}
+        self.transcript_to_cosmis: Dict[str, pd.DataFrame] = {}
         self.is_biounit = False
         self.structure_type = structure_type
         self.structure_id = structure_id
         self.single_chain = single_chain
-        self.structure: Structure = None
+        self.structure: Optional[Structure] = None
         self.renumbered_structure: Structure = None
         self.source_coordinates_filename = ""
         self.info_func = info_func
@@ -751,6 +750,82 @@ class PDBMapComplex:
         return pd.DataFrame(_dataframe_rows, columns=["chain", "resid", "unp_pos", "x", "y", "z"])
 
     @staticmethod
+    def _load_one_cosmis_set(uniprot_id: str) -> pd.DataFrame:
+        """
+        From a uniprot ID, lookup Bian Li's cosmis scores via the mapping file, then the specific
+        PDB, alphafold, or swiss
+
+        @param uniprot_id:
+        @return: dataframe of cosmis scores, or empty dataframe if none found
+        """
+        uniprot_to_struct_filename = os.path.join(
+            PDBMapGlobals.config['cosmis_dir'], "mapping-files", "uniprot_to_struct.tsv")
+
+        # This only works for canonical uniprot IDs
+        # Might as well flip to upper case, just in case
+        if not PDBMapProtein.isCanonicalByUniparc(uniprot_id):
+            LOGGER.warning("COSMIS scores are not available for non-canonical %s", uniprot_id)
+            return pd.DataFrame()
+
+        # We might have an isoform designator - strip it.
+        uniprot_id = uniprot_id.split('-')[0].upper()
+
+        # Lookup struct_id and struct_source in the mapping file....
+        struct_id = None
+        struct_source = None
+        with open(uniprot_to_struct_filename, 'r') as f:
+            # Skip header line
+            line = f.readline()
+            while True:
+                line = f.readline()
+                if not line:
+                    LOGGER.warning("No COSMIS cross-reference for %s in %s", uniprot_id, uniprot_to_struct_filename)
+                    return pd.DataFrame()
+                line_split =  line.split('\t')
+                if len(line_split) != 3:
+                    LOGGER.critical("Line from %s is not a tab-delimited triple", uniprot_to_struct_filename)
+                elif line_split[0] == uniprot_id:
+                    struct_id = line_split[1] # Formatted as an ID and chain concatenated
+                    struct_source = line_split[2].rstrip()  # Drop trailing \n
+                    assert struct_source in ['PDB', 'SWISS-MODEL', 'AF2']
+                    break
+
+        # Now that we have a struct_source, open that, and find the cosmis scores
+        struct_source_filename_part = None
+        if struct_source == 'PDB':
+            struct_source_filename_part = 'pdb'
+        elif struct_source == 'SWISS-MODEL':
+            struct_source_filename_part = 'swiss_model'
+        elif struct_source == 'AF2':
+            struct_source_filename_part = 'alphafold'
+        else:
+            sys.exit("Unacceptable cosmis structure source")
+
+        cosmis_scores_filename = os.path.join(PDBMapGlobals.config['cosmis_dir'],"cosmis-scores",
+                                       "cosmis_scores_%s.tsv.gz" % struct_source_filename_part)
+
+        with gzip.open(cosmis_scores_filename, 'rt') as f:
+            # Grab the column headers with linefeed
+            extracted_lines = f.readline()
+            for line in f:
+                if line[0:6] == uniprot_id:
+                    extracted_lines += line
+
+            return pd.read_csv(StringIO(extracted_lines),sep='\t')
+
+
+
+    def load_cosmis_scores(self):
+        for chain in self.structure[0]:
+            if chain.id not in self.chain_to_transcript:
+                LOGGER.warning("Chain %s does not represent a Human uniprot ID.  Skipping Cosmis load", chain.id)
+                continue
+            uniprot_id_for_chain = self.chain_to_transcript[chain.id].id
+            cosmis_scores_df = PDBMapComplex._load_one_cosmis_set(uniprot_id_for_chain)
+            self.transcript_to_cosmis[uniprot_id_for_chain] = cosmis_scores_df
+
+
+    @staticmethod
     def _load_one_rate4site_file(rate4site_filename: str) -> Tuple[pd.DataFrame, float, float, float]:
         """
 
@@ -759,7 +834,7 @@ class PDBMapComplex:
         """
         # you have to see thees files - lots of COMMENTS at top, blank lines
         headers_re = re.compile('^#POS *SEQ *SCORE *QQ-INTERVAL *STD *MSA *DATA *$')
-        float_regex = '([-+]?[0-9]*\.?[0-9]*)'
+        float_regex = '([-+]?[0-9]*\.?[0-9]*[eE]?[-+]?\d+)'
         spaces = ' *'
         int_regex = '([0-9]*)'
 
@@ -773,7 +848,6 @@ class PDBMapComplex:
             spaces + int_regex +  # MSA
             '/100[ \n]*$')
         rate4site_data_re = re.compile(rate4site_data_regular_expression)
-
         alpha_parameter = None
         average = None
         std = None
@@ -849,6 +923,29 @@ class PDBMapComplex:
 
                 # rate4site_orig_rates_filename = os.path.join(PDBMapGlobals.config['rate4site_dir'],
                 # "%s_orig_rates.txt" % ensembl_transcript.id)
+                
+    def write_cosmis_scores(self, cosmis_scores_json_filename: str) -> None:
+        cosmis_scores_output_dict = {}
+        for chain in self.structure[0]:
+            if chain.id not in self.chain_to_transcript:
+                LOGGER.warning("Chain %s does not represent a Human uniprot ID.  Skipping Rate4Site load", chain.id)
+                continue
+            if chain.id in self.chain_to_transcript:
+                uniprot_id = self.chain_to_transcript[chain.id].id
+                if uniprot_id in self.transcript_to_cosmis:
+                    df_cosmis_scores = self.transcript_to_cosmis[uniprot_id]
+                    cosmis_scores_output_dict[chain.id] = df_cosmis_scores.set_index('uniprot_pos').T.to_dict('dict')
+
+        if len(cosmis_scores_output_dict) > 0:
+            # cosmis_scores_json_filename ="cosmis_scores.json"
+            with open(cosmis_scores_json_filename, 'w') as f:
+                json.dump(cosmis_scores_output_dict, f)
+            LOGGER.info("COSMIS scores written to %s for %d chains",
+                        cosmis_scores_json_filename,
+                        len(cosmis_scores_output_dict))
+        else:
+            LOGGER.warning("No chain(s) in the complex were mapped to cosmis scores")
+
 
     def write_rate4site_scores(self, rate4site_scores_json_filename: str):
         rate4site_scores_output_dict = {}
