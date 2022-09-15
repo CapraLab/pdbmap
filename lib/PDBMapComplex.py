@@ -923,7 +923,12 @@ class PDBMapComplex:
 
                 # rate4site_orig_rates_filename = os.path.join(PDBMapGlobals.config['rate4site_dir'],
                 # "%s_orig_rates.txt" % ensembl_transcript.id)
-                
+
+    def write_alphafold_metrics(self, alpha_fold_metrics_json_filename: str):
+        if self.alpha_fold_local_metrics:
+            with open(alpha_fold_metrics_json_filename, 'w') as alpha_fold_metrics_file:
+                json.dump(self.alpha_fold_local_metrics, alpha_fold_metrics_file)
+
     def write_cosmis_scores(self, cosmis_scores_json_filename: str) -> None:
         cosmis_scores_output_dict = {}
         for chain in self.structure[0]:
@@ -934,7 +939,10 @@ class PDBMapComplex:
                 uniprot_id = self.chain_to_transcript[chain.id].id
                 if uniprot_id in self.transcript_to_cosmis:
                     df_cosmis_scores = self.transcript_to_cosmis[uniprot_id]
-                    cosmis_scores_output_dict[chain.id] = df_cosmis_scores.set_index('uniprot_pos').T.to_dict('dict')
+                    if df_cosmis_scores.empty:
+                        cosmis_scores_output_dict[chain.id] = {}
+                    else:
+                        cosmis_scores_output_dict[chain.id] = df_cosmis_scores.set_index('uniprot_pos').T.to_dict('dict')
 
         if len(cosmis_scores_output_dict) > 0:
             # cosmis_scores_json_filename ="cosmis_scores.json"
