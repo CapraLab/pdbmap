@@ -163,7 +163,8 @@ class PDBMapGnomad:
                          'Ref_AminoAcid': CSQ['Ref_AminoAcid'],
                          'Alt_AminoAcid': CSQ['Alt_AminoAcid'],
                          'Protein_position': CSQ['Protein_position'],
-                         'maf': float(vcf_record.INFO['AF'])  # Minor allele frequency
+                          # The Minor allele frequence from Gnmad can be missing/null.  So use 0.0 in that case.
+                         'maf': float(vcf_record.INFO['AF']) if vcf_record.INFO['AF'] else 0.0
                          }])], ignore_index=True)
         LOGGER.info("%d raw Gnomad missense variants excerpted from VCF fragment for %s" ,
                     len(df_gnomad_missense), transcript.unversioned_id)
