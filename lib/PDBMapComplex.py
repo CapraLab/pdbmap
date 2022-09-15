@@ -117,7 +117,7 @@ class PDBMapComplex:
 
         self._label = self.structure_id  # Typicaly a complex user will override this at a later point
 
-        if self.structure_type == 'biounit' or self.structure_id == 'pdb':
+        if self.structure_type == 'biounit' or self.structure_type == 'pdb':
             self._load_pdb()
         elif self.structure_type == 'swiss':
             self._load_swiss()
@@ -157,7 +157,7 @@ class PDBMapComplex:
                                 self.single_chain)
                     self.structure[0].detach_child(chain.id)
 
-        if self.structure_type == 'biounit' or self.structure_id == 'pdb':
+        if self.structure_type == 'biounit' or self.structure_type== 'pdb':
             self._align_pdb_chains_to_best_uniprot_transcripts_with_sifts()
         else:
             self._align_model_chains_per_user_chain_to_transcript()
