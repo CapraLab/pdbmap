@@ -939,9 +939,7 @@ class PDBMapComplex:
                 uniprot_id = self.chain_to_transcript[chain.id].id
                 if uniprot_id in self.transcript_to_cosmis:
                     df_cosmis_scores = self.transcript_to_cosmis[uniprot_id]
-                    if df_cosmis_scores.empty:
-                        cosmis_scores_output_dict[chain.id] = {}
-                    else:
+                    if not df_cosmis_scores.empty:
                         cosmis_scores_output_dict[chain.id] = df_cosmis_scores.set_index('uniprot_pos').T.to_dict('dict')
 
         if len(cosmis_scores_output_dict) > 0:
@@ -969,7 +967,7 @@ class PDBMapComplex:
                     # Each chain will now point to a dictionary which maps the residue numbers to a dictionary of
                     # rate4site values (seq/score/qq-interval_low and _high, std, msa
                     rate4site_scores_output_dict[chain.id] = df_rate4site_scores.set_index('pos').T.to_dict('dict')
-                break
+                    break
 
         if len(rate4site_scores_output_dict) > 0:
             # rate4site_scores_json_filename ="rate4site_scores.json"
