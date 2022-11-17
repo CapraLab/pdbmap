@@ -21,13 +21,17 @@ sh = logging.StreamHandler()
 LOGGER = logging.getLogger()
 LOGGER.addHandler(sh)
 
+
+
 log_format_string = '%(asctime)s %(levelname)-4s [%(filename)16s:%(lineno)d] %(message)s'
 date_format_string = '%H:%M:%S'
 log_formatter = logging.Formatter(log_format_string, date_format_string)
 
 LOGGER.setLevel(logging.DEBUG)
-sh.setLevel(logging.INFO)
+sh.setLevel(logging.DEBUG)
 sh.setFormatter(log_formatter)
+
+
 
 rootdir_log_filename = "sifts_parser.log"
 needRoll = os.path.isfile(rootdir_log_filename)
@@ -44,7 +48,6 @@ if needRoll:
 
 sys.stderr.write("Root (case) directory log file is %s\n" % rootdir_log_filename)
 
-from pdbmap import PDBMapProtein
 
 # Parse config file for database parameters
 import argparse, configparser
@@ -71,6 +74,7 @@ if args.conf_file:
     config.read([args.conf_file])
     config_dict = dict(config.items("Genome_PDB_Mapper"))
     defaults.update(config_dict)
+
 
 conf_file = args.conf_file
 # Check for command line argument for the XML directory
@@ -100,6 +104,8 @@ if not all(vars(args)):
 if not args.xmldir:
     LOGGER.critical("xmldir must be supplied on command line or with sifts entry in -c config file\n");
     sys.exit(1)
+
+from pdbmap import PDBMapProtein
 
 PDBMapProtein.load_idmapping(defaults['idmapping'])
 PDBMapProtein.load_sec2prim(defaults['sec2prim'])
@@ -292,6 +298,8 @@ if args.legacy_xml:
         # Iterate over PDB chains
         for chain in root.findall("entity"):
             if chain.get("type") == "protein":
+                # if chain.get("entityId") == 'S':
+                #    import pdb; pdb.set_trace();
                 # Iterate over SIFTS annotation segments
                 for s in chain.getchildren():
                     # Iterate over segment residues
@@ -372,6 +380,8 @@ if args.legacy_xml:
 
             LOGGER.debug(sql % rlist[0])
 
+            LOGGER.info("%d rows of residue alignments to add via SQL", len(rlist))
+            rows_affected = 0
             try:
                 rows_affected = c.executemany(sql, rlist)
                 con.commit()
@@ -380,4 +390,9 @@ if args.legacy_xml:
                 con.rollback()
                 LOGGER.exception("Failed to upload rows.\n%s", c._last_executed)
                 raise
+            if rows_affected != len(rlist):
+                LOGGER.critical("SOMEHOW, in %s not all rows added\n %s to %s",
+                                str(rlist[0]['pdbid']),
+                                str(rlist[0]),
+                                str(rlist[-1]))
         c.close()

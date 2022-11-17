@@ -31,13 +31,17 @@ LOGGER = logging.getLogger(__name__)
 BLOSUM62 = substitution_matrices.load("BLOSUM62")
 
 
-def sifts_best_unps(structure: Structure):
+def sifts_best_unps(structure: Structure) -> Dict[str,str]:
     """Return a dictionary mapping chain IDs to the uniprot identifiers that sifts 
        has determined to be 'best' for each chain"""
 
     chain_to_best_unp = {}
 
-    query = "SELECT pdbid,uniprot_acc,mapping_pdb_chain FROM sifts_mappings_pdb_uniprot_best_isoforms where pdbid=%(pdbid)s AND identifier LIKE '%%HUMAN' ORDER BY mapping_pdb_chain"
+    query = """
+SELECT pdbid,uniprot_acc,mapping_pdb_chain FROM sifts_mappings_pdb_uniprot_best_isoforms 
+WHERE pdbid=%(pdbid)s AND identifier LIKE '%%HUMAN' 
+ORDER BY mapping_pdb_chain"""
+
     with PDBMapSQLdb() as db:
         db.activate_dict_cursor()
         db.execute(query, {'pdbid': structure.id})
@@ -380,6 +384,19 @@ class PDBMapAlignment():
         return (True, None)
         # end align_trivial()
 
+    @staticmethod
+    def seq_resid_required_keys_present(mmcif_dict) -> bool:
+        for required_key in ['_pdbx_poly_seq_scheme.pdb_strand_id',
+                             '_pdbx_poly_seq_scheme.auth_seq_num',
+                             '_pdbx_poly_seq_scheme.pdb_ins_code',
+                             '_chem_comp.id']:
+            if required_key not in mmcif_dict:
+                LOGGER.critical(
+                    "mmcif dicts lacks component '%s' which is critical for cross-referencing" % required_key)
+                return False
+        return True
+
+    @staticmethod
     def create_pdb_seq_resid_xref(mmcif_dict) -> Dict[str, List[Tuple]]:
         """ From an mmcif_dict, return a dictionary with key=chain ID, and value=list
             of Biopython residue ID tuples, so that for every seqres residue in the 
@@ -394,11 +411,8 @@ class PDBMapAlignment():
         chem_comp_id = '_chem_comp.id'
         chem_comp_mon_nstd_flag = '_chem_comp.mon_nstd_flag'
 
-        for required_key in [chain_id_key, pdb_author_id, ins_code_key, chem_comp_id]:
-            if required_key not in mmcif_dict:
-                LOGGER.critical(
-                    "mmcif dicts lacks component '%s' which is critical for cross-referencing" % required_key)
-                sys.exit(1)
+        if not PDBMapAlignment.seq_resid_required_keys_present(mmcif_dict):
+            sys.exit(1)
 
         # The chem_comp_id seems to list all monomers in the deposition, as well as whether they are standard residues
         # Biopython's parser takes the H_ hetero residue definition out of the PDB legacy area of the .cif. I don't like that 

@@ -222,6 +222,7 @@ class PDBMapVEP():
         finally
         """
 
+        VEP_process.wait()
         VEP_process.kill() # kill any running subprocess, Does not seem to throw exceptions...
 
 
