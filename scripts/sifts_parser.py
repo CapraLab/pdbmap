@@ -3,18 +3,31 @@
    and uploads data to mysql database.  It needs some ongoing work think.
    Better integration into PDBMap architecture, etc
 
+   2023-02-13  The uniprot/HUMAN_9606_idmapping_sprot.dat.gz files cross-references
+   53,000 PDB structures to SwissProt human uniprot IDs.  HOWEVER, going to sifts directly with
+   our curated SwissProt IDs returns over 110,000 transcript-aligned PDB structures.  This,
+   it is helpful for us to preload all of these.
+
+   A challenge with the REST-API approach is that it is prone to faults, and crashes.  It takes time.
+   A lot of the code is about making sure to "not stop" and gather ALL the data before crashing, then
+   Attempting to not repeat loads of previously gathered data.
+
    2019-09-03  This script is messed up because it also does REST API calls
    to populate two other tables.  Needs to be cleaned up badly
 
    2019-10-28  Passing legacy_xml gives this script its old behavior which
    saves sifts information for uniprot canonical IDs only"""
 
+import logging
+from logging import handlers
+
 from lxml import etree, objectify
 from collections import defaultdict
 import sys, os, glob, re
+import gzip
+from typing import List, Tuple
+import time
 
-import logging
-from logging import handlers
 
 # from logging import handlers
 sh = logging.StreamHandler()
@@ -31,6 +44,9 @@ LOGGER.setLevel(logging.DEBUG)
 sh.setLevel(logging.DEBUG)
 sh.setFormatter(log_formatter)
 
+pdbs_processed_count = 0
+pdbs_added_count = 0
+pdbs_deleted_count = 0
 
 
 rootdir_log_filename = "sifts_parser.log"
@@ -123,16 +139,27 @@ class APIError(Exception):
     def __str__(self):
         return "APIError: status={}".format(self.status)
 
+def sifts_call_rest_api(REST_request, pdb_or_uniprot_id):
+    resp = None
+    for attempt in range(20):
+        try:
+            # LOGGER.debug("REST request: %s" % REST_request % pdb_or_uniprot_id)
+            resp = requests.get(REST_request % pdb_or_uniprot_id)
+            break  # Success
 
-def sifts_call_rest_api(REST_request, pdbid):
-    try:
-        LOGGER.debug("REST request: %s" % REST_request % pdbid)
-        resp = requests.get(REST_request % pdbid)
+        except requests.exceptions.RequestException as e:  # This is the correct syntax
+            LOGGER.error("Attempt %d failed: %s", attempt + 1, str(e))
+            time.sleep((attempt+1) * 1.5)
 
-    except requests.exceptions.RequestException as e:  # This is the correct syntax
-        print(str(e))
-        sys.exit(1)
+    if attempt >= 19:
+        err_failed = "Failed to reach sifts https after %d tries" % attempt
+        LOGGER.critical(err_failed)
+        sys.exit(err_failed)
 
+    # These calls return 404 in case the response is _mostly_ empty.
+    # This is an odd thing, because even with 404, I think often
+    # the content looks like reasonable JSON
+    # 404 is NOT an error in this SIFTS API.
     if resp.status_code == 404:
         return None
 
@@ -141,20 +168,26 @@ def sifts_call_rest_api(REST_request, pdbid):
         raise APIError(REST_request + " {}".format(resp.status_code))
 
     resp_dict = resp.json()
-    if not pdbid.lower() in resp_dict:
-        raise APIError("fundamental problem in returned json format from sifts {}".format(str(resp)))
+    # The format of the returned json varies depending on whether we asked for a uniprot ID or a PDBID.
+    # For _todaY_, we assume a PDB id if len is <= 4
+    if len(pdb_or_uniprot_id) <= 4:
+        if not pdb_or_uniprot_id.lower() in resp_dict:
+            raise APIError("fundamental problem in returned json format from sifts {}".format(str(resp)))
+    else: # It's a uniprot ID - always upper case.
+        if not pdb_or_uniprot_id in resp_dict:
+            raise APIError("fundamental problem in returned json format from sifts {}".format(str(resp)))
 
     return resp_dict
 
 
-def sifts_get_best_isoforms(pdbid):
+def sifts_get_best_isoforms(pdb_or_uniprot_id: str):
     # Documented at https://www.ebi.ac.uk/pdbe/api/doc/sifts.html
-    return sifts_call_rest_api("https://www.ebi.ac.uk/pdbe/api/mappings/isoforms/%s", pdbid)
+    return sifts_call_rest_api("https://www.ebi.ac.uk/pdbe/api/mappings/isoforms/%s", pdb_or_uniprot_id)
 
 
-def sifts_get_all_isoforms(pdbid):
+def sifts_get_all_isoforms(pdb_or_uniprot_id: str):
     # Documented at https://www.ebi.ac.uk/pdbe/api/doc/sifts.html
-    return sifts_call_rest_api("https://www.ebi.ac.uk/pdbe/api/mappings/all_isoforms/%s", pdbid)
+    return sifts_call_rest_api("https://www.ebi.ac.uk/pdbe/api/mappings/all_isoforms/%s", pdb_or_uniprot_id)
 
 
 # isoform_json = sifts_get_all_isoforms('6CET')
@@ -164,9 +197,19 @@ def sifts_get_all_isoforms(pdbid):
 # Connect to the databsae
 import MySQLdb
 
-con = MySQLdb.connect(host=args.dbhost, user=args.dbuser,
+con = None
+def reconnect_sql():
+    global con
+    if con is not None:
+        try:
+            con.close()
+        except Exception as ex:
+            pass
+
+    con = MySQLdb.connect(host=args.dbhost, user=args.dbuser,
                       passwd=args.dbpass, db=args.dbname)
 
+reconnect_sql()
 
 # Increase maximum packet size for this connection
 # Oops - not allowed under Redhat 7 new server!
@@ -174,20 +217,50 @@ con = MySQLdb.connect(host=args.dbhost, user=args.dbuser,
 # c.execute("SET GLOBAL max_allowed_packet=512000000")
 # c.close()
 
-
-def load_idmapping_pdbids():
-    # Get a list of all pdb files known to the uniprot curated idmapping file
-    sql_get_unique_pdbids = "SELECT distinct ID FROM pdbmap_v14.Idmapping where ID_type = 'pdb'"
+def sql_select_where(sql_query) -> List[Tuple]:
     cursor = con.cursor()
 
     number_of_rows = 0;
     try:
-        number_of_rows = cursor.execute(sql_get_unique_pdbids)
-        pdbids = cursor.fetchall()
+        number_of_rows = cursor.execute(sql_query)
+        ids = cursor.fetchall()
         cursor.close()
-        return pdbids
+        return ids
     except:
-        LOGGER.exception("Failed to execute: %s", sql)
+        LOGGER.exception("Failed to execute: %s", sql_query)
+
+    cursor.close()
+
+# Get a list of EVERY uniprot ID mentioned in the curated human list
+# We can run queries to sifts to figure out which PDBs are alighed to these
+def load_idmapping_uniprot_ids() -> List[Tuple]:
+    return sql_select_where("SELECT DISTINCT unp FROM Idmapping where ID_type = 'UniParc'")
+
+
+
+def load_idmapping_pdbids() -> List[Tuple]:
+    # Get a list of all pdb files known to the uniprot curated idmapping file
+    return sql_select_where("SELECT DISTINCT ID FROM Idmapping where ID_type = 'pdb'")
+
+def delete_pdb_from_mapping_table(con_cursor: MySQLdb.cursors.Cursor,
+                                  pdb_id: str,
+                                  sql_mapping_table: str) -> None:
+    """
+    Delete all entries for a specific pdbid from the given table.
+    This uses a cursor created in the calling function
+    """
+
+    # CAREFUL: You cannot substitute in a table name as a parameter.
+    # So, we're going to "hard code" the table name as a long normal string
+    # and just paste in the pdb_id at the concursor.execute() part
+    global pdbs_deleted_count
+    delete_a_pdb_sql = 'DELETE FROM ' + sql_mapping_table + """ WHERE pdbid=%s"""
+
+    rows_affected = con_cursor.execute(delete_a_pdb_sql, (pdb_id,))
+    if rows_affected >= 0:
+        LOGGER.info("PDB %s.  DELETEd %d stale SIFTS rows from %s", pdb_id, rows_affected, sql_mapping_table)
+        if rows_affected > 0:
+            pdbs_deleted_count += 1
 
 
 def json_to_INSERTs(pdbid, unp, pdb_unp_dict):
@@ -220,7 +293,8 @@ def json_to_INSERTs(pdbid, unp, pdb_unp_dict):
     return INSERT_list
 
 
-pdbs_processed_count = 0
+
+
 if args.best_isoforms or args.all_isoforms:
     all_or_best = 'all' if args.all_isoforms else 'best'
     # with open("sifts_retry.txt") as f:
@@ -229,19 +303,101 @@ if args.best_isoforms or args.all_isoforms:
 
     # pdbs = ['6CES','1M6D']
 
-    cursor = con.cursor()
-    pdb_list = []
-    if args.pdb:
-        pdb_list = args.pdb.split(',')
-    else:
-        pdbid_rows_from_idmapping = load_idmapping_pdbids()
-        pdb_list = [pdbid_row[0] for pdbid_row in pdbid_rows_from_idmapping]
+    save_uniprot_progress = {}
+    # The idea here is that the tmp file will go away periodically...  which is perfect
+    # I just want to avoid endless reloading from the REST API which is error prone
+    save_uniprot_progress_filename = '/tmp/save_uniprot_progress_%s_isoforms.json.gz' % all_or_best
+    try:
+        with gzip.open(save_uniprot_progress_filename,'rt') as f:
+            save_uniprot_progress = json.load(f)
 
-    for pdbid in pdb_list:
-        LOGGER.info("Processing pdbid %d/%d %s" % (pdbs_processed_count + 1, len(pdb_list), pdbid))
+
+    except:
+        save_uniprot_progress = {}
+
+    LOGGER.info('%d previously gathered uniprot IDs loaded from', len(save_uniprot_progress))
+
+    last_saved_len =     len(save_uniprot_progress)
+
+    def save_uniprot_progress_to_tmp():
+        LOGGER.info("Writing %d records to %s", len(save_uniprot_progress), save_uniprot_progress_filename)
+        with gzip.open(save_uniprot_progress_filename,'wt') as f:
+            json.dump(save_uniprot_progress, f, indent=1)
+
+
+    sql_mapping_table = "sifts_mappings_pdb_uniprot_%s_isoforms" % all_or_best
+
+    pdb_set = set()
+    if args.pdb:
+        pdb_set = {pdb_id for pdb_id in args.pdb.split(',')}
+    else:
+        # First let's get PDB IDs for those PDBs associated in the IDmapping file
+        pdbid_rows_from_idmapping = load_idmapping_pdbids()
+        pdb_set = {pdbid_row[0] for pdbid_row in pdbid_rows_from_idmapping}
+
+        # Let's add in any PDBs that might be associated with our uniprot IDs
+        # at SIFTS
+        uniprot_rows_from_idmapping = load_idmapping_uniprot_ids()
+        unp_list = [uniprot_id_row[0] for uniprot_id_row in uniprot_rows_from_idmapping]
+
+        sifts_pdb_set = set()
+        # Let's try to get ALL the PDBs that are aligned by SIFTS
+        test_count = 0
+        for unp in unp_list:
+            pdbs_for_unp = []
+            isoform_json = {}
+
+            if unp in save_uniprot_progress:
+                isoform_json = save_uniprot_progress
+            else:
+                isoform_json = sifts_get_all_isoforms(unp) if args.all_isoforms else sifts_get_best_isoforms(unp)
+            if  isoform_json and 'PDB' in isoform_json[unp]:
+                pdb_dict = isoform_json[unp]['PDB']
+                for pdbid in pdb_dict.keys():
+                    pdbs_for_unp.append(pdbid)
+                    sifts_pdb_set.add(pdbid)
+                # If we are not retrieving the PDB ilst from the saved isoform json THEN
+                # we should add this restapi information to our saved file.
+                if not isoform_json is save_uniprot_progress:
+                    save_uniprot_progress[unp] = isoform_json[unp]
+            else: # Next time we save the progress, note that we have no PDBs for this uniprot ID
+                save_uniprot_progress[unp] = {'PDB': {}}
+            if len(save_uniprot_progress) - last_saved_len >= 200:
+                save_uniprot_progress_to_tmp()
+                last_saved_len = len(save_uniprot_progress)
+
+            LOGGER.info("%s xrefs to: %s", unp, str(pdbs_for_unp))
+            if pdbs_for_unp:
+                test_count += 1
+                # if test_count > 5: # For development it can be helpful to cut this off.
+                #    break
+
+    save_uniprot_progress_to_tmp()
+    LOGGER.info("%d pdbs from sifts restAPI calls.  %d pdbs from idmapping", len(sifts_pdb_set), len(pdb_set))
+    pdb_set = sifts_pdb_set.union(pdb_set)
+
+    reconnect_sql()
+
+    for pdbid in pdb_set:
+        LOGGER.info("Processing pdbid %d/%d %s" % (pdbs_processed_count + 1, len(pdb_set), pdbid))
         isoform_json = sifts_get_all_isoforms(pdbid) if args.all_isoforms else sifts_get_best_isoforms(pdbid)
+
+        try:
+            cursor = con.cursor()
+        except:
+            LOGGER.warning("Reconnecting SQL after inability to get cursor()")
+            reconnect_sql()
+            cursor = con.cursor()
+
+        delete_pdb_from_mapping_table(
+            cursor,
+            pdbid,
+            sql_mapping_table
+        )
+
+
         if not isoform_json:
-            LOGGER.warning("NO SIFTS REPONSE FOR %s ?Retained in uniprot ID Mapping; removed from PDB?" % pdbid)
+            LOGGER.warning("NO SIFTS REPONSE FOR %s ?Retained in uniprot ID Mapping; removed from PDB?", pdbid)
             continue
         # assert(pdb.lower() in isoform_json)
         # print(isoform_json)
@@ -257,17 +413,21 @@ if args.best_isoforms or args.all_isoforms:
         for INSERT in INSERTs:
             placeholders = ', '.join(['%s'] * len(INSERT))
             columns = ', '.join(list(INSERT.keys()))
-            sql = "INSERT IGNORE INTO pdbmap_v14.sifts_mappings_pdb_uniprot_%s_isoforms ( %s ) VALUES ( %s )" % (
-            all_or_best, columns, placeholders)
+            sql = "INSERT IGNORE INTO %s ( %s ) VALUES ( %s )" % (
+            sql_mapping_table, columns, placeholders)
             # cursor.executemany(sql, INSERTs)
             cursor.execute(sql, INSERT.values())
-            con.commit()
+
+        if len(INSERTs) > 0:
+            pdbs_added_count += 1
+        con.commit()
         pdbs_processed_count += 1
 
-    cursor.close()
+        cursor.close()
 
-    print("Processed %d pdbids" % len(pdb_list))
-    sys.exit(1)
+    LOGGER.info("PDBs Added: %d  PDBs Deleted: %d  PDBs Processed: %d", \
+                pdbs_added_count, pdbs_deleted_count, len(pdb_set))
+    sys.exit(0)
 
 if args.legacy_xml:
     LOGGER.info("Converting *.xml.gz files to SQL in %s" % args.xmldir)
@@ -358,16 +518,11 @@ if args.legacy_xml:
             assert rlist[0]['pdbid'] in xmlfile, "Crazy - xml file refers to a pdb not the filename %s" % xmlfile
             ## Upload to database
             c = con.cursor()
-            sql = """DELETE FROM sifts_legacy_xml WHERE pdbid=%s"""
-            try:
-                rows_affected = c.execute(sql, (rlist[0]['pdbid'],))
-                con.commit()
-                if rows_affected > 0:
-                    LOGGER.info("PDB %s.  Removed %d stale SIFTS xml rows", rlist[0]['pdbid'], rows_affected)
-            except:
-                con.rollback()
-                LOGGER.exception("Failure on attempt to DELETE old pdb values\n%s", c._last_executed)
-                raise
+            delete_pdb_from_mapping_table(
+                c,
+                rlist[0]['pdbid'],
+                'sifts_legacy_xml'
+            )
 
             sql = """INSERT IGNORE INTO sifts_legacy_xml
             (PDBe_dbResNum,pdbid,pdb_chain,pdb_resnum,pdb_icode,pdb_resname,uniprot_acc,uniprot_resnum,
@@ -386,13 +541,14 @@ if args.legacy_xml:
                 rows_affected = c.executemany(sql, rlist)
                 con.commit()
                 LOGGER.info("Uploaded and committed! %d rows affected" % rows_affected)
-            except:
+            except Exception as ex:
                 con.rollback()
-                LOGGER.exception("Failed to upload rows.\n%s", c._last_executed)
+                LOGGER.exception("%s: Failed to upload rows.\n", ex)
                 raise
             if rows_affected != len(rlist):
                 LOGGER.critical("SOMEHOW, in %s not all rows added\n %s to %s",
                                 str(rlist[0]['pdbid']),
                                 str(rlist[0]),
                                 str(rlist[-1]))
+            pdbs_added_count += 1
         c.close()
