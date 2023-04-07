@@ -135,6 +135,46 @@ def reconnect_sql():
 
 reconnect_sql()
 
+import string
+
+unp_enst_seq_mismatch = []
+unp_enst_len_mismatch = []
+
+with open("/tmp/unp_enst_mismatch.txt") as f:
+    translator = str.maketrans('', '', "() '\n")
+    for line in f.readlines():
+        print(line)
+        tuple_break = line.split(',')
+        unp = tuple_break[0].translate(translator)
+        enst = tuple_break[1].translate(translator)
+        print("[%s] [%s]" % (unp, enst))
+        enst_transcript = PDBMapTranscriptEnsembl(enst)
+        unp_transcript = PDBMapTranscriptUniprot(unp)
+        if enst_transcript.aa_seq == unp_transcript.aa_seq:
+            sys.exit("HUGE FAIL - stop %s" % unp)
+        try:
+
+            if len(enst_transcript.aa_seq) != len(unp_transcript.aa_seq):
+                unp_enst_len_mismatch.append(str((unp,enst)) + "%d vs %d len" % (
+                    len(unp_transcript.aa_seq),  len(enst_transcript.aa_seq)
+                ))
+            else:
+                unp_enst_seq_mismatch.append(str((unp,enst)) + str([(n+1,unp_transcript.aa_seq[n],enst_transcript.aa_seq[n]) for n in range(len(unp_transcript.aa_seq)) \
+                                                                if unp_transcript.aa_seq[n] != enst_transcript.aa_seq[n]]))
+        except:
+            LOGGER.info("FAILURE - CAREFUL on %s %s", unp,enst)
+            pass
+
+
+with open('/tmp/unp_enst_len_mismatch.txt','w') as f:
+    for unp_enst in unp_enst_len_mismatch:
+        f.write("%s\n" % str(unp_enst))
+with open('/tmp/unp_enst_seq_mismatch.txt','w') as f:
+    for unp_enst in unp_enst_seq_mismatch:
+        f.write("%s\n" % str(unp_enst))
+sys.exit(0)
+
+
 # Increase maximum packet size for this connection
 # Oops - not allowed under Redhat 7 new server!
 # c = con.cursor()
@@ -165,6 +205,9 @@ LOGGER.info("%d unique uniprot IDs", len(unp_list))
 # AND
 # 2) Have a specific (isoform specific, dashed UNP)
 # that is better
+
+
+
 
 better_unp_list = []
 for unp in unp_list:
