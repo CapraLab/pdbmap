@@ -102,9 +102,9 @@ parser.add_argument("xmldir", nargs="?", help="Sifts data XML directory",
 parser.add_argument("-x", "--legacy_xml", action='store_true',
                     help="Load sifts .xml to align canonical uniprot IDs for all pdbids ")
 parser.add_argument("-b", "--best_isoforms", action='store_true',
-                    help="Load 'best' isoforms data from sifts rest api")
+                    help="Use /tmp pdb list from --all_isoforms and Load 'best' isoforms data from sifts rest api")
 parser.add_argument("-a", "--all_isoforms", action='store_true',
-                    help="Load alignments for all isoforms from sifts rest api")
+                    help="Create /tmp pdb list and Load alignments for all isoforms from sifts rest api")
 parser.add_argument("-p", "--pdb",
                     help="Load alignments for a single pdb for all isoforms in the sifts RESTapi")
 args = parser.parse_args(remaining_argv)
@@ -180,9 +180,9 @@ def sifts_call_rest_api(REST_request, pdb_or_uniprot_id):
     return resp_dict
 
 
-def sifts_get_best_isoforms(pdb_or_uniprot_id: str):
+def sifts_get_best_isoforms(pdb_id: str):
     # Documented at https://www.ebi.ac.uk/pdbe/api/doc/sifts.html
-    return sifts_call_rest_api("https://www.ebi.ac.uk/pdbe/api/mappings/isoforms/%s", pdb_or_uniprot_id)
+    return sifts_call_rest_api("https://www.ebi.ac.uk/pdbe/api/mappings/isoforms/%s", pdb_id)
 
 
 def sifts_get_all_isoforms(pdb_or_uniprot_id: str):
@@ -304,20 +304,21 @@ if args.best_isoforms or args.all_isoforms:
     # pdbs = ['6CES','1M6D']
 
     save_uniprot_progress = {}
-    # The idea here is that the tmp file will go away periodically...  which is perfect
-    # I just want to avoid endless reloading from the REST API which is error prone
-    save_uniprot_progress_filename = '/tmp/save_uniprot_progress_%s_isoforms.json.gz' % all_or_best
-    try:
-        with gzip.open(save_uniprot_progress_filename,'rt') as f:
-            save_uniprot_progress = json.load(f)
 
+    if all_or_best == 'all': # Then we should pick up additional PDB ids from SIFTS
+        # The idea here is that the tmp file will go away periodically...  which is perfect
+        # I just want to avoid endless reloading from the REST API which is error prone
+        save_uniprot_progress_filename = '/tmp/save_uniprot_progress_all_isoforms.json.gz'
+        try:
+            with gzip.open(save_uniprot_progress_filename,'rt') as f:
+                save_uniprot_progress = json.load(f)
 
-    except:
-        save_uniprot_progress = {}
+        except:
+            save_uniprot_progress = {}
 
-    LOGGER.info('%d previously gathered uniprot IDs loaded from', len(save_uniprot_progress))
+        LOGGER.info('%d previously gathered uniprot IDs loaded from', len(save_uniprot_progress))
 
-    last_saved_len =     len(save_uniprot_progress)
+        last_saved_len =     len(save_uniprot_progress)
 
     def save_uniprot_progress_to_tmp():
         LOGGER.info("Writing %d records to %s", len(save_uniprot_progress), save_uniprot_progress_filename)
@@ -342,38 +343,50 @@ if args.best_isoforms or args.all_isoforms:
 
         sifts_pdb_set = set()
         # Let's try to get ALL the PDBs that are aligned by SIFTS
-        test_count = 0
-        for unp in unp_list:
-            pdbs_for_unp = []
-            isoform_json = {}
+        if all_or_best == 'best':
+            # We should mine the PDB IDs from a prior 'all' run of this script.  Read the SQL database for a list
+            select_distinct_PDBs = 'select distinct pdbid from sifts_mappings_pdb_uniprot_all_isoforms'
+            pdb_list_from_all = sql_select_where(select_distinct_PDBs)
+            LOGGER.info("%d pdb ids loaded from sifts_mappings_pdb_uniprot_all_isoforms", len(pdb_list_from_all))
+            for pdb_row in pdb_list_from_all:
+               sifts_pdb_set.add(pdb_row[0]) # Each list element is a tuple from SQL
+            LOGGER.info("%d pdbids loaded sifts_mappings_pdb_uniprot_all_isoforms", len(sifts_pdb_set))
+        else:
+            assert all_or_best == 'all'
+            test_count = 0
+            for unp in unp_list:
+                pdbs_for_unp = []
+                isoform_json = {}
 
-            if unp in save_uniprot_progress:
-                isoform_json = save_uniprot_progress
-            else:
-                isoform_json = sifts_get_all_isoforms(unp) if args.all_isoforms else sifts_get_best_isoforms(unp)
-            if  isoform_json and 'PDB' in isoform_json[unp]:
-                pdb_dict = isoform_json[unp]['PDB']
-                for pdbid in pdb_dict.keys():
-                    pdbs_for_unp.append(pdbid)
-                    sifts_pdb_set.add(pdbid)
-                # If we are not retrieving the PDB ilst from the saved isoform json THEN
-                # we should add this restapi information to our saved file.
-                if not isoform_json is save_uniprot_progress:
-                    save_uniprot_progress[unp] = isoform_json[unp]
-            else: # Next time we save the progress, note that we have no PDBs for this uniprot ID
-                save_uniprot_progress[unp] = {'PDB': {}}
-            if len(save_uniprot_progress) - last_saved_len >= 200:
-                save_uniprot_progress_to_tmp()
-                last_saved_len = len(save_uniprot_progress)
+                if unp in save_uniprot_progress:
+                    isoform_json = save_uniprot_progress
+                else:
+                    isoform_json = sifts_get_all_isoforms(unp) if args.all_isoforms else sifts_get_best_isoforms(unp)
+                if  isoform_json and 'PDB' in isoform_json[unp]:
+                    pdb_dict = isoform_json[unp]['PDB']
+                    for pdbid in pdb_dict.keys():
+                        pdbs_for_unp.append(pdbid)
+                        sifts_pdb_set.add(pdbid)
+                    # If we are not retrieving the PDB ilst from the saved isoform json THEN
+                    # we should add this restapi information to our saved file.
+                    if not isoform_json is save_uniprot_progress:
+                        save_uniprot_progress[unp] = isoform_json[unp]
+                else: # Next time we save the progress, note that we have no PDBs for this uniprot ID
+                    save_uniprot_progress[unp] = {'PDB': {}}
+                if len(save_uniprot_progress) - last_saved_len >= 200:
+                    save_uniprot_progress_to_tmp()
+                    last_saved_len = len(save_uniprot_progress)
 
-            LOGGER.info("%s xrefs to: %s", unp, str(pdbs_for_unp))
-            if pdbs_for_unp:
-                test_count += 1
-                # if test_count > 5: # For development it can be helpful to cut this off.
-                #    break
+                LOGGER.info("%s xrefs to: %s", unp, str(pdbs_for_unp))
+                if pdbs_for_unp:
+                    test_count += 1
+                    # if test_count > 5: # For development it can be helpful to cut this off.
+                    #    break
 
-    save_uniprot_progress_to_tmp()
-    LOGGER.info("%d pdbs from sifts restAPI calls.  %d pdbs from idmapping", len(sifts_pdb_set), len(pdb_set))
+            save_uniprot_progress_to_tmp()
+            LOGGER.info("%d pdbs from sifts restAPI calls.  %d pdbs from idmapping", len(sifts_pdb_set), len(pdb_set))
+
+    # Create the larger set of pdbs to round up alignments for
     pdb_set = sifts_pdb_set.union(pdb_set)
 
     reconnect_sql()
@@ -417,6 +430,8 @@ if args.best_isoforms or args.all_isoforms:
             sql_mapping_table, columns, placeholders)
             # cursor.executemany(sql, INSERTs)
             cursor.execute(sql, INSERT.values())
+
+        LOGGER.info("%s: %d rows added", pdbid, len(INSERTs))
 
         if len(INSERTs) > 0:
             pdbs_added_count += 1
