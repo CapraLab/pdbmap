@@ -13,8 +13,6 @@
 import sys,os,csv
 from collections import OrderedDict
 import logging
-from Bio import pairwise2
-# unused and deprecated: from Bio.SubsMat import MatrixInfo as matlist
 from Bio.PDB import Structure
 from Bio.SeqUtils import seq1
 from lib import PDBMapSQLdb

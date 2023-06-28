@@ -18,8 +18,7 @@
 import sys,os,csv,re,gzip
 import numpy as np
 import subprocess as sp
-from Bio import pairwise2
-from Bio.SubsMat import MatrixInfo as matlist
+# from Bio.SubsMat import MatrixInfo as matlist
 import vcf # PyVCF
 from lib import bed # PyVCF emulator for BED files
 
