@@ -34,5 +34,28 @@ CREATE TABLE MANE_xref (
   optional_uniprot_id VARCHAR(40) NOT NULL COMMENT 'the bracketed uniprot ID that appears in some rows of raw data',
   PRIMARY KEY (ensembl_transcript_id)
 ) ENGINE=InnoDB COMMENT 'Lookup by ENST000 ID verifies MANE cross reference, and returns refseq IDs'
-
 CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+
+-- Another important source of MANE information is the sumamry fiel that is downloaded from ensembl
+-- https://ftp.ncbi.nlm.nih.gov/refseq/MANE/MANE_human/
+
+CREATE TABLE MANE_v13_summary (
+  NCBI_GeneID VARCHAR(40),
+  Ensembl_Gene VARCHAR(40),
+  HGNC_ID VARCHAR(40),
+  symbol VARCHAR(40),
+  name VARCHAR(40),
+  RefSeq_nuc VARCHAR(40),
+  RefSeq_prot VARCHAR(40),
+  Ensembl_nuc VARCHAR(40),
+  Ensembl_prot VARCHAR(40),
+  MANE_status VARCHAR(40),
+  GRCh38_chr VARCHAR(40),
+  chr_start VARCHAR(40),
+  chr_end VARCHAR(40),
+  chr_strand VARCHAR(40),
+  PRIMARY KEY (refSeq_nuc,Ensembl_nuc), 
+  KEY (Ensembl_nuc)
+) ENGINE=InnoDB
+CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+
