@@ -23,4 +23,5 @@ from .PDB36Parser import PDB36Parser
 # from .PDBMapIntersect import PDBMapIntersect
 from .PDBMapVisualize import PDBMapVisualize
 from .PDBMapComplex import PDBMapComplex
+from .PDBMapAlphaMissense import PDBMapAlphaMissense
 from .hybrid36 import *
