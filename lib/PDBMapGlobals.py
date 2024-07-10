@@ -3,10 +3,14 @@
 """PDBMapGlobals.config is a convenient global handle to a dictionary of filesystem and MariaDB resources
 If alternate is provided, the dictionary is initialized from pdbmap_sibling_directory/config/global.config"""
 
+KEYS_TO_SHROUD = ['dbpass', 'dbhost', 'dbuser']
+
 import os
 import sys
 import logging
 import configparser
+import copy
+
 import pprint
 LOGGER = logging.getLogger(__name__)
 
@@ -52,11 +56,17 @@ class _PDBMapGlobals_meta(type):
         if cls._config:
             LOGGER.info("Replacing previous PDBMapGlobals definition")
         cls._config = external_dictionary
-        LOGGER.info("Setting PDBMapGlobal config from dictionary:\n %s",pprint.pformat(cls._config))
+        LOGGER.info("Setting PDBMapGlobal config from dictionary:\n %s",pprint.pformat(PDBMapGlobals.shroud_config_dict(cls._config)))
 
 class PDBMapGlobals(metaclass=_PDBMapGlobals_meta):
     """The end-user global class that exposes PDBMapGlobals.config"""
-    pass
+    @staticmethod
+    def shroud_config_dict(_config_dict: dict) -> dict:
+        _config_dict_shroud_password = copy.deepcopy(_config_dict)
+        for key in KEYS_TO_SHROUD:
+            value_to_shroud = _config_dict.get(key, '?')
+            _config_dict_shroud_password[key] = '*' * len(value_to_shroud)
+        return _config_dict_shroud_password
 
 if __name__ == '__main__':
     LOGGER.exception("PDBMapGlobals.py is a class definition, and should not be called as mainline")

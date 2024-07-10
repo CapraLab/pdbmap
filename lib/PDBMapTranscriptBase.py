@@ -13,6 +13,7 @@
 # =============================================================================s
 
 import sys
+import textwrap
 from typing import Tuple
 from typing import Optional
 from typing import Type
@@ -59,6 +60,13 @@ class PDBMapTranscriptBase:
                 return self._aa_seq
 
         raise Exception("Transcript Base class cannot return aa_seq when neither aa_seq nor uniparc_id is provided")
+
+    @property
+    def fasta_aa_seq(self) -> str:
+        return ">sp|" + self.id +  "\n" + textwrap.fill(self.aa_seq, width=60)
+
+        
+        
 
     @property
     def len(self):

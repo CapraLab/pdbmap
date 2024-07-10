@@ -337,14 +337,36 @@ class PDBMapComplex:
         assert self.structure_type == 'pdb' or self.structure_type == 'biounit'
         self.chain_to_alignment = {}
         sifts_chain_to_best_unp = sifts_best_unps(self.structure)
-        for chain_letter in sifts_chain_to_best_unp:
+
+        pdb_chain_to_sifts_aligned_chain = {}
+
+        # If we are dealing with a biounit with, say, A-2 chain.  Then, we should align that following SIFT's
+        # alignment for the A chain (assuming there is an A-2 to A mapping in the mmcif file)
+        if self.structure_type == 'biounit' and self.mmcif_dict and '_pdbx_chain_remapping.entity_id' in self.mmcif_dict:
+            _entity_ids = self.mmcif_dict['_pdbx_chain_remapping.entity_id']
+            _auth_asym_ids = self.mmcif_dict['_pdbx_chain_remapping.auth_asym_id']
+            _orig_auth_asym_ids = self.mmcif_dict['_pdbx_chain_remapping.orig_auth_asym_id']
+            for i in range(len(_entity_ids)):
+                if _auth_asym_ids[i] in self.structure[0]:
+                    # Only worry about remapping if the original transformed chain mapped to uniprot
+                    if _orig_auth_asym_ids[i] in sifts_chain_to_best_unp:
+                        pdb_chain_to_sifts_aligned_chain[_auth_asym_ids[i]] = _orig_auth_asym_ids[i]
+        else: # In the non-biounit case, we just align the chains without regard for extra chains from a biounit
+            for chain_letter in sifts_chain_to_best_unp:
+                # So, in this simple common non-biounit case, we'll have {'A': 'A'}, B:B etc...
+                pdb_chain_to_sifts_aligned_chain[chain_letter] = chain_letter 
+
+        # Iterate over every chain_letter in the structure for which we have 
+        # a sifts alignment
+        for chain_letter in pdb_chain_to_sifts_aligned_chain:
+            sifts_aligned_chain_letter = pdb_chain_to_sifts_aligned_chain[chain_letter]
             if chain_letter not in self.structure[0]:
                 continue  # It is A-OK to have a biounit which lacks chains from sifts
             if chain_letter in self.chain_to_transcript:
                 best_unp_transcript = self.chain_to_transcript[
-                    chain_letter]  # Use the transcript inited from command line
+                    sifts_aligned_chain_letter]  # Use the transcript inited from command line
             else:
-                sifts_best_uniprot_id = sifts_chain_to_best_unp[chain_letter]
+                sifts_best_uniprot_id = sifts_chain_to_best_unp[sifts_aligned_chain_letter]
                 ensemble_transcript_ids = []
                 # Before we get too excited about an isoform specific ID
                 # If there is no cross-ref'd ENST transcript from idmapping, then revert to canonical
@@ -358,22 +380,23 @@ class PDBMapComplex:
                     if not ensemble_transcript_ids:
                         LOGGER.critical(
                             "Unp %s is best for chain %s. HOWEVER it lacks ENST*.. so reverting to canonical",
-                            sifts_chain_to_best_unp[chain_letter], chain_letter)
+                            sifts_chain_to_best_unp[sifts_aligned_chain_letter], chain_letter)
+
                 if not ensemble_transcript_ids:
                     # To get the canonical uniprot ID, we strip the '-' off any uniprot ID we have in hand
                     # And we ask for the "best" unp.  That will give us n A123456-nn format identifier if indeed
                     # the dashed form exists for this uniprot ID
-                    canonical_unp = PDBMapProtein.best_unp(sifts_chain_to_best_unp[chain_letter].split('-')[0])
+                    canonical_unp = PDBMapProtein.best_unp(sifts_chain_to_best_unp[sifts_aligned_chain_letter].split('-')[0])
                     # If this unp is NOT in our curated/reviewed set from uniprot, we need to skip this chain
                     if PDBMapProtein.unp2uniparc(canonical_unp) is None:
                         LOGGER.warning(
                             "Chain %s has canonical unp %s, but it has not been reviewed by uniprot.  Skipping" % (
                                 chain_letter, canonical_unp))
                         continue
-                    sifts_chain_to_best_unp[chain_letter] = canonical_unp
-                    LOGGER.critical("For chain %s, unp now=%s", chain_letter, sifts_chain_to_best_unp[chain_letter])
+                    sifts_chain_to_best_unp[sifts_aligned_chain_letter] = canonical_unp
+                    LOGGER.critical("For chain %s, unp now=%s", chain_letter, sifts_chain_to_best_unp[sifts_aligned_chain_letter])
 
-                best_unp_transcript = PDBMapTranscriptUniprot(sifts_chain_to_best_unp[chain_letter])
+                best_unp_transcript = PDBMapTranscriptUniprot(sifts_chain_to_best_unp[sifts_aligned_chain_letter])
 
             alignment = PDBMapAlignment()
             (success, message) = alignment.align_trivial(best_unp_transcript, self.structure, chain_id=chain_letter)
@@ -388,7 +411,7 @@ class PDBMapComplex:
                 if is_canonical:
                     (success, message) = alignment.align_sifts_canonical(best_unp_transcript,
                                                                          self.structure,
-                                                                         chain_id=chain_letter)
+                                                                         chain_id=sifts_aligned_chain_letter)
                 if not success:
                     # Then we have to attempt a PDB alignment using the sequence info embedded in the .cif file
 
@@ -415,7 +438,7 @@ class PDBMapComplex:
                             (success, message) = alignment.align_sifts_isoform_specific(best_unp_transcript,
                                                                                         _temp_mmcif_structure,
                                                                                         pdb_seq_residue_id_xref,
-                                                                                        chain_id=chain_letter,
+                                                                                        chain_id=sifts_aligned_chain_letter,
                                                                                         is_canonical=is_canonical)
                     if not success:
                         LOGGER.warning("Unable to align with sifts: %s", message)
