@@ -88,7 +88,7 @@ LEFT OUTER JOIN %s on %s.uniparc=Idmapping_uniparc.id where id_type='Uniparc' an
 connection_cursor.execute(sql_select_missing_uniparc_ids)
 all_rows = connection_cursor.fetchall()
 
-all_rows = [('UPI000015D2DD',''),('UPI0000F23CBD','')]
+# all_rows = [('UPI000015D2DD',''),('UPI0000F23CBD','')]
 
 
 if len(all_rows) < 1:
