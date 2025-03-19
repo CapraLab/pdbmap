@@ -17,7 +17,7 @@ __Therefore, the below documentation primarily targets PDBMap software maintaine
 ____
 
 
-The PDBMap library (lib/PDBMap*.py) is a critical component of the Personal Structural Biology (PSB) Pipeline.
+The PDBMap library (lib/PDBMap*.py) is a critical component of the VUStruct Personal Structural Biology (PSB) Pipeline.
 
 Creation of tables in the SQL database is accomplished mainly by scripts/create_schema*.sql scripts.
 
