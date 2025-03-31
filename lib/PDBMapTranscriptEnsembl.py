@@ -65,13 +65,23 @@ class PDBMapTranscriptEnsembl(PDBMapTranscriptBase):
                 "registry file %s lacks a -dbname => 'homo_sapiens_core_API_GENOME' entry" % cls._ensembl_registry)
             sys.exit(1)
 
-    def __init__(self, ensembl_ENST_transcript_id):
-        """An ENSTnnnnnn ENSEMBL transcript ID is required to instantiate"""
+    def __init__(self, ensembl_ENST_transcript_id, container_access_prepend= None):
+        """
+        An ENSTnnnnnn ENSEMBL transcript ID is required to instantiate the class and for any
+        subsequence queries through ENSEMBL PERL API to the ENSEMBL SQL database.
+
+        If the caller wishes, the PERL calls can be made with a container prefix.  For example,
+        the VUStruct pipeline will execute calls by prepending this to the command line:
+
+            'singularity exec --bind `pwd` ensembl_perlapi.simg'
+
+        """
         # Define transcript, gene, and sequence
         if not PDBMapTranscriptEnsembl._ensembl_registry:
             PDBMapTranscriptEnsembl.__init__ensembl_registry__()
 
         self._ensembl_ENST = ensembl_ENST_transcript_id
+        self._container_access_prepend = container_access_prepend
         self.ensembl_ENSG = None  # ENSG* gene identifer mapped to this ENST transcript
         self.ensembl_ENSP = None  # ENSP* protein id mapped to this ENST transcript
         self.ensembl_chromosome = None  # Chromosome 'chr*' returned from the ensembl API
@@ -123,14 +133,20 @@ class PDBMapTranscriptEnsembl(PDBMapTranscriptBase):
         Run one of the ...pl perl scripts that interfaces to the ENSEMBL Perl API.
         The one argument is simply the ENST transcript id
         """
-        cmd_list = ["%s" % script_filename, self._ensembl_ENST]
-        cmd_string = ' '.join(cmd_list)
-        LOGGER.info("Launching PERL script to access ENSEMBL: %s" % cmd_string)
+        if self._container_access_prepend:
+            cmd_list = self._container_access_prepend.split(' ')
+        else:
+             cmd_list = []
+
+        cmd_list.extend([script_filename, self._ensembl_ENST])
+
+        LOGGER.info("Launching PERL script to access ENSEMBL: %s", ' '.join(cmd_list))
         completed_process = subprocess.run(cmd_list, encoding='utf-8', stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
         if completed_process.returncode != 0:
             LOGGER.warning("Exit Code %d returned from: %s\nstderr: %s\nstdout:%s" % (
                 completed_process.returncode,
-                cmd_string,
+                ' '.join(cmd_list),
                 completed_process.stderr.rstrip(), completed_process.stdout.rstrip()))
         return completed_process
 

@@ -15,11 +15,15 @@
 
 # See main check for cmd line parsing
 import sys, os, csv
+import re
 from collections import OrderedDict
 from typing import Dict, List, Tuple
 import logging
-from Bio import pairwise2
+# deprecated from Bio import pairwise2
+from Bio import Align
+
 from Bio.Data import IUPACData
+from Bio import Align
 from Bio.Align import substitution_matrices
 from Bio.PDB import Structure
 from Bio.SeqUtils import seq1
@@ -152,11 +156,18 @@ class PDBMapAlignment():
         assert self._chain_id, "The pdb/mmcif structure you provided somehow lacks a first chain"
 
     def _my_seq1(self, structure, resid, transcript_aa_letter, seq):
+        if resid[0].startswith('H_') or ("UNK" in resid[0]):
+            # If resid is hetero, then we can directly return X because that matches no standard amino acid
+            # This is often the case with 7ktr.pdb - filled with UNK res names
+            LOGGER.warn("In %s, structure[%s][%s][%s] is a hetero-atom resid for %s%s.  Converting to unknown",
+                structure.id, self._model_id, self._chain_id, resid, transcript_aa_letter, seq)
+            return 'X'
+
         try:
             chain_aa_code = structure[self._model_id][self._chain_id][resid].get_resname()
         except:
-            LOGGER.exception("In %s Unable to lookup seq1 on structure[%s][%s][%s] matched to trans seq=%s%d" % (
-            structure.id, self._model_id, self._chain_id, resid, transcript_aa_letter, seq))
+            LOGGER.exception("In %s Unable to lookup seq1 on structure[%s][%s][%s] matched to trans seq=%s%d",
+                structure.id, self._model_id, self._chain_id, resid, transcript_aa_letter, seq)
             chain_aa_code = 'XXX'
 
         if chain_aa_code == 'MSE':  # Seleno Methionine->Met
@@ -245,8 +256,6 @@ class PDBMapAlignment():
         chain_gap_char = '-'
         previous_residue_number = None
 
-        # import pdb; pdb.set_trace()
-
         if not transcript.aa_seq:
             self._aln_str = "PDB Chain Here" + "\n" + connect_str + "\n" + "Transcript Seq Unavailable" + "\n"
             return
@@ -286,7 +295,6 @@ class PDBMapAlignment():
                 residue_letter = seq1(residue.get_resname())
                 chain_str += residue_letter
                 if transcript_no >= len(transcript.aa_seq):
-                    # import pdb; pdb.set_trace()
                     t_aaseq_char = '-'
                 else:
                     t_aaseq_char = transcript.aa_seq[transcript_no]
@@ -475,7 +483,6 @@ class PDBMapAlignment():
                                'unp': uniprot_transcript.id.split('-')[0] if is_canonical else uniprot_transcript.id,
                                'chain_id': self._chain_id})
             for row in db.fetchall():
-                # import pdb; pdb.set_trace()
                 unp_starts.append(int(row['mapping_unp_start']))
                 unp_ends.append(int(row['mapping_unp_end']))
                 pdb_seq_start_numbers.append(int(row['mapping_start_residue_number']))
@@ -520,7 +527,6 @@ class PDBMapAlignment():
                         self._seq_to_unresolved[unp_resno] = residue_id_or_unresolved_aa
                         assert (isinstance(residue_id_or_unresolved_aa, str))
 
-            # import pdb; pdb.set_trace()
             self._calc_stats(uniprot_transcript, structure)
             self._generate_aln_str(uniprot_transcript, structure)
 
@@ -733,9 +739,12 @@ class PDBMapAlignment():
     def align_biopython(self, transcript, structure, chain_id=None, model_id=None):
         """Perform a de-novo Needleman Wunsch alignment
          of a transcript to a chain in a structure  
-         via Biopython's pairwise2.align.globalx dynamic programming algorithm
-         Pass 1 is an initial alignment.  In Pass 2 structure gaps are removed
+         via Biopython's Bio.Align routine.  This code has been reworked to
+         replace Biopyton's pairwise2.align.globalx dynamic programming algorithm
+         OLD APPROACH: Pass 1 is an initial alignment.  In Pass 2 structure gaps are removed
          to compute a score"""
+
+         
         self._set_model_and_chain_ids(structure, chain_id, model_id)
 
         # Residue ids are not necessarily monotonic increasing.  We must preserve
@@ -796,17 +805,70 @@ class PDBMapAlignment():
         #
         # Perform pairwise alignment
         #
+        # LOGGER.debug(
+        #     "pairwise2.align.globalds(\n%s\n%s\ngap_open=%f,gap_extend=%f,one_alignment_only,not penalize_end_gaps   )" % (
+        #     chain_aaseq, transcript.aa_seq, gap_open, gap_extend))
+        # deprecated
+        # self._alignment = pairwise2.align.globalds(chain_aaseq, transcript.aa_seq, BLOSUM62,
+        #                                            gap_open, gap_extend, one_alignment_only=True,
+        #                                            penalize_end_gaps=False)
+
         LOGGER.debug(
-            "pairwise2.align.globalds(\n%s\n%s\ngap_open=%f,gap_extend=%f,one_alignment_only,not penalize_end_gaps   )" % (
+            "Align.PairwiseAligner....(mode=global\n%s\n%s\nopen_gap_score=%f,extend_gap_score=%f,one_alignment_only,not penalize_end_gaps   )" % (
             chain_aaseq, transcript.aa_seq, gap_open, gap_extend))
-        self._alignment = pairwise2.align.globalds(chain_aaseq, transcript.aa_seq, BLOSUM62,
-                                                   gap_open, gap_extend, one_alignment_only=True,
-                                                   penalize_end_gaps=False)
+
+        aligner = Align.PairwiseAligner(mode = 'global', 
+            open_gap_score = gap_open,
+            extend_gap_score = gap_extend,
+            substitution_matrix = BLOSUM62)
+
+        alignments = aligner.align(chain_aaseq, transcript.aa_seq)
+        self._alignment = alignments[0]
+        
 
         # Pull apart the tuple returned by the alignment
-        LOGGER.debug("Alignment Result=\n%s" % pairwise2.format_alignment(*self._alignment[0]))
-        aln_chain, aln_trans, aln_score, begin, end = self._alignment[0]
-        self._aln_str = pairwise2.format_alignment(*self._alignment[0])
+        # LOGGER.debug("Alignment Result=\n%s" % pairwise2.format_alignment(*self._alignment[0]))
+
+        # Biopython Align is incredibly annoying that you have to fish out the aligned transcripts
+        # and alignment pattern using a regex at the end.
+        align_3_string_format = self._alignment._format_pretty()
+        aln_chain_pattern_aln_trans = align_3_string_format.split('\n')
+
+        # We now have to build up the target and query strings by concatinating 
+        # the right sides of the output strings - so annoying!
+        # Generally we get outputs with format
+        # target            0 ----------------------------------------------GSSGSS--------
+        #                  60 ----------------------------------------------|..|..--------
+        # query            60 STSAICRYFFLLSGWEQDDLTNQWLEWEATELQPALSAALYYLVVQGKKGEDVLGSVRRA
+        # 
+        # ^^^ In the above format the target... strings are the residues in the 3D chain
+        #     and query are the residues in the transcript
+
+        self._aln_str = ''
+        aln_chain = ''
+        aln_trans = ''
+      
+        compiled_re = re.compile(r'(target|      |query ) *\d* *([^ ]*).*$')
+        for target_row in range(0,len(aln_chain_pattern_aln_trans),4):
+            # grab the alignment string that starts with 'target'
+            match_result = compiled_re.match(aln_chain_pattern_aln_trans[target_row])
+            if match_result.group(1) == 'target':
+                aln_chain += match_result.group(2)
+
+                # now grab the alignment string itself
+                match_result = compiled_re.match(aln_chain_pattern_aln_trans[target_row+1])
+                if match_result.group(1) == '      ':
+                    self._aln_str += match_result.group(2)
+
+                    # now grab the alignment string tat starts with 'query'
+                    match_result = compiled_re.match(aln_chain_pattern_aln_trans[target_row+2])
+                    if match_result.group(1) == 'query ':
+                        aln_trans += match_result.group(2)
+
+         
+
+        # aln_chain, aln_trans, aln_score, begin, end = self._alignment[0]
+        # self._aln_str = pairwise2.format_alignment(*self._alignment[0])
 
         # Create an alignment map from chain to transcript
         self._resid_to_seq = OrderedDict()
@@ -840,12 +902,11 @@ class PDBMapAlignment():
             [seq1(structure[self._model_id][self._chain_id][resid].get_resname()) for resid in self._resid_to_seq])
 
         # old idea: aln_str   = "<biopython>\n%s\n%s"%(aln_chain,aln_trans)
-        _aln_rescore = pairwise2.align.globalds(aln_chain.replace('-', '-'), aln_trans.replace('-', '-'),
-                                                BLOSUM62, gap_open, gap_extend, score_only=True,
-                                                penalize_end_gaps=False)
-
-        assert _aln_rescore == self._aln_score, "_calc_stats alignment score = %f but Biopython rescore is %d" % (
-        self._aln_score, _aln_rescore)
+        # _aln_rescore = pairwise2.align.globalds(aln_chain.replace('-', '-'), aln_trans.replace('-', '-'),
+        #                                         BLOSUM62, gap_open, gap_extend, score_only=True,
+        #                                        penalize_end_gaps=False)
+        # assert _aln_rescore == self._aln_score, "_calc_stats alignment score = %f but Biopython rescore is %d" % (
+        # self._aln_score, _aln_rescore)
 
         # The next(iter and next(reversed below return first and last elements
         LOGGER.info("Complex pairwise (non-sifts) Biopython alignment of %d residues %s to %s" % (

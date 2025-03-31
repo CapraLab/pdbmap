@@ -231,7 +231,7 @@ class PDBMapProtein:
         # Then, grab a refseq ID from the canonical uniprot ID (no '-')
         # This is likely wrong - but at least you get something...
         # The uniprot refseq mappings are very strange...
-        if not best_refseq_ids and '-' in uniprot_id and PDBMapProtein.isCanonicalByUniparc(uniprot_id):
+        if not best_refseq_ids and PDBMapProtein.isCanonicalByUniparc(uniprot_id):
             best_refseq_ids = PDBMapProtein._uniprot_to_ID.get(
                 uniprot_id[0:6], {}).get('RefSeq_NT', [])
 

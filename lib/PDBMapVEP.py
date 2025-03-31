@@ -61,7 +61,7 @@ class PDBMapVEP():
            self._config_dict = PDBMapGlobals.config
         if not self._config_dict or 'vep' not in self._config_dict:
             raise Exception("The vep executable is missing from the config dictionary, or invalid")
-        self.vep_executable = self._config_dict['vep']
+        self.vep_executable = self._config_dict['vep'].split(' ')
         self.vep_cache_dir = None
 
         self.ensembl_registry_filename = None
@@ -70,9 +70,10 @@ class PDBMapVEP():
         self.dbuser = None
         # self.dbname = None
         self.dbpass = None
- 
-        if not self.vep_executable or not os.path.exists(self.vep_executable):
-            msg = "VEP executable program path is invalid: %s"%self.vep_executable
+
+        # Only double-check that vep program ison file system if we clearly not running in filesystem
+        if not self.vep_executable or ('vep' in self.vep_executable[0] and  os.path.exists(self.vep_executable[0])):
+            msg = "VUStruct config file error:\nVEP executable program path is invalid: %s"%self.vep_executable
             LOGGER.critical(msg)
             sys.exit(msg)
 
@@ -105,7 +106,8 @@ class PDBMapVEP():
     def launch_vep(self,
                 input_filename: str,
                 input_format: str = 'default',
-                vep_echo_filename: str = None) -> Iterator[str]:
+                vep_echo_filename: str = None,
+                coding_only = True) -> Iterator[str]:
 
         """1) Build a VEP ready command line,
         2) launch vep
@@ -118,7 +120,7 @@ class PDBMapVEP():
             LOGGER.critical(\
     "PDBMapVEP.run_VEP() requires an input filename.  stdin is not an option at present")
 
-        vep_cmd = [self.vep_executable, '-i', input_filename]
+        vep_cmd = self.vep_executable + ['-i', input_filename]
         # Specify the input type.  By default, VEP will auto-detect the input format
         if input_format and input_format != 'default':
             vep_cmd.extend(['--format', input_format])
@@ -165,13 +167,16 @@ class PDBMapVEP():
         vep_cmd.extend(['--biotype'])
 
         # Retain only coding-region variants
-        vep_cmd.extend(['--coding_only'])
+        if coding_only:
+            vep_cmd.extend(['--coding_only'])
         #  output format
         vep_cmd.extend(['--vcf'])
 
         vep_cmd.extend(['--db_version',self.vep_db_version])
         vep_cmd.extend(['--assembly',self.vep_assembly])
 
+        # Don't be upset if variants are not in order.  That's on the user - not us - if we slow down
+        vep_cmd.extend(['--no_check_variants_order'])
 
         # Send to stdout and don't generate a summary stats file
         vep_cmd.extend(['--no_stats'])
@@ -179,7 +184,7 @@ class PDBMapVEP():
         LOGGER.info("Invoking VEP with commands: %s", ' '.join(vep_cmd))
 
         # Call VEP and capture stdout in realtime
-        VEP_process = sp.Popen(vep_cmd, stdout=sp.PIPE)
+        VEP_process = sp.Popen(vep_cmd, stdout=sp.PIPE, stderr=sp.PIPE)
         echo_f = None
         if vep_echo_filename:
             echo_f = gzip.open(vep_echo_filename, 'wb') # Open cache for writing
@@ -193,6 +198,7 @@ class PDBMapVEP():
             return vcf_split_tabs[7].find(b'CSQ=') > -1 
 
         vep_lines_yielded = 0
+        vep_header_lines = 0 # Count the lines that start with # distinctly
         for vep_output_line in iter(VEP_process.stdout.readline, b''):
             # Echo to file, if caller requested, before yielding
             if echo_f:
@@ -201,9 +207,12 @@ class PDBMapVEP():
             # Filter variants without consequence (CSQ) annotations
             if vep_output_line.startswith(b'#') or CSQ_in_INFO(vep_output_line):
                 vep_lines_yielded += 1
+                if vep_output_line.startswith(b'#'):
+                    vep_header_lines += 1
                 yield vep_output_line.decode('utf-8')
 
-        LOGGER.info("%d lines (strings) yielded from VEP"%vep_lines_yielded)
+        LOGGER.info("%d lines (strings) yielded from VEP.  %d are headers."% (
+            vep_lines_yielded, vep_header_lines) )
 
         if echo_f:
             echo_f.close() # Close the cache
@@ -224,6 +233,41 @@ class PDBMapVEP():
 
         VEP_process.wait()
         VEP_process.kill() # kill any running subprocess, Does not seem to throw exceptions...
+
+        # ENSEMBL vep can die with a non-zero error code in many situations
+        # HOWEVER, if the user just uploads a bad .vcf file, THEN vep ends with an error code 0
+        # and the problem can only be identified by noting theat there are stderr outputs
+        # but NO stdoutput lines
+
+        stderr = ''
+        for line in iter(VEP_process.stderr.readline, b''):
+                if stderr:
+                    stderr += '\n'
+                stderr += line.decode('utf-8').rstrip()[0:80]
+
+        if VEP_process.returncode != 0 or (len(stderr) > 2 and vep_lines_yielded <= vep_header_lines):
+            # We have a problem in case of an explicit error
+            # OR we only got #... header lines back from VEP
+            fail_string = """The ENSEMBL VEP failed with error code %d%s
+The specific error from the VEP application is shown below.  Please verify
+that you have a well-formed VCF file.  Troubleshooting suggestions at
+https://https://meilerlab.org/VUStruct/Contact.html
+---------------------------------------------------------------------
+vep command line was:
+%s
+---------------------------------------------------------------------
+vep stderr was:
+%s
+---------------------------------------------------------------------""" % (
+            VEP_process.returncode, 
+            "\nThis often means that the input file was badly formatted\n" if VEP_process.returncode == 0 else '', 
+            ' '.join(vep_cmd),
+            stderr)
+
+            LOGGER.critical(fail_string) 
+            sys.exit(fail_string)
+        elif vep_lines_yielded > 0:
+            LOGGER.warning("VEP stderr contained the following lines - likely unimportant:\n%s" % stderr)
 
 
 
@@ -508,11 +552,21 @@ class PDBMapVEP():
                             "reference base(s)","alternate base(s)","quality",
                             "filter status PASS/MISSING/etc"]
                             
-        # SQL types for these first 7 standard mandatory fields
-        first_7_types  = ["VARCHAR(100)","BIGINT","VARCHAR(100)","VARCHAR(100)"]
-        first_7_types += ["VARCHAR(100)","DOUBLE","VARCHAR(100)"]
+        # first_7_types  = ["VARCHAR(100)","BIGINT","VARCHAR(100)","VARCHAR(100)"]
+        # first_7_types += ["VARCHAR(100)","DOUBLE","VARCHAR(100)"]        # SQL types for these first 7 standard mandatory fields
 
-        primary_key_components = ['chrom','pos','ref','vcf_record_number']
+        first_7_types  = [
+            "VARCHAR(100)", # % CHROM
+            "BIGINT", # POS
+            "VARCHAR(100)", # % ID_
+            "TEXT", #  % REF
+            "TEXT", # % ALT,
+            "DOUBLE", # qual
+            "VARCHAR(100)"   #  % FILTER_MAX_LEN]
+            ]
+
+        # I can imagine no reason to need to search on REF or ALT which can be huge strings in clinvar
+        primary_key_components = ['chrom','pos','vcf_record_number']
 
         # Replace INFO keys that overlap with the first_7 column headers
         for info_key in list(vcf_reader.infos.keys()):
@@ -603,6 +657,7 @@ class PDBMapVEP():
         query += "INSERT INTO %s "%dbname_dot_table_name
         query += "(%s) VALUES "%','.join(['`%s`'%h for h in header])
         query += "(%s)"%','.join([formatter[f] for f in types])
+        # query += "(%s)"%','.join(["%s" for f in types])
 
         def write_unwritten_vcf_rows():
             nonlocal rows_inserted, query, unwritten_vcf_rows
@@ -632,7 +687,7 @@ class PDBMapVEP():
         # Return the number of rows uploaded
         return rows_inserted
 
-    def vcf_reader_from_file_supplemented_with_vep_outputs(self,vcf_filename,vep_echo_filename=None,prepend_chr=True):
+    def vcf_reader_from_file_supplemented_with_vep_outputs(self,vcf_filename,vep_echo_filename=None,prepend_chr=True,coding_only=True):
         """ Pipe a VCF file into VEP and yield records suitable for additional to SQL
             vcf_filename:      The pre-VEP vcf filename with CHROM/POS/REF/ALT
             vep_echo_filename: Optional place to store vep outputs, in addition to yieleding back inside the code
@@ -647,7 +702,7 @@ class PDBMapVEP():
         if vep_echo_filename:
             LOGGER.info("Echoing VEP output to %s"%vep_echo_filename)
         # Launch the vep, and return a vcf reader that parses vep outputs
-        vcf_reader = vcf.Reader(self.launch_vep(vcf_filename,'vcf',vep_echo_filename),prepend_chr=prepend_chr,encoding='UTF-8')
+        vcf_reader = vcf.Reader(self.launch_vep(vcf_filename,'vcf',vep_echo_filename,coding_only=coding_only),prepend_chr=prepend_chr,encoding='UTF-8')
         vcf_reader.CSQorVEP = None
         for key in ['CSQ','vep']:
             if key in vcf_reader.infos:
@@ -693,7 +748,7 @@ class PDBMapVEP():
 
         snpcount = 0
         parse_count = 0
-        LOGGER.critical("Reminder: FILTER testing is NOT being used")
+        LOGGER.warning("Reminder: FILTER testing is NOT being used")
         for record in vcf_reader: 
             parse_count += 1
             LOGGER.debug("vcf parsed record #%d = %s"%(parse_count,str(record)))
