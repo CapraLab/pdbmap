@@ -156,7 +156,7 @@ class PDBMapSQLdb(object):
                 LOGGER.exception("Database Error %s"%str(err))
                 raise
 
-            except err:
+            except Exception as err:
                 LOGGER.exception("Unhandled SQL error from execute: %s"%str(err))
                 raise  
             else:

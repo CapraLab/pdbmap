@@ -74,8 +74,8 @@ class PDBMapTranscriptEnsembl(PDBMapTranscriptBase):
         the VUStruct pipeline will execute calls by prepending this to the command line:
 
             'singularity exec --bind `pwd` ensembl_perlapi.simg'
-
         """
+
         # Define transcript, gene, and sequence
         if not PDBMapTranscriptEnsembl._ensembl_registry:
             PDBMapTranscriptEnsembl.__init__ensembl_registry__()

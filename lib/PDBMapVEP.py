@@ -120,7 +120,9 @@ class PDBMapVEP():
             LOGGER.critical(\
     "PDBMapVEP.run_VEP() requires an input filename.  stdin is not an option at present")
 
-        vep_cmd = self.vep_executable + ['-i', input_filename]
+        vep_cmd = ['apptainer', 'exec','--bind','/home/resv146/','/home/resv146/containers/vep.sif']
+
+        vep_cmd.extend( [self.vep_executable, '-i', input_filename])
         # Specify the input type.  By default, VEP will auto-detect the input format
         if input_format and input_format != 'default':
             vep_cmd.extend(['--format', input_format])

@@ -328,6 +328,7 @@ if args.best_isoforms or args.all_isoforms:
 
     sql_mapping_table = "sifts_mappings_pdb_uniprot_%s_isoforms" % all_or_best
 
+    sifts_pdb_set = set()
     pdb_set = set()
     if args.pdb:
         pdb_set = {pdb_id for pdb_id in args.pdb.split(',')}
