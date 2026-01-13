@@ -61,7 +61,7 @@ class PDBMapVEP():
            self._config_dict = PDBMapGlobals.config
         if not self._config_dict or 'vep' not in self._config_dict:
             raise Exception("The vep executable is missing from the config dictionary, or invalid")
-        self.vep_executable = self._config_dict['vep']
+        self.vep_executable = self._config_dict['vep'].split(' ')
         self.vep_cache_dir = None
 
         self.ensembl_registry_filename = None
@@ -70,11 +70,12 @@ class PDBMapVEP():
         self.dbuser = None
         # self.dbname = None
         self.dbpass = None
- 
-        # if not self.vep_executable or not os.path.exists(self.vep_executable):
-        #      msg = "VUStruct config file error:\nVEP executable program path is invalid: %s"%self.vep_executable
-        #     LOGGER.critical(msg)
-        #     sys.exit(msg)
+
+        # Only double-check that vep program ison file system if we clearly not running in filesystem
+        if not self.vep_executable or ('vep' in self.vep_executable[0] and  os.path.exists(self.vep_executable[0])):
+            msg = "VUStruct config file error:\nVEP executable program path is invalid: %s"%self.vep_executable
+            LOGGER.critical(msg)
+            sys.exit(msg)
 
         # Vep preferred access method #1
         if 'vep_cache_dir' in self._config_dict:
@@ -118,6 +119,7 @@ class PDBMapVEP():
             input_filename = 'stdin'
             LOGGER.critical(\
     "PDBMapVEP.run_VEP() requires an input filename.  stdin is not an option at present")
+
         vep_cmd = ['apptainer', 'exec','--bind','/home/resv146/','/home/resv146/containers/vep.sif']
 
         vep_cmd.extend( [self.vep_executable, '-i', input_filename])
@@ -175,6 +177,8 @@ class PDBMapVEP():
         vep_cmd.extend(['--db_version',self.vep_db_version])
         vep_cmd.extend(['--assembly',self.vep_assembly])
 
+        # Don't be upset if variants are not in order.  That's on the user - not us - if we slow down
+        vep_cmd.extend(['--no_check_variants_order'])
 
         # Send to stdout and don't generate a summary stats file
         vep_cmd.extend(['--no_stats'])
@@ -550,11 +554,21 @@ vep stderr was:
                             "reference base(s)","alternate base(s)","quality",
                             "filter status PASS/MISSING/etc"]
                             
-        # SQL types for these first 7 standard mandatory fields
-        first_7_types  = ["VARCHAR(100)","BIGINT","VARCHAR(100)","VARCHAR(100)"]
-        first_7_types += ["VARCHAR(100)","DOUBLE","VARCHAR(100)"]
+        # first_7_types  = ["VARCHAR(100)","BIGINT","VARCHAR(100)","VARCHAR(100)"]
+        # first_7_types += ["VARCHAR(100)","DOUBLE","VARCHAR(100)"]        # SQL types for these first 7 standard mandatory fields
 
-        primary_key_components = ['chrom','pos','ref','vcf_record_number']
+        first_7_types  = [
+            "VARCHAR(100)", # % CHROM
+            "BIGINT", # POS
+            "VARCHAR(100)", # % ID_
+            "TEXT", #  % REF
+            "TEXT", # % ALT,
+            "DOUBLE", # qual
+            "VARCHAR(100)"   #  % FILTER_MAX_LEN]
+            ]
+
+        # I can imagine no reason to need to search on REF or ALT which can be huge strings in clinvar
+        primary_key_components = ['chrom','pos','vcf_record_number']
 
         # Replace INFO keys that overlap with the first_7 column headers
         for info_key in list(vcf_reader.infos.keys()):
@@ -645,6 +659,7 @@ vep stderr was:
         query += "INSERT INTO %s "%dbname_dot_table_name
         query += "(%s) VALUES "%','.join(['`%s`'%h for h in header])
         query += "(%s)"%','.join([formatter[f] for f in types])
+        # query += "(%s)"%','.join(["%s" for f in types])
 
         def write_unwritten_vcf_rows():
             nonlocal rows_inserted, query, unwritten_vcf_rows
