@@ -653,6 +653,13 @@ class PDBMapComplex:
                 if re_match:  # An ENSEMBL transcript ID was explicitly assigned to the chain
                     chain_letter = re_match.group(1)
                     ensembl_transcript_id = re_match.group(2)
+                    # if we have a singularity container for the perlAPI configured, then use that one
+                    if PDBMapGlobals.config['singularity_ensembl_perlapi']:
+                        transcript = PDBMapTranscriptEnsembl(ensembl_transcript_id,
+                                PDBMapGlobals.config['singularity_ensembl_perlapi'])
+                    else:
+                        transcript = PDBMapTranscriptEnsembl(ensembl_transcript_id)
+
                     transcript = PDBMapTranscriptEnsembl(ensembl_transcript_id)
                     LOGGER.info("Successful load of Ensembl transcript %s", ensembl_transcript_id)
                 else:
