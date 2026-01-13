@@ -156,11 +156,18 @@ class PDBMapAlignment():
         assert self._chain_id, "The pdb/mmcif structure you provided somehow lacks a first chain"
 
     def _my_seq1(self, structure, resid, transcript_aa_letter, seq):
+        if resid[0].startswith('H_') or ("UNK" in resid[0]):
+            # If resid is hetero, then we can directly return X because that matches no standard amino acid
+            # This is often the case with 7ktr.pdb - filled with UNK res names
+            LOGGER.warn("In %s, structure[%s][%s][%s] is a hetero-atom resid for %s%s.  Converting to unknown",
+                structure.id, self._model_id, self._chain_id, resid, transcript_aa_letter, seq)
+            return 'X'
+
         try:
             chain_aa_code = structure[self._model_id][self._chain_id][resid].get_resname()
         except:
-            LOGGER.exception("In %s Unable to lookup seq1 on structure[%s][%s][%s] matched to trans seq=%s%d" % (
-            structure.id, self._model_id, self._chain_id, resid, transcript_aa_letter, seq))
+            LOGGER.exception("In %s Unable to lookup seq1 on structure[%s][%s][%s] matched to trans seq=%s%d",
+                structure.id, self._model_id, self._chain_id, resid, transcript_aa_letter, seq)
             chain_aa_code = 'XXX'
 
         if chain_aa_code == 'MSE':  # Seleno Methionine->Met
