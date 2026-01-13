@@ -71,10 +71,10 @@ class PDBMapVEP():
         # self.dbname = None
         self.dbpass = None
  
-        if not self.vep_executable or not os.path.exists(self.vep_executable):
-            msg = "VUStruct config file error:\nVEP executable program path is invalid: %s"%self.vep_executable
-            LOGGER.critical(msg)
-            sys.exit(msg)
+        # if not self.vep_executable or not os.path.exists(self.vep_executable):
+        #      msg = "VUStruct config file error:\nVEP executable program path is invalid: %s"%self.vep_executable
+        #     LOGGER.critical(msg)
+        #     sys.exit(msg)
 
         # Vep preferred access method #1
         if 'vep_cache_dir' in self._config_dict:
@@ -118,8 +118,9 @@ class PDBMapVEP():
             input_filename = 'stdin'
             LOGGER.critical(\
     "PDBMapVEP.run_VEP() requires an input filename.  stdin is not an option at present")
+        vep_cmd = ['apptainer', 'exec','--bind','/home/resv146/','/home/resv146/containers/vep.sif']
 
-        vep_cmd = [self.vep_executable, '-i', input_filename]
+        vep_cmd.extend( [self.vep_executable, '-i', input_filename])
         # Specify the input type.  By default, VEP will auto-detect the input format
         if input_format and input_format != 'default':
             vep_cmd.extend(['--format', input_format])
