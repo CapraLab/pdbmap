@@ -660,7 +660,6 @@ class PDBMapComplex:
                     else:
                         transcript = PDBMapTranscriptEnsembl(ensembl_transcript_id)
 
-                    transcript = PDBMapTranscriptEnsembl(ensembl_transcript_id)
                     LOGGER.info("Successful load of Ensembl transcript %s", ensembl_transcript_id)
                 else:
                     re_match = chain_x_fasta_re.match(arg)
