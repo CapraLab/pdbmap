@@ -556,7 +556,12 @@ class PDBMapComplex:
         _ENST_identical_transcripts = []
 
         for ensembl_transcript_id in unfiltered_ensemble_transcript_ids:
-            ensembl_transcript = PDBMapTranscriptEnsembl(ensembl_transcript_id)
+            # if we have a singularity container for the perlAPI configured, then use that one
+            if PDBMapGlobals.config['singularity_ensembl_perlapi']:
+                ensembl_transcript = PDBMapTranscriptEnsembl(ensembl_transcript_id,
+                        PDBMapGlobals.config['singularity_ensembl_perlapi'])
+            else:
+                ensembl_transcript = PDBMapTranscriptEnsembl(ensembl_transcript_id)
             if not PDBMapComplex.uniprot_and_ensembl_close_enough(uniprot_transcript, ensembl_transcript):
                 continue
 
@@ -781,6 +786,7 @@ class PDBMapComplex:
         @param uniprot_id:
         @return: dataframe of cosmis scores, or empty dataframe if none found
         """
+
         uniprot_to_struct_filename = os.path.join(
             PDBMapGlobals.config['cosmis_dir'], "mapping-files", "uniprot_to_struct.tsv")
 
@@ -834,9 +840,8 @@ class PDBMapComplex:
                 if line[0:6] == uniprot_id:
                     extracted_lines += line
 
-            return pd.read_csv(StringIO(extracted_lines),sep='\t')
-
-
+            cosmis_df = pd.read_csv(StringIO(extracted_lines),sep='\t')
+            return cosmis_df
 
     def load_cosmis_scores(self):
         for chain in self.structure[0]:
