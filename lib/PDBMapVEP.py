@@ -61,7 +61,10 @@ class PDBMapVEP():
            self._config_dict = PDBMapGlobals.config
         if not self._config_dict or 'vep' not in self._config_dict:
             raise Exception("The vep executable is missing from the config dictionary, or invalid")
-        self.vep_executable = self._config_dict['vep'].split(' ')
+
+        # This must be a single string with no spaces
+        self.vep_executable = self._config_dict['vep']
+        assert len(self.vep_executable.split(' ')) == 1
         self.vep_cache_dir = None
 
         self.ensembl_registry_filename = None
@@ -120,7 +123,7 @@ class PDBMapVEP():
             LOGGER.critical(\
     "PDBMapVEP.run_VEP() requires an input filename.  stdin is not an option at present")
 
-        vep_cmd = ['apptainer', 'exec','--bind','/home/resv146/','/home/resv146/containers/vep.sif']
+        vep_cmd = ['apptainer', 'exec','--bind','/home/resv146/,/data/p_csb_meiler/resv146','/home/resv146/containers/vep.sif']
 
         vep_cmd.extend( [self.vep_executable, '-i', input_filename])
         # Specify the input type.  By default, VEP will auto-detect the input format
@@ -183,6 +186,7 @@ class PDBMapVEP():
         # Send to stdout and don't generate a summary stats file
         vep_cmd.extend(['--no_stats'])
         vep_cmd.extend(['-o', 'stdout'])
+
         LOGGER.info("Invoking VEP with commands: %s", ' '.join(vep_cmd))
 
         # Call VEP and capture stdout in realtime
