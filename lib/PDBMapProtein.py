@@ -587,7 +587,7 @@ class PDBMapProtein:
                                 _unversioned_refseq_ID] = _id
                         else:  # We need to crash if we see 2 different versions of ID mapping to our base RefSeq
                             if _existing_versioned_refseq_ID != _id:
-                                LOGGER.critical("RefSeq ID %s is not uniquely cross-referenced in uniprot",
+                                LOGGER.warning("RefSeq ID %s is not uniquely cross-referenced in uniprot",
                                                 _unversioned_refseq_ID)
                                 _id_version = int(_id.split('.')[1])
                                 _existing_version = int(_existing_versioned_refseq_ID.split('.')[1])
